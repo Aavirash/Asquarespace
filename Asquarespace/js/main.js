@@ -200,7 +200,7 @@ let space2SearchText='';
 let space2State={items:[],collections:[]};
 let space2ActiveItemId='';
 let space2CollectionsOpen=false;
-let space2View='discover';
+let space2View='grid';
 let space2SidebarWidth=parseInt(localStorage.getItem('asq.space2.sidebar.width')||'264',10)||264;
 let space2LayoutMode=(localStorage.getItem('asq.space2.layout.mode')||'grid')==='feed'?'feed':'grid';
 let space2ColumnsSetting=localStorage.getItem('asq.space2.layout.columns')||'auto';

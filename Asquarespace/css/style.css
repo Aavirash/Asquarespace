@@ -51,6 +51,8 @@ body,html{margin:0;padding:0;width:100%;height:100%;min-width:0;min-height:0;bac
 .space2-top-icon-btn{width:30px;height:30px;padding:0;border-radius:8px;border:1px solid transparent;background:transparent;backdrop-filter:none;box-shadow:none;color:var(--text-mid);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .14s ease,border-color .14s ease,color .14s ease;}
 .space2-top-icon-btn:hover{background:var(--surface);border-color:var(--border);color:var(--text);}
 .space2-top-icon-btn svg{width:16px;height:16px;fill:currentColor;}
+#space2-camera-btn{border-color:color-mix(in srgb,var(--accent) 38%,var(--border));background:color-mix(in srgb,var(--accent) 14%,var(--surface));color:var(--accent);}
+#space2-camera-btn:hover{border-color:color-mix(in srgb,var(--accent) 52%,var(--border));background:color-mix(in srgb,var(--accent) 20%,var(--surface));}
 
 .space2-view-switch{display:flex;align-items:center;gap:3px;height:38px;padding:3px;border-radius:11px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(10px);box-shadow:var(--shadow);}
 .space2-view-switch.hidden{display:none;}
@@ -968,17 +970,18 @@ body.space-2 #favorites-panel{display:none!important;}
 
 @media (max-width:760px){
     .space-switcher{top:10px;}
-    .space-btn{min-width:92px;font-size:11px;}
+    .space-btn{min-width:102px;font-size:12px;height:34px;}
     .space2-panel{inset:58px 10px 14px;}
     .space2-head{right:10px;left:auto;top:-46px;transform:none;gap:6px;max-width:calc(100vw - 20px);}
     .space2-panel{--space2-sidebar-width:198px;}
     .space2-sidebar{overflow:hidden;}
     .space2-search-wrap{width:auto;max-width:none;min-width:0;flex:1;}
     .space2-search-wrap:focus-within{width:auto;}
-    .space2-head{padding:0 6px;height:38px;max-width:calc(100vw - 20px);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;}
+    .space2-head{padding:0 8px;height:46px;max-width:calc(100vw - 20px);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;}
     .space2-head::-webkit-scrollbar{display:none;}
-    .space2-search-wrap{min-width:150px;width:150px;}
-    .space2-top-icon-btn{width:30px;height:30px;flex-shrink:0;}
+    .space2-search-wrap{min-width:190px;width:190px;height:36px;}
+    .space2-top-icon-btn{width:36px;height:36px;border-radius:10px;flex-shrink:0;}
+    .space2-top-icon-btn svg{width:18px;height:18px;}
     .space2-view-switch{height:34px;padding:2px;}
     .space2-view-toggle{height:28px;width:76px;}
     .space2-view-icon{width:31px;height:28px;}
