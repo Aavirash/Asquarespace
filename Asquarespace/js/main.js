@@ -386,6 +386,21 @@ function removeSpace2Collection(colId){
     renderSpace2Grid();
 }
 
+function removeItemFromSpace2View(itemId){
+    if(!itemId) return;
+    if(space2ActiveCollection==='all'){
+        space2State.items=space2State.items.filter(i=>i.id!==itemId);
+    }else{
+        const item=space2State.items.find(i=>i.id===itemId);
+        if(!item) return;
+        item.collectionIds=(item.collectionIds||[]).filter(id=>id!==space2ActiveCollection);
+        item.updatedAt=Date.now();
+    }
+    saveSpace2State();
+    renderSpace2Collections();
+    renderSpace2Grid();
+}
+
 function openCollectionModal(mode='create',collectionId='',discoverItem=null){
     space2CollectionModalMode=mode;
     space2CollectionEditingId=collectionId||'';
@@ -510,7 +525,7 @@ function renderSpace2Grid(){
                 <button class="space2-card-action" data-action="collection" title="Add to collection" aria-label="Add to collection">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8a2 2 0 0 1 2 2v2H2V6a2 2 0 0 1 2-2h6zm12 8v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8h20zm-10 2v2H10v2h2v2h2v-2h2v-2h-2v-2h-2z"/></svg>
                 </button>
-                <button class="space2-card-action" data-action="remove" title="Remove image" aria-label="Remove image">
+                <button class="space2-card-action" data-action="remove" title="Remove" aria-label="Remove">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3 3v8h2v-8H9zm4 0v8h2v-8h-2zM9 3h6l1 2h4v2H4V5h4l1-2z"/></svg>
                 </button>
             </div>
@@ -537,12 +552,12 @@ function renderSpace2Grid(){
         }
         const removeBtn=card.querySelector('[data-action="remove"]');
         if(removeBtn){
+            const removeTitle=space2ActiveCollection==='all'?'Delete from all items':'Remove from this collection';
+            removeBtn.title=removeTitle;
+            removeBtn.setAttribute('aria-label',removeTitle);
             removeBtn.addEventListener('click',e=>{
                 e.stopPropagation();
-                space2State.items=space2State.items.filter(i=>i.id!==item.id);
-                saveSpace2State();
-                renderSpace2Collections();
-                renderSpace2Grid();
+                removeItemFromSpace2View(item.id);
             });
         }
         space2Grid.appendChild(card);
