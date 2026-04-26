@@ -2839,7 +2839,40 @@ function renderDiscoverSources(feedKey=discoverCurrentFeed){
     sources.forEach(source=>{
         const row=document.createElement('div');
         row.className='discover-source-item';
-        row.innerHTML=`<div class="discover-source-meta"><div class="discover-source-name">${source.label}</div><div class="discover-source-url">${source.url}</div></div>`;
+        const meta=document.createElement('div');
+        meta.className='discover-source-meta';
+        const name=document.createElement('div');
+        name.className='discover-source-name';
+        name.textContent=source.label;
+        const url=document.createElement('div');
+        url.className='discover-source-url';
+        url.textContent=source.url;
+        meta.appendChild(name);
+        meta.appendChild(url);
+        row.appendChild(meta);
+        if(source.type==='custom'){
+            const del=document.createElement('button');
+            del.className='discover-source-del';
+            del.title='Remove source';
+            del.textContent='✕';
+            del.addEventListener('click',e=>{
+                e.stopPropagation();
+                const pages=getDiscoverPages();
+                pages.forEach(page=>{
+                    const idx=(page.urls||[]).indexOf(source.url);
+                    if(idx!==-1) page.urls.splice(idx,1);
+                });
+                setDiscoverPages(pages.filter(p=>(p.urls||[]).length>0));
+                renderDiscoverCustomList();
+                renderDiscoverSources(feedKey);
+            });
+            row.appendChild(del);
+        } else {
+            const badge=document.createElement('span');
+            badge.className='discover-source-badge';
+            badge.textContent=source.type==='rss'?'RSS':'Built-in';
+            row.appendChild(badge);
+        }
         row.addEventListener('click',()=>window.open(source.url,'_blank'));
         list.appendChild(row);
     });
