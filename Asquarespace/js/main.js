@@ -13,6 +13,9 @@ const nodeHttps = safeNodeRequire('https');
 const nodeHttp  = safeNodeRequire('http');
 const nodeCrypto= safeNodeRequire('crypto');
 const nodeChildProcess = safeNodeRequire('child_process');
+const electron = safeNodeRequire('electron');
+const electronShell = electron&&electron.shell?electron.shell:null;
+const electronSystemPreferences = electron&&electron.systemPreferences?electron.systemPreferences:null;
 const APP_QUERY = new URLSearchParams(window.location.search);
 const IS_MAC_APP = APP_QUERY.get('app') === 'mac';
 
@@ -871,6 +874,29 @@ async function requestSpace2CapturePermission({silent=false}={}){
         return false;
     }
     if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Requesting macOS screen capture access...';
+
+    const openMacScreenSettings=()=>{
+        if(!IS_MAC_APP) return;
+        const deepLink='x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
+        try{
+            if(electronShell&&typeof electronShell.openExternal==='function'){
+                electronShell.openExternal(deepLink);
+                return;
+            }
+        }catch{}
+        try{ nodeChildProcess && nodeChildProcess.exec(`open \"${deepLink}\"`); }catch{}
+    };
+
+    try{
+        if(IS_MAC_APP && electronSystemPreferences && typeof electronSystemPreferences.getMediaAccessStatus==='function'){
+            const status=String(electronSystemPreferences.getMediaAccessStatus('screen')||'').toLowerCase();
+            if(status==='granted'){
+                if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Access already granted.';
+                return true;
+            }
+        }
+    }catch{}
+
     let stream=null;
     try{
         stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
@@ -880,8 +906,9 @@ async function requestSpace2CapturePermission({silent=false}={}){
     }catch(err){
         console.warn('space2 capture permission request failed',err);
         if(!silent&&space2CaptureStatus){
-            space2CaptureStatus.textContent='Access not granted. Allow Screen Recording for Asquarespace in macOS System Settings and try again.';
+            space2CaptureStatus.textContent='Permission denied. Opening macOS Screen Recording settings...';
         }
+        openMacScreenSettings();
         return false;
     }finally{
         if(stream) stream.getTracks().forEach(t=>t.stop());
@@ -2548,7 +2575,6 @@ function setSpace(space){
         document.body.classList.add('space-2');
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
-        maybeAutoRequestSpace2CapturePermission();
         loadSpace2State();
         setSpace2CollectionsOpen(space2CollectionsOpen);
         showSpace2View(space2View);
@@ -3126,7 +3152,6 @@ if(space2SettingsBtn) space2SettingsBtn.addEventListener('click',openSpace2Setti
 if(space2SettingsClose) space2SettingsClose.addEventListener('click',closeSpace2SettingsModal);
 if(space2CapturePermissionBtn) space2CapturePermissionBtn.addEventListener('click',()=>requestSpace2CapturePermission({silent:false}));
 if(space2SettingsModal) space2SettingsModal.addEventListener('click',e=>{if(e.target===space2SettingsModal) closeSpace2SettingsModal();});
-setTimeout(maybeAutoRequestSpace2CapturePermission,700);
 document.addEventListener('click',e=>{
     if(activeCollectionMenu && !activeCollectionMenu.contains(e.target)) closeCollectionMenu();
 });
