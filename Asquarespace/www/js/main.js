@@ -27,6 +27,8 @@ const APP_WEB_URL = 'https://space.asquareportal.com';
 const APP_PASSCODE = '24176882';
 const SUPABASE_MEDIA_BUCKET = 'asq-media';
 const SUPABASE_STATE_TABLE = 'user_workspace_state';
+const SPACE2_SIGNED_URL_TTL_SEC = 60 * 60 * 24 * 14;
+const SPACE2_SIGNED_URL_REFRESH_GRACE_SEC = 60 * 60 * 6;
 
 // ── Rotation cursor SVGs (curved arrow, rotated for each corner) ────────────
 // The SVG is a curved rotate arrow (Asquarespace branded in #ef4027).
@@ -318,34 +320,47 @@ function getCloudBoardKey(projectKey=currentProjectKey,boardId=currentBoardId){
     return `${projectKey||'local-default'}::${boardId||'board-1'}`;
 }
 
+function nowEpochSec(){
+    return Math.floor(Date.now()/1000);
+}
+
+function shouldRefreshSpace2SignedUrl(item){
+    if(!item||!item.cloudPath) return false;
+    if(!item.src) return true;
+    const exp=parseInt(item.signedUrlExpiresAt||0,10)||0;
+    if(!exp) return true;
+    return (exp-nowEpochSec())<=SPACE2_SIGNED_URL_REFRESH_GRACE_SEC;
+}
+
 async function uploadBlobToSupabase(blob,{folder='uploads',nameHint='image'}={}){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser||!blob) return null;
     const ext=extFromMime(blob.type||'image/png');
     const cleanHint=(nameHint||'image').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28)||'image';
     const path=`${currentSupabaseUser.id}/${folder}/${Date.now()}_${Math.floor(Math.random()*100000)}_${cleanHint}.${ext}`;
-    const upload=await client.storage.from(SUPABASE_MEDIA_BUCKET).upload(path,blob,{upsert:false,contentType:blob.type||'image/png'});
+    const upload=await client.storage.from(SUPABASE_MEDIA_BUCKET).upload(path,blob,{upsert:false,contentType:blob.type||'image/png',cacheControl:'31536000'});
     if(upload.error){
         console.warn('supabase storage upload failed',upload.error.message||upload.error);
         return null;
     }
-    const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(path,60*60*24*14);
+    const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(path,SPACE2_SIGNED_URL_TTL_SEC);
     if(signed.error){
         console.warn('supabase signed url failed',signed.error.message||signed.error);
-        return {path,url:''};
+        return {path,url:'',expiresAt:0};
     }
-    return {path,url:signed.data?.signedUrl||''};
+    return {path,url:signed.data?.signedUrl||'',expiresAt:nowEpochSec()+SPACE2_SIGNED_URL_TTL_SEC};
 }
 
 async function refreshSpace2SignedUrls(){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser||!space2State||!Array.isArray(space2State.items)) return;
-    const targets=space2State.items.filter(item=>item&&item.cloudPath);
+    const targets=space2State.items.filter(shouldRefreshSpace2SignedUrl);
     if(!targets.length) return;
     await Promise.all(targets.map(async item=>{
-        const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(item.cloudPath,60*60*24*14);
+        const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(item.cloudPath,SPACE2_SIGNED_URL_TTL_SEC);
         if(!signed.error&&signed.data&&signed.data.signedUrl){
             item.src=signed.data.signedUrl;
+            item.signedUrlExpiresAt=nowEpochSec()+SPACE2_SIGNED_URL_TTL_SEC;
         }
     }));
 }
@@ -406,13 +421,19 @@ function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     try{
         const raw=localStorage.getItem(getSpace2Key(projectKey,boardId));
         const parsed=raw?JSON.parse(raw):null;
-        const items=Array.isArray(parsed&&parsed.items)?parsed.items.filter(i=>i&&i.id&&i.src):[];
+        const items=Array.isArray(parsed&&parsed.items)?parsed.items.filter(i=>i&&i.id&&(i.src||i.cloudPath)):[];
         const collections=Array.isArray(parsed&&parsed.collections)?parsed.collections.filter(c=>c&&c.id&&c.name):[];
         space2State={items,collections};
     }catch{
         space2State=defaultSpace2State();
     }
     if(!space2State.collections.some(c=>c.id===space2ActiveCollection)) space2ActiveCollection='all';
+    if(currentSupabaseUser&&space2State.items.some(shouldRefreshSpace2SignedUrl)){
+        refreshSpace2SignedUrls().then(()=>{
+            saveSpace2State(projectKey,boardId);
+            renderSpace2Grid();
+        }).catch(err=>console.warn('space2 signed url refresh failed',err));
+    }
     renderSpace2Collections();
     renderSpace2Grid();
 }
@@ -1027,6 +1048,7 @@ function insertSpace2Item(item,{collectionIds}={}){
     if(!src) return {item:null,added:false,changed:false};
     const filePath=item.filePath||'';
     const cloudPath=item.cloudPath||'';
+    const signedUrlExpiresAt=parseInt(item.signedUrlExpiresAt||0,10)||0;
     const existing=space2State.items.find(i=>(filePath&&i.filePath===filePath)||i.src===src);
     const normalizedCollectionIds=Array.isArray(collectionIds)
         ? [...new Set(collectionIds.filter(Boolean))]
@@ -1035,10 +1057,12 @@ function insertSpace2Item(item,{collectionIds}={}){
         const currentIds=Array.isArray(existing.collectionIds)?existing.collectionIds:[];
         const mergedIds=[...new Set([...currentIds,...normalizedCollectionIds])];
         const hasCloudUpdate=!!(cloudPath&&existing.cloudPath!==cloudPath);
-        const changed=mergedIds.length!==currentIds.length||hasCloudUpdate;
+        const hasExpUpdate=!!(signedUrlExpiresAt&&existing.signedUrlExpiresAt!==signedUrlExpiresAt);
+        const changed=mergedIds.length!==currentIds.length||hasCloudUpdate||hasExpUpdate;
         if(changed){
             existing.collectionIds=mergedIds;
             if(hasCloudUpdate) existing.cloudPath=cloudPath;
+            if(hasExpUpdate) existing.signedUrlExpiresAt=signedUrlExpiresAt;
             existing.updatedAt=Date.now();
         }
         return {item:existing,added:false,changed};
@@ -1049,6 +1073,7 @@ function insertSpace2Item(item,{collectionIds}={}){
         src,
         filePath,
         cloudPath,
+        signedUrlExpiresAt,
         title:item.title||(filePath?filePath.split('/').pop():'Untitled'),
         description:item.description||'',
         collectionIds:normalizedCollectionIds,
@@ -1147,6 +1172,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
         let src='';
         let filePath='';
         let cloudPath='';
+        let signedUrlExpiresAt=0;
         if(f.path){
             filePath=f.path;
             src=toFileUrl(f.path);
@@ -1166,12 +1192,13 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
                     cloudPath=uploaded.path;
                     if(uploaded.url) src=uploaded.url;
                 }
+                if(uploaded&&uploaded.expiresAt) signedUrlExpiresAt=uploaded.expiresAt;
             }catch(err){
                 console.warn('space2 upload sync failed',err);
             }
         }
         if(!src) continue;
-        items.push({src,filePath,title:f.name||'Upload',cloudPath,analysisBlob:f});
+        items.push({src,filePath,title:f.name||'Upload',cloudPath,signedUrlExpiresAt,analysisBlob:f});
     }
     upsertSpace2Items(items,{openEditor});
 }
