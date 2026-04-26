@@ -1,0 +1,46 @@
+{
+  "name": "asquarespace-mac-app",
+  "version": "1.0.0",
+  "description": "Standalone macOS desktop wrapper for Asquarespace",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "make-icon": "bash ./scripts/make-icon.sh",
+    "dev": "electron .",
+    "build:mac": "npm run make-icon && electron-builder --mac --universal"
+  },
+  "devDependencies": {
+    "electron": "^32.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.asquarespace.desktop",
+    "productName": "Asquarespace",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../Asquarespace",
+        "to": "Asquarespace",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns"
+    }
+  }
+}

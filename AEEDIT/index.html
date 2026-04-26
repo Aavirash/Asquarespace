@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AE-Edit</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <div class="brand">AE-Edit</div>
+        <div class="status-wrap">
+            <span id="sync-status" class="pill">Disconnected</span>
+            <span id="comp-name" class="comp-name">No comp</span>
+        </div>
+        <div class="top-actions">
+            <button id="btn-tool-select" class="btn tiny active-tool" title="Select tool (Ctrl+V)">Select (Ctrl+V)</button>
+            <button id="btn-tool-blade" class="btn tiny" title="Blade tool (Ctrl+C)">Blade (Ctrl+C)</button>
+            <button id="btn-snap" class="btn tiny active-tool" title="Toggle snapping (S)">Snap: On</button>
+            <button id="btn-refresh" class="btn">Refresh Timeline</button>
+            <button id="btn-cut-at-cti" class="btn primary">Cut At CTI</button>
+        </div>
+    </header>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="panel-title">Media Browser</div>
+            <label class="file-pick">
+                <input id="file-input" type="file" multiple accept="audio/*,video/*,image/*">
+                Pick Files
+            </label>
+            <div class="media-actions">
+                <button id="btn-import-to-ae" class="btn tiny">Import To Project</button>
+                <button id="btn-insert-to-comp" class="btn tiny">Insert At CTI</button>
+            </div>
+            <div id="media-list" class="media-list"></div>
+        </aside>
+
+        <main class="timeline-wrap">
+            <div class="timeline-head">
+                <div>Timeline</div>
+                <div id="timeline-meta">0 layers</div>
+            </div>
+            <div class="ruler-wrap">
+                <div id="time-readout" class="time-readout">00:00:00</div>
+                <div id="timeline-ruler" class="timeline-ruler"></div>
+            </div>
+            <div id="timeline" class="timeline"></div>
+        </main>
+    </div>
+</div>
+
+<script src="js/CSInterface.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

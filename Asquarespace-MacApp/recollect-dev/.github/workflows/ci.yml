@@ -1,0 +1,127 @@
+jobs:
+  find_duplicated_packages:
+    name: Find Duplicated Packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/pnpm-install
+
+      - name: Check for duplicated packages
+        run: pnpm turbo run check:packages
+
+    timeout-minutes: 15
+
+  lint-css:
+    # env:
+    #   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+    #   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+    name: 🔬 Lint CSS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/pnpm-install
+
+      - name: Lint CSS
+        run: pnpm turbo run lint:css
+
+    timeout-minutes: 15
+
+  lint-ultracite:
+    # env:
+    #   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+    #   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+    name: 🔬 Lint Ultracite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/pnpm-install
+
+      - name: Generate Next.js types
+        run: pnpm next:typegen
+        env:
+          SKIP_ENV_VALIDATION: "true"
+
+      - name: Lint Ultracite
+        run: pnpm turbo run lint:ultracite
+
+    timeout-minutes: 15
+
+  lint-knip:
+    # env:
+    #   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+    #   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+    name: 🔬 Lint Knip
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/pnpm-install
+
+      - name: Lint Knip
+        run: pnpm turbo run lint:knip
+
+    timeout-minutes: 15
+
+  lint-md:
+    # env:
+    #   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+    #   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+    name: 🔬 Lint MD
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/pnpm-install
+
+      - name: Lint MD
+        run: pnpm turbo run lint:md
+
+    timeout-minutes: 15
+
+  lint-deno-types:
+    name: 🔬 Lint Deno Types
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/pnpm-install
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+        with:
+          deno-version: v2.x
+
+      - name: Lint Deno Types
+        run: pnpm lint:types:deno
+
+    timeout-minutes: 15
+
+name: CI
+
+on:
+  pull_request: ~
+  push:
+    branches:
+      - dev
+      - main

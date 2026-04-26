@@ -1,0 +1,83 @@
+import type { NextRouter } from "next/router";
+
+import { DISCOVER_URL } from "./constants";
+
+/**
+ * Extracts the category slug from the current Next.js router path.
+ *
+ * Example:
+ * - URL: /technology?sort=latest
+ * - Returns: "technology"
+ *
+ * - URL: /public/username/category-slug
+ * - Returns: "category-slug"
+ *
+ * - URL: /public/discover
+ * - Returns: "discover"
+ *
+ * - URL: /
+ * - Returns: null
+ * @param router The Next.js router instance
+ * @returns The category slug (string) or null if not found
+ */
+export const getCategorySlugFromRouter = (router: NextRouter): null | string => {
+  // Ensure we are running on the client (window is not available on server-side)
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const pathSegments = router?.asPath?.split("/")?.filter(Boolean) || [];
+
+  // Handle the public guest discover route: /public/discover[/preview/...]
+  if (pathSegments[0] === "public" && pathSegments[1]?.split("?")?.[0] === DISCOVER_URL) {
+    return DISCOVER_URL;
+  }
+
+  // Handle public collection routes: /public/[user_name]/[category_slug]
+  if (pathSegments[0] === "public" && pathSegments.length >= 3) {
+    return pathSegments[2]?.split("?")?.[0] || null;
+  }
+
+  // Handle authenticated routes: /[category_slug]
+  // router.asPath gives the full path with query string (e.g., "/technology?sort=latest")
+  // Step 1: Split by "/" → ["", "technology?sort=latest"]
+  // Step 2: Take index [1] → "technology?sort=latest"
+  // Step 3: Split by "?" to remove query → ["technology", "sort=latest"]
+  // Step 4: Take index [0] → "technology"
+  return router?.asPath?.split("/")?.[1]?.split("?")?.[0] || null;
+};
+
+/**
+ * Extracts user_name and category slug from public page routes.
+ *
+ * Example:
+ * - URL: /public/john/technology
+ * - Returns: { user_name: "john", category_slug: "technology" }
+ *
+ * - URL: /public/john/technology/preview/123
+ * - Returns: { user_name: "john", category_slug: "technology" }
+ * @param router The Next.js router instance
+ * @returns Object with user_name and category_slug, or null if not a public route
+ */
+export const getPublicPageInfo = (
+  router: NextRouter,
+): { category_slug: string; user_name: string } | null => {
+  // Ensure we are running on the client (window is not available on server-side)
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const pathSegments = router?.asPath?.split("/")?.filter(Boolean) || [];
+
+  // Check if this is a public route: /public/[user_name]/[category_slug]
+  if (pathSegments[0] === "public" && pathSegments.length >= 3) {
+    const [, user_name, rawCategorySlug] = pathSegments;
+    const category_slug = rawCategorySlug?.split("?")?.[0];
+
+    if (user_name && category_slug) {
+      return { category_slug, user_name };
+    }
+  }
+
+  return null;
+};
