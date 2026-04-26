@@ -180,6 +180,8 @@ let tx=0, ty=0, sc=1;
 let allNodes    = [];
 let selectedSet = new Set();
 let drag        = null;
+let activeCanvasPointerId = null;
+let lastNoteTap = { node: null, time: 0, pointerType: '' };
 let interactionDirty=false;
 let genW=1024, genH=1024;
 let currentModel='flux';
@@ -2748,99 +2750,32 @@ viewport.addEventListener('mousedown',e=>{
 viewport.addEventListener('contextmenu',e=>e.preventDefault());
 
 window.addEventListener('mousemove',e=>{
-    if(!drag) return;
-    const d=drag;
-    if(d.type==='pan'){
-        setT(tx+(e.clientX-d.lastX),ty+(e.clientY-d.lastY),sc);
-        d.lastX=e.clientX;d.lastY=e.clientY;
-    } else if(d.type==='cmdZoom'){
-        const dy=d.lastY-e.clientY;d.lastY=e.clientY;
-        const f=Math.exp(dy*0.012);
-        setT(d.pivX-(d.pivX-tx)*f,d.pivY-(d.pivY-ty)*f,sc*f);
-    } else if(d.type==='marquee'){
-        d.lastX=e.clientX;d.lastY=e.clientY;
-        setMarqueeBox(d.startX,d.startY,d.lastX,d.lastY);
-        marqueeSelect(d.startX,d.startY,d.lastX,d.lastY,d.append);
-    } else if(d.type==='drag'){
-        const dx=(e.clientX-d.startX)/sc,dy=(e.clientY-d.startY)/sc;
-        selectedSet.forEach(n=>{n.style.left=(d.origins.get(n).x+dx)+'px';n.style.top=(d.origins.get(n).y+dy)+'px';});
-        interactionDirty=true;
-        updateCtxPos();updateMultiSelectionBox();updateNoteToolbarPos();
-    } else if(d.type==='rotate'){
-        const nr=d.node.getBoundingClientRect();
-        const cx=nr.left+nr.width/2,cy=nr.top+nr.height/2;
-        const now=Math.atan2(e.clientY-cy,e.clientX-cx)*180/Math.PI;
-        const delta=now-d.startMouseAngle;
-        d.node.style.transform=`rotate(${d.startNodeAngle+delta}deg)`;
-        interactionDirty=true;
-        updateMultiSelectionBox();
-    } else if(d.type==='scale'){
-        const dx=(e.clientX-d.startX)/sc;
-        const dy=(e.clientY-d.startY)/sc;
-        const isCard=d.node.classList.contains('note-card')||d.node.classList.contains('chat-card');
-        let nw=d.ow;
-        let nh=d.oh;
-        if(isCard){
-            if(d.handle==='br'){nw=d.ow+dx;nh=d.oh+dy;}
-            else if(d.handle==='tr'){nw=d.ow+dx;nh=d.oh-dy;}
-            else if(d.handle==='bl'){nw=d.ow-dx;nh=d.oh+dy;}
-            else {nw=d.ow-dx;nh=d.oh-dy;}
-            nw=clamp(nw,d.minW,d.maxW);
-            nh=clamp(nh,d.minH,d.maxH);
-            const deltaW=nw-d.ow;
-            const deltaH=nh-d.oh;
-            let nx=d.startLeft;
-            let ny=d.startTop;
-            if(d.handle==='tl'||d.handle==='bl') nx=d.startLeft-deltaW;
-            if(d.handle==='tl'||d.handle==='tr') ny=d.startTop-deltaH;
-            d.node.style.left=nx+'px';
-            d.node.style.top=ny+'px';
-        }else{
-            let sx=1,sy=1;
-            if(d.handle==='br'){sx=(d.ow+dx)/d.ow;sy=(d.oh+dy)/d.oh;}
-            else if(d.handle==='tr'){sx=(d.ow+dx)/d.ow;sy=(d.oh-dy)/d.oh;}
-            else if(d.handle==='bl'){sx=(d.ow-dx)/d.ow;sy=(d.oh+dy)/d.oh;}
-            else {sx=(d.ow-dx)/d.ow;sy=(d.oh-dy)/d.oh;}
-            const f=Math.max(0.08,Math.min(12,Math.max(sx,sy)));
-            nw=clamp(d.ow*f,d.minW,d.maxW);
-            nh=clamp(d.oh*f,d.minH,d.maxH);
-        }
-        const mediaEl=d.el.querySelector&&d.el.querySelector('.media-el');
-        const isVideoMedia=!!(mediaEl&&mediaEl.tagName==='VIDEO');
-        const isAudioMedia=!!(mediaEl&&mediaEl.tagName==='AUDIO');
-        if(isVideoMedia){
-            d.el.style.width=nw+'px';
-            d.el.style.height='';
-            mediaEl.style.height='auto';
-        }else if(isAudioMedia){
-            d.el.style.width=nw+'px';
-            d.el.style.height='58px';
-        }else{
-            d.el.style.width=nw+'px';
-            d.el.style.height=nh+'px';
-        }
-        interactionDirty=true;
-        updateMultiSelectionBox();
-    }
+    updateCanvasInteraction(e.clientX,e.clientY);
 });
 
 window.addEventListener('mouseup',()=>{
-    if(drag&&drag.type==='marquee'){
-        const moved=Math.hypot(drag.lastX-drag.startX,drag.lastY-drag.startY);
-        if(moved<3&&!drag.append) clearSel();
-        selBox.style.display='none';
-    }
-    if(interactionDirty){
-        captureHistorySnapshot();
-        schedulePersist(120);
-    }
-    interactionDirty=false;
-    drag=null;
-    updateCtxPos();
-    updateNoteToolbarPos();
-    updateMultiSelectionBox();
-    viewport.classList.remove('is-panning','is-cmd-zoom');
+    finishCanvasInteraction();
 });
+
+window.addEventListener('pointermove',e=>{
+    if(e.pointerType==='mouse'||activeCanvasPointerId===null||e.pointerId!==activeCanvasPointerId) return;
+    e.preventDefault();
+    updateCanvasInteraction(e.clientX,e.clientY);
+},{passive:false});
+
+window.addEventListener('pointerup',e=>{
+    if(e.pointerType==='mouse'||activeCanvasPointerId===null||e.pointerId!==activeCanvasPointerId) return;
+    e.preventDefault();
+    finishCanvasInteraction();
+    clearActiveCanvasPointer(e.pointerId,e.target);
+},{passive:false});
+
+window.addEventListener('pointercancel',e=>{
+    if(e.pointerType==='mouse'||activeCanvasPointerId===null||e.pointerId!==activeCanvasPointerId) return;
+    e.preventDefault();
+    finishCanvasInteraction();
+    clearActiveCanvasPointer(e.pointerId,e.target);
+},{passive:false});
 
 window.addEventListener('mousedown',e=>{
     if((e.altKey||e.metaKey||e.ctrlKey)&&e.target&&e.target.closest&&e.target.closest('.canvas-node')){
@@ -3111,6 +3046,140 @@ function clamp(v,min,max){
     return Math.max(min,Math.min(max,v));
 }
 
+function setActiveCanvasPointer(pointerId, owner){
+    activeCanvasPointerId = pointerId;
+    if(owner && owner.setPointerCapture){
+        try{ owner.setPointerCapture(pointerId); }catch{}
+    }
+}
+
+function clearActiveCanvasPointer(pointerId, owner){
+    if(activeCanvasPointerId!==pointerId) return;
+    activeCanvasPointerId = null;
+    if(owner && owner.releasePointerCapture){
+        try{ owner.releasePointerCapture(pointerId); }catch{}
+    }
+}
+
+function updateCanvasInteraction(clientX,clientY){
+    if(!drag) return;
+    const d=drag;
+    if(d.type==='pan'){
+        setT(tx+(clientX-d.lastX),ty+(clientY-d.lastY),sc);
+        d.lastX=clientX;d.lastY=clientY;
+    } else if(d.type==='cmdZoom'){
+        const dy=d.lastY-clientY;d.lastY=clientY;
+        const f=Math.exp(dy*0.012);
+        setT(d.pivX-(d.pivX-tx)*f,d.pivY-(d.pivY-ty)*f,sc*f);
+    } else if(d.type==='marquee'){
+        d.lastX=clientX;d.lastY=clientY;
+        setMarqueeBox(d.startX,d.startY,d.lastX,d.lastY);
+        marqueeSelect(d.startX,d.startY,d.lastX,d.lastY,d.append);
+    } else if(d.type==='drag'){
+        const dx=(clientX-d.startX)/sc,dy=(clientY-d.startY)/sc;
+        selectedSet.forEach(n=>{n.style.left=(d.origins.get(n).x+dx)+'px';n.style.top=(d.origins.get(n).y+dy)+'px';});
+        interactionDirty=true;
+        updateCtxPos();updateMultiSelectionBox();updateNoteToolbarPos();
+    } else if(d.type==='rotate'){
+        const nr=d.node.getBoundingClientRect();
+        const cx=nr.left+nr.width/2,cy=nr.top+nr.height/2;
+        const now=Math.atan2(clientY-cy,clientX-cx)*180/Math.PI;
+        const delta=now-d.startMouseAngle;
+        d.node.style.transform=`rotate(${d.startNodeAngle+delta}deg)`;
+        interactionDirty=true;
+        updateMultiSelectionBox();
+    } else if(d.type==='scale'){
+        const dx=(clientX-d.startX)/sc;
+        const dy=(clientY-d.startY)/sc;
+        const isCard=d.node.classList.contains('note-card')||d.node.classList.contains('chat-card');
+        let nw=d.ow;
+        let nh=d.oh;
+        if(isCard){
+            if(d.handle==='br'){nw=d.ow+dx;nh=d.oh+dy;}
+            else if(d.handle==='tr'){nw=d.ow+dx;nh=d.oh-dy;}
+            else if(d.handle==='bl'){nw=d.ow-dx;nh=d.oh+dy;}
+            else {nw=d.ow-dx;nh=d.oh-dy;}
+            nw=clamp(nw,d.minW,d.maxW);
+            nh=clamp(nh,d.minH,d.maxH);
+            const deltaW=nw-d.ow;
+            const deltaH=nh-d.oh;
+            let nx=d.startLeft;
+            let ny=d.startTop;
+            if(d.handle==='tl'||d.handle==='bl') nx=d.startLeft-deltaW;
+            if(d.handle==='tl'||d.handle==='tr') ny=d.startTop-deltaH;
+            d.node.style.left=nx+'px';
+            d.node.style.top=ny+'px';
+        }else{
+            let sx=1,sy=1;
+            if(d.handle==='br'){sx=(d.ow+dx)/d.ow;sy=(d.oh+dy)/d.oh;}
+            else if(d.handle==='tr'){sx=(d.ow+dx)/d.ow;sy=(d.oh-dy)/d.oh;}
+            else if(d.handle==='bl'){sx=(d.ow-dx)/d.ow;sy=(d.oh+dy)/d.oh;}
+            else {sx=(d.ow-dx)/d.ow;sy=(d.oh-dy)/d.oh;}
+            const f=Math.max(0.08,Math.min(12,Math.max(sx,sy)));
+            nw=clamp(d.ow*f,d.minW,d.maxW);
+            nh=clamp(d.oh*f,d.minH,d.maxH);
+        }
+        const mediaEl=d.el.querySelector&&d.el.querySelector('.media-el');
+        const isVideoMedia=!!(mediaEl&&mediaEl.tagName==='VIDEO');
+        const isAudioMedia=!!(mediaEl&&mediaEl.tagName==='AUDIO');
+        if(isVideoMedia){
+            d.el.style.width=nw+'px';
+            d.el.style.height='';
+            mediaEl.style.height='auto';
+        }else if(isAudioMedia){
+            d.el.style.width=nw+'px';
+            d.el.style.height='58px';
+        }else{
+            d.el.style.width=nw+'px';
+            d.el.style.height=nh+'px';
+        }
+        interactionDirty=true;
+        updateMultiSelectionBox();
+    }
+}
+
+function finishCanvasInteraction(){
+    if(drag&&drag.type==='marquee'){
+        const moved=Math.hypot(drag.lastX-drag.startX,drag.lastY-drag.startY);
+        if(moved<3&&!drag.append) clearSel();
+        selBox.style.display='none';
+    }
+    if(interactionDirty){
+        captureHistorySnapshot();
+        schedulePersist(120);
+    }
+    interactionDirty=false;
+    drag=null;
+    updateCtxPos();
+    updateNoteToolbarPos();
+    updateMultiSelectionBox();
+    viewport.classList.remove('is-panning','is-cmd-zoom');
+}
+
+function maybeOpenNoteEditorFromTap(node,pointerType){
+    if(!(node.classList.contains('note-card')||node.classList.contains('chat-card'))) return;
+    const now=Date.now();
+    if(lastNoteTap.node===node&&lastNoteTap.pointerType===pointerType&&(now-lastNoteTap.time)<360){
+        const c=node.querySelector('.note-content');
+        if(c){
+            if(!selectedSet.has(node))selOnly(node);
+            c.contentEditable='true';
+            c.classList.add('editing');
+            c.focus();
+            if(c.textContent==='Type your note...'||c.textContent==='Thinking...'){
+                c.textContent='';
+                const r=document.createRange();
+                r.selectNodeContents(c);
+                r.collapse(false);
+                const s=window.getSelection();
+                s.removeAllRanges();
+                s.addRange(r);
+            }
+        }
+    }
+    lastNoteTap={ node, time: now, pointerType };
+}
+
 function makeNode(cx,cy){
     const n=document.createElement('div');n.classList.add('canvas-node');n.style.left=cx+'px';n.style.top=cy+'px';return n;
 }
@@ -3152,6 +3221,35 @@ function addHandles(node,inner){
             updateCtxPos();
             updateNoteToolbarPos();
         });inner.appendChild(h);
+        h.addEventListener('pointerdown',e=>{
+            if(e.pointerType==='mouse') return;
+            e.preventDefault();
+            e.stopPropagation();
+            if(!selectedSet.has(node))selOnly(node);
+            const t=inner.querySelector('.media-player,img,video,audio,.ai-placeholder')||inner;if(!t)return;
+            const ow=t.offsetWidth||parseFloat(getComputedStyle(t).width)||40;
+            const oh=t.offsetHeight||parseFloat(getComputedStyle(t).height)||40;
+            const isCard=node.classList.contains('note-card')||node.classList.contains('chat-card');
+            drag={
+                type:'scale',
+                el:t,
+                node,
+                handle:pos,
+                startX:e.clientX,
+                startY:e.clientY,
+                startLeft:parseFloat(node.style.left)||0,
+                startTop:parseFloat(node.style.top)||0,
+                ow,
+                oh,
+                minW:isCard?260:40,
+                minH:isCard?160:40,
+                maxW:isCard?980:2600,
+                maxH:isCard?760:2200
+            };
+            setActiveCanvasPointer(e.pointerId,h);
+            updateCtxPos();
+            updateNoteToolbarPos();
+        },{passive:false});
 
     });
 
@@ -3171,6 +3269,21 @@ function addHandles(node,inner){
         updateCtxPos();
         updateNoteToolbarPos();
     });
+    rh.addEventListener('pointerdown',e=>{
+        if(e.pointerType==='mouse') return;
+        e.preventDefault();
+        e.stopPropagation();
+        if(!selectedSet.has(node))selOnly(node);
+        const nr=node.getBoundingClientRect();
+        const cx=nr.left+nr.width/2,cy=nr.top+nr.height/2;
+        const startMouseAngle=Math.atan2(e.clientY-cy,e.clientX-cx)*180/Math.PI;
+        const m=(node.style.transform||'').match(/rotate\(([-\d.]+)deg\)/);
+        const startNodeAngle=m?parseFloat(m[1]):0;
+        drag={type:'rotate',node,startMouseAngle,startNodeAngle};
+        setActiveCanvasPointer(e.pointerId,rh);
+        updateCtxPos();
+        updateNoteToolbarPos();
+    },{passive:false});
     inner.appendChild(rh);
 
     if(!node.__asqNodeBound){
@@ -3201,6 +3314,35 @@ function addHandles(node,inner){
             updateCtxPos();
             updateNoteToolbarPos();
         });
+        node.addEventListener('pointerdown',e=>{
+            if(e.pointerType==='mouse') return;
+            if(e.altKey||e.metaKey||e.ctrlKey) return;
+            if(e.target.classList.contains('scale-handle'))return;
+            if(e.target.classList.contains('rotate-handle'))return;
+            if(e.target.tagName==='VIDEO'||e.target.tagName==='AUDIO')return;
+            if(e.target.closest&&e.target.closest('.media-controls')) return;
+            if(e.shiftKey){
+                e.preventDefault();
+                e.stopPropagation();
+                if(selectedSet.has(node)) removeSel(node);
+                else addSel(node);
+                return;
+            }
+            if(e.target.classList.contains('note-content')&&!e.target.classList.contains('editing')){
+                e.preventDefault();
+                selOnly(node);
+                updateNoteToolbarPos();
+            }
+            if(e.target.isContentEditable)return;
+            e.preventDefault();
+            e.stopPropagation();
+            if(!selectedSet.has(node)) selOnly(node);
+            const origins=new Map();selectedSet.forEach(n=>origins.set(n,{x:parseFloat(n.style.left)||0,y:parseFloat(n.style.top)||0}));
+            drag={type:'drag',startX:e.clientX,startY:e.clientY,origins};
+            setActiveCanvasPointer(e.pointerId,node);
+            updateCtxPos();
+            updateNoteToolbarPos();
+        },{passive:false});
         node.__asqNodeBound=true;
     }
 
@@ -3213,6 +3355,11 @@ function addHandles(node,inner){
             if(c.textContent==='Type your note...'||c.textContent==='Thinking...'){c.textContent='';const r=document.createRange();r.selectNodeContents(c);r.collapse(false);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}
         });
         c.addEventListener('blur',()=>{c.contentEditable='false';c.classList.remove('editing');});
+        node.addEventListener('pointerup',e=>{
+            if(e.pointerType==='mouse') return;
+            if(drag||activeCanvasPointerId!==null) return;
+            maybeOpenNoteEditorFromTap(node,e.pointerType);
+        });
     }
 }
 
