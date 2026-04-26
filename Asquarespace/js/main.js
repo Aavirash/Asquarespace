@@ -121,6 +121,7 @@ const space2ItemDelete = document.getElementById('space2-item-delete');
 const space2ItemCancel = document.getElementById('space2-item-cancel');
 const space2ItemSave = document.getElementById('space2-item-save');
 const space2CollectionModal = document.getElementById('space2-collection-modal');
+let space2LayoutFrame=0;
 const space2CollectionModalTitle = document.getElementById('space2-collection-modal-title');
 const space2CollectionNameInput = document.getElementById('space2-collection-name');
 const space2CollectionCancel = document.getElementById('space2-collection-cancel');
@@ -462,6 +463,7 @@ function renderSpace2Grid(){
     const list=getFilteredSpace2Items();
     if(!list.length){
         space2Grid.innerHTML='';
+        space2Grid.style.setProperty('--space2-grid-content-height','0px');
         return;
     }
     space2Grid.innerHTML='';
@@ -489,6 +491,7 @@ function renderSpace2Grid(){
                 if(img&&desc&&!item.description){
                         img.addEventListener('load',()=>{
                                 if(img.naturalWidth&&img.naturalHeight) desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
+                        scheduleSpace2GridLayout();
                         },{once:true});
                 }
         card.addEventListener('click',()=>openSpace2Item(item.id));
@@ -511,6 +514,57 @@ function renderSpace2Grid(){
         }
         space2Grid.appendChild(card);
     });
+    layoutSpace2Grid();
+}
+
+function getSpace2GridColumnCount(){
+    if(window.innerWidth<=760) return 2;
+    if(window.innerWidth<=980) return 3;
+    return 4;
+}
+
+function scheduleSpace2GridLayout(){
+    if(!space2Grid) return;
+    if(space2LayoutFrame) cancelAnimationFrame(space2LayoutFrame);
+    space2LayoutFrame=requestAnimationFrame(()=>{
+        space2LayoutFrame=0;
+        layoutSpace2Grid();
+    });
+}
+
+function layoutSpace2Grid(){
+    if(!space2Grid) return;
+    const cards=[...space2Grid.querySelectorAll('.space2-item')];
+    if(!cards.length){
+        space2Grid.style.setProperty('--space2-grid-content-height','0px');
+        return;
+    }
+    const styles=window.getComputedStyle(space2Grid);
+    const paddingLeft=parseFloat(styles.paddingLeft)||0;
+    const paddingRight=parseFloat(styles.paddingRight)||0;
+    const paddingTop=parseFloat(styles.paddingTop)||0;
+    const paddingBottom=parseFloat(styles.paddingBottom)||0;
+    const gap=parseFloat(styles.getPropertyValue('--space2-grid-gap'))||16;
+    const columnCount=getSpace2GridColumnCount();
+    const innerWidth=Math.max(0,space2Grid.clientWidth-paddingLeft-paddingRight);
+    const cardWidth=Math.max(0,(innerWidth-gap*(columnCount-1))/columnCount);
+    const columnHeights=Array(columnCount).fill(paddingTop);
+
+    cards.forEach(card=>{
+        card.style.width=`${cardWidth}px`;
+        let targetColumn=0;
+        for(let idx=1;idx<columnHeights.length;idx++){
+            if(columnHeights[idx]<columnHeights[targetColumn]) targetColumn=idx;
+        }
+        const left=paddingLeft+targetColumn*(cardWidth+gap);
+        const top=columnHeights[targetColumn];
+        card.style.left=`${left}px`;
+        card.style.top=`${top}px`;
+        columnHeights[targetColumn]=top+card.offsetHeight+gap;
+    });
+
+    const contentHeight=Math.max(...columnHeights)-gap+paddingBottom;
+    space2Grid.style.setProperty('--space2-grid-content-height',`${Math.max(contentHeight,0)}px`);
 }
 
 function openSpace2Item(itemId){
@@ -1516,6 +1570,7 @@ setTimeout(fitViewportToVisibleArea,120);
 setTimeout(fitViewportToVisibleArea,420);
 setTimeout(fitViewportToVisibleArea,1200);
 setTimeout(()=>{const r=viewport.getBoundingClientRect();setT(r.width/2,r.height/2,1);},0);
+window.addEventListener('resize',scheduleSpace2GridLayout);
 
 // ── Grid placement ─────────────────────────────────────────────────────────
 function getGridPos(w,h){const vc=viewCenter();const total=(w+PLACE_GAP)*PLACE_COLS-PLACE_GAP;const x=vc.x-total/2+placeColumn*(w+PLACE_GAP);const y=vc.y-h/2+placeRow*(h+PLACE_GAP*1.5);placeColumn++;if(placeColumn>=PLACE_COLS){placeColumn=0;placeRow++;}return{x,y};}
