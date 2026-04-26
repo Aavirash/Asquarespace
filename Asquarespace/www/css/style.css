@@ -649,7 +649,7 @@ body.space-2 #favorites-panel{display:none!important;}
     color: #f3f4f6;
 }
 /* Sliding pill underneath active button */
-#mode-switcher {
+#mode-slider {
     position: absolute;
     top: 5px;
     height: calc(100% - 10px);
