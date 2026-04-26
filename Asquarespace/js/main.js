@@ -118,6 +118,9 @@ const space2SettingsModal = document.getElementById('space2-settings-modal');
 const space2SettingsClose = document.getElementById('space2-settings-close');
 const space2CapturePermissionBtn = document.getElementById('space2-capture-permission-btn');
 const space2CaptureStatus = document.getElementById('space2-capture-status');
+const space2LayoutGridBtn = document.getElementById('space2-layout-grid-btn');
+const space2LayoutFeedBtn = document.getElementById('space2-layout-feed-btn');
+const space2ColumnsSelect = document.getElementById('space2-columns-select');
 const space2Collections = document.getElementById('space2-collections');
 const space2Grid = document.getElementById('space2-grid');
 const space2ItemModal = document.getElementById('space2-item-modal');
@@ -199,6 +202,8 @@ let space2ActiveItemId='';
 let space2CollectionsOpen=false;
 let space2View='discover';
 let space2SidebarWidth=parseInt(localStorage.getItem('asq.space2.sidebar.width')||'264',10)||264;
+let space2LayoutMode=(localStorage.getItem('asq.space2.layout.mode')||'grid')==='feed'?'feed':'grid';
+let space2ColumnsSetting=localStorage.getItem('asq.space2.layout.columns')||'auto';
 let space2AiModels=[];
 let space2AiModel='openai';
 let space2AiCaptureArmed=false;
@@ -508,6 +513,7 @@ function renderSpace2Collections(){
 
 function renderSpace2Grid(){
     if(!space2Grid) return;
+    space2Grid.classList.toggle('feed-mode',space2LayoutMode==='feed');
     const list=getFilteredSpace2Items();
     if(!list.length){
         space2Grid.innerHTML='';
@@ -566,9 +572,16 @@ function renderSpace2Grid(){
 }
 
 function getSpace2GridColumnCount(){
+    if(space2LayoutMode==='feed') return 1;
+    if(space2ColumnsSetting!=='auto'){
+        const manual=Math.max(1,Math.min(5,parseInt(space2ColumnsSetting,10)||2));
+        return manual;
+    }
     if(window.innerWidth<=760) return 2;
-    if(window.innerWidth<=980) return 3;
-    return 4;
+    if(window.innerWidth<=1180) return 2;
+    if(window.innerWidth<=1560) return 3;
+    if(window.innerWidth<=1980) return 4;
+    return 5;
 }
 
 function scheduleSpace2GridLayout(){
@@ -706,22 +719,27 @@ function insertSpace2Item(item,{collectionIds}={}){
     return {item:created,added:true,changed:true};
 }
 
-function upsertSpace2Items(items){
+function upsertSpace2Items(items,{openEditor=false}={}){
     if(!Array.isArray(items)||!items.length) return 0;
     let added=0;
     let changed=false;
+    let firstAddedItemId='';
     items.forEach((item,idx)=>{
         const inserted=insertSpace2Item({
             ...item,
             title:item.title||((item.filePath||'').split('/').pop()||`Image ${idx+1}`)
         });
-        if(inserted.added) added++;
+        if(inserted.added){
+            added++;
+            if(!firstAddedItemId&&inserted.item&&inserted.item.id) firstAddedItemId=inserted.item.id;
+        }
         if(inserted.changed) changed=true;
     });
     if(!changed) return 0;
     saveSpace2State();
     renderSpace2Collections();
     renderSpace2Grid();
+    if(openEditor&&firstAddedItemId) openSpace2Item(firstAddedItemId);
     return added;
 }
 
@@ -767,7 +785,7 @@ function importSelectionToSpace2(silent=false){
     return upsertSpace2Items(items);
 }
 
-async function importFilesToSpace2(files){
+async function importFilesToSpace2(files,{openEditor=false}={}){
     const list=[...(files||[])].filter(f=>f&&f.type&&f.type.startsWith('image/'));
     if(!list.length) return;
     const items=[];
@@ -789,7 +807,7 @@ async function importFilesToSpace2(files){
         if(!src) continue;
         items.push({src,filePath,title:f.name||'Upload'});
     }
-    upsertSpace2Items(items);
+    upsertSpace2Items(items,{openEditor});
 }
 
 function initSpace2GridDropzone(){
@@ -876,11 +894,31 @@ function initSpace2SidebarSizing(){
 
 function openSpace2SettingsModal(){
     if(space2CaptureStatus) space2CaptureStatus.textContent='';
+    updateSpace2LayoutSettingsUI();
     if(space2SettingsModal) space2SettingsModal.classList.remove('hidden');
 }
 
 function closeSpace2SettingsModal(){
     if(space2SettingsModal) space2SettingsModal.classList.add('hidden');
+}
+
+function updateSpace2LayoutSettingsUI(){
+    if(space2LayoutGridBtn) space2LayoutGridBtn.classList.toggle('primary',space2LayoutMode==='grid');
+    if(space2LayoutFeedBtn) space2LayoutFeedBtn.classList.toggle('primary',space2LayoutMode==='feed');
+    if(space2ColumnsSelect) space2ColumnsSelect.value=space2ColumnsSetting;
+}
+
+function applySpace2LayoutSettings({persist=true}={}){
+    if(space2ColumnsSetting!=='auto'&&!/^[1-5]$/.test(String(space2ColumnsSetting))){
+        space2ColumnsSetting='auto';
+    }
+    if(persist){
+        localStorage.setItem('asq.space2.layout.mode',space2LayoutMode);
+        localStorage.setItem('asq.space2.layout.columns',space2ColumnsSetting);
+    }
+    updateSpace2LayoutSettingsUI();
+    if(space2Grid) space2Grid.classList.toggle('feed-mode',space2LayoutMode==='feed');
+    renderSpace2Grid();
 }
 
 async function requestSpace2CapturePermission({silent=false}={}){
@@ -2956,7 +2994,7 @@ if(space2FileInput) space2FileInput.addEventListener('change',async e=>{
     e.target.value='';
 });
 if(space2CameraInput) space2CameraInput.addEventListener('change',async e=>{
-    await importFilesToSpace2(e.target.files);
+    await importFilesToSpace2(e.target.files,{openEditor:true});
     e.target.value='';
 });
 if(space2AiInput){
@@ -3154,6 +3192,7 @@ function renderDiscoverSources(feedKey=discoverCurrentFeed){
 if(space2ViewToggle) space2ViewToggle.addEventListener('click', () => showSpace2View(space2View==='grid'?'discover':'grid'));
 initSpace2SidebarSizing();
 initSpace2GridDropzone();
+applySpace2LayoutSettings({persist:false});
 if(space2NewCollection) space2NewCollection.addEventListener('click',()=>createSpace2Collection());
 if(space2ItemCancel) space2ItemCancel.addEventListener('click',closeSpace2Item);
 if(space2ItemSave) space2ItemSave.addEventListener('click',saveSpace2Item);
@@ -3166,6 +3205,18 @@ if(space2CollectionModal) space2CollectionModal.addEventListener('click',e=>{if(
 if(space2SettingsBtn) space2SettingsBtn.addEventListener('click',openSpace2SettingsModal);
 if(space2SettingsClose) space2SettingsClose.addEventListener('click',closeSpace2SettingsModal);
 if(space2CapturePermissionBtn) space2CapturePermissionBtn.addEventListener('click',()=>requestSpace2CapturePermission({silent:false}));
+if(space2LayoutGridBtn) space2LayoutGridBtn.addEventListener('click',()=>{
+    space2LayoutMode='grid';
+    applySpace2LayoutSettings();
+});
+if(space2LayoutFeedBtn) space2LayoutFeedBtn.addEventListener('click',()=>{
+    space2LayoutMode='feed';
+    applySpace2LayoutSettings();
+});
+if(space2ColumnsSelect) space2ColumnsSelect.addEventListener('change',()=>{
+    space2ColumnsSetting=(space2ColumnsSelect.value||'auto');
+    applySpace2LayoutSettings();
+});
 if(space2SettingsModal) space2SettingsModal.addEventListener('click',e=>{if(e.target===space2SettingsModal) closeSpace2SettingsModal();});
 document.addEventListener('click',e=>{
     if(activeCollectionMenu && !activeCollectionMenu.contains(e.target)) closeCollectionMenu();

@@ -207,6 +207,9 @@
       <button id="space2-upload-btn" class="space2-top-icon-btn" title="Upload images" aria-label="Upload images">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l5 5h-3v7h-4V9H7l5-5zm-7 14h14v2H5v-2z"/></svg>
       </button>
+      <button id="space2-camera-btn" class="space2-top-icon-btn" title="Capture from camera" aria-label="Capture from camera">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l1.4-2h3.2L15 5h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4zm3 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0-2.2a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z"/></svg>
+      </button>
       <button id="space2-new-collection" class="space2-top-icon-btn" title="New collection" aria-label="New collection">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z"/></svg>
       </button>
@@ -218,6 +221,7 @@
         <svg id="icon-sun" viewBox="0 0 24 24"><path d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0-13a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V5a1 1 0 0 1 1-1zm0 15a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1zm9-8a1 1 0 1 1 0 2h-1a1 1 0 1 1 0-2h1zM5 12a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2h1zm12.66-7.07a1 1 0 0 1 0 1.41l-.7.71a1 1 0 1 1-1.42-1.42l.71-.7a1 1 0 0 1 1.41 0zM7.05 16.95a1 1 0 0 1 0 1.41l-.7.71a1 1 0 1 1-1.42-1.42l.71-.7a1 1 0 0 1 1.41 0zm10.61 1.41a1 1 0 0 1-1.41 0l-.71-.7a1 1 0 1 1 1.42-1.42l.7.71a1 1 0 0 1 0 1.41zM7.05 7.05a1 1 0 0 1-1.41 0l-.71-.7A1 1 0 0 1 6.34 4.93l.71.7a1 1 0 0 1 0 1.42z"/></svg>
         <svg id="icon-moon" viewBox="0 0 24 24" style="display:none"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8A9.15 9.15 0 0 0 12 3z"/></svg>
       </button>
+      <input type="file" id="space2-camera-input" hidden accept="image/*" capture="environment">
       <input type="file" id="space2-file-input" hidden multiple accept="image/*">
     </div>
     <div class="space2-body">
@@ -284,7 +288,7 @@
               <div id="space2-ai-model-dropdown" class="model-dropdown hidden"></div>
             </div>
             <button id="space2-ai-send" class="space2-ai-send" type="button" aria-label="Send prompt">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.6l17.7-8.1a1 1 0 0 0 0-1.8L3.4 2.6a1 1 0 0 0-1.4 1.1l1.6 6.3a1 1 0 0 0 .8.7l8 .9-8 .9a1 1 0 0 0-.8.7L2 19.5a1 1 0 0 0 1.4 1.1z"/></svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5l5 5h-3v9h-4v-9H7l5-5z"/></svg>
             </button>
           </div>
         </div>
@@ -332,6 +336,20 @@
   <div id="space2-settings-modal" class="settings-modal hidden">
     <div class="settings-card">
       <div class="settings-title">Space Settings</div>
+      <label class="settings-label">Grid Layout</label>
+      <div class="settings-actions" style="justify-content:flex-start;gap:8px;margin-top:8px;">
+        <button id="space2-layout-grid-btn" class="settings-btn">Grid</button>
+        <button id="space2-layout-feed-btn" class="settings-btn">Feed</button>
+      </div>
+      <label class="settings-label" for="space2-columns-select" style="margin-top:10px;">Columns</label>
+      <select id="space2-columns-select" class="settings-input" style="height:34px;">
+        <option value="auto">Auto</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
       <label class="settings-label">Screen Capture Access</label>
       <div class="settings-help">Grant macOS screen capture permission for region capture in Space AI.</div>
       <div class="settings-actions" style="justify-content:space-between;align-items:center;margin-top:10px;">
