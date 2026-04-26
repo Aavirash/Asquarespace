@@ -23,6 +23,7 @@ const API_KEY  = 'sk_CpXbaZAa5rqnfaDUxTtFrw4rVsOjtc7m';
 const API_BASE = 'https://gen.pollinations.ai';
 const SUPABASE_URL = 'https://idnuatrmilkjwcmqgysg.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_0fFfKFkffH43-8vX97na7A_H3mKg3K7';
+const APP_WEB_URL = 'https://space.asquareportal.com';
 const APP_PASSCODE = '24176882';
 const SUPABASE_MEDIA_BUCKET = 'asq-media';
 const SUPABASE_STATE_TABLE = 'user_workspace_state';
@@ -1894,7 +1895,13 @@ function bindAuthUi(){
         }
         currentAuthEmail=email;
         setAuthStatus('Sending verification code...');
-        const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:true}});
+        const {error}=await client.auth.signInWithOtp({
+            email,
+            options:{
+                shouldCreateUser:true,
+                emailRedirectTo:APP_WEB_URL
+            }
+        });
         if(error){
             setAuthStatus(error.message||'Unable to send code.',true);
             return;

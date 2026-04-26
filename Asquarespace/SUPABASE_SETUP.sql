@@ -19,23 +19,27 @@ create table if not exists public.user_workspace_state (
 
 alter table public.user_workspace_state enable row level security;
 
-create policy if not exists "workspace_select_own"
+drop policy if exists "workspace_select_own" on public.user_workspace_state;
+create policy "workspace_select_own"
 on public.user_workspace_state
 for select
 using (auth.uid() = user_id);
 
-create policy if not exists "workspace_insert_own"
+drop policy if exists "workspace_insert_own" on public.user_workspace_state;
+create policy "workspace_insert_own"
 on public.user_workspace_state
 for insert
 with check (auth.uid() = user_id);
 
-create policy if not exists "workspace_update_own"
+drop policy if exists "workspace_update_own" on public.user_workspace_state;
+create policy "workspace_update_own"
 on public.user_workspace_state
 for update
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
-create policy if not exists "workspace_delete_own"
+drop policy if exists "workspace_delete_own" on public.user_workspace_state;
+create policy "workspace_delete_own"
 on public.user_workspace_state
 for delete
 using (auth.uid() = user_id);
@@ -45,26 +49,30 @@ insert into storage.buckets (id, name, public)
 values ('asq-media', 'asq-media', false)
 on conflict (id) do nothing;
 
-create policy if not exists "media_read_own"
+drop policy if exists "media_read_own" on storage.objects;
+create policy "media_read_own"
 on storage.objects
 for select
 to authenticated
 using (bucket_id = 'asq-media' and owner = auth.uid());
 
-create policy if not exists "media_insert_own"
+drop policy if exists "media_insert_own" on storage.objects;
+create policy "media_insert_own"
 on storage.objects
 for insert
 to authenticated
 with check (bucket_id = 'asq-media' and owner = auth.uid());
 
-create policy if not exists "media_update_own"
+drop policy if exists "media_update_own" on storage.objects;
+create policy "media_update_own"
 on storage.objects
 for update
 to authenticated
 using (bucket_id = 'asq-media' and owner = auth.uid())
 with check (bucket_id = 'asq-media' and owner = auth.uid());
 
-create policy if not exists "media_delete_own"
+drop policy if exists "media_delete_own" on storage.objects;
+create policy "media_delete_own"
 on storage.objects
 for delete
 to authenticated
