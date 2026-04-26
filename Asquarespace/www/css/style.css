@@ -220,7 +220,7 @@ body.space-2 #context-toolbar,
 body.space-2 #multi-toolbar,
 body.space-2 #note-toolbar,
 body.space-2 #favorites-panel{display:none!important;}
-body.space-2 #space2-mode-dock{display:flex;}
+body.space-2 #space2-mode-dock{display:none;}
 body:not(.space-2) #space2-mode-dock{display:none!important;}
 
 /* Workflow Dock + Canvas Nodes (mac app only) */
@@ -1047,10 +1047,11 @@ body:not(.space-2) #space2-mode-dock{display:none!important;}
     .space2-panel{--space2-sidebar-width:198px;}
     .space2-sidebar{overflow:auto;padding-top:8px;padding-bottom:68px;-webkit-overflow-scrolling:touch;top:10px;}
     .space2-head{gap:8px;}
-    .space2-sidebar-head{display:none;}
+    .space2-sidebar-head{display:flex;align-items:center;gap:8px;padding:2px 0 6px;min-width:0;}
     .space2-head-row{justify-content:flex-start;align-items:center;gap:6px;}
-    .space2-search-wrap{width:min(68vw,340px);max-width:none;min-width:0;height:36px;flex:0 1 auto;}
-    .space2-search-wrap:focus-within{width:min(68vw,340px);}
+    .space2-sidebar-head .space2-view-switch{flex:0 0 auto;align-self:auto;}
+    .space2-sidebar-head .space2-search-wrap{width:auto;max-width:none;min-width:0;height:36px;flex:1 1 auto;box-shadow:none;}
+    .space2-sidebar-head .space2-search-wrap:focus-within{width:auto;}
     .space2-top-icon-btn{width:36px;height:36px;border-radius:10px;flex-shrink:0;}
     .space2-top-icon-btn svg{width:18px;height:18px;}
     .space2-view-switch{height:36px;padding:2px;border-radius:10px;box-shadow:none;}
@@ -1060,9 +1061,13 @@ body:not(.space-2) #space2-mode-dock{display:none!important;}
     .space2-view-icon-grid{left:38px;right:auto;}
     .space2-view-thumb{top:2px;left:2px;width:34px;height:26px;border-radius:7px;transition:left .2s cubic-bezier(.4,0,.2,1);}
     .space2-view-toggle.is-grid .space2-view-thumb{left:38px;top:2px;}
+    body.space-2 #space2-mode-dock{display:flex!important;}
     .space2-mode-dock{bottom:calc(70px + env(safe-area-inset-bottom));padding:4px 5px 5px;border-radius:12px 12px 0 0;}
     .space2-mode-btn{min-width:44px;width:44px;padding:8px 0;font-size:0;gap:0;}
     .space2-mode-btn svg{width:16px;height:16px;}
+    .space2-mode-dock #theme-toggle{width:44px;height:34px;padding:0;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--text-mid);box-shadow:none;flex-shrink:0;}
+    .space2-mode-dock #theme-toggle:hover{background:var(--surface);border-color:var(--border);color:var(--text);}
+    .space2-top-search{display:none!important;}
     .board-fan-grid{grid-template-columns:repeat(3,38px);}
     .board-fan-btn{width:38px;height:38px;}
     #toolbar-hub{bottom:calc(8px + env(safe-area-inset-bottom));width:calc(100% - 12px);}

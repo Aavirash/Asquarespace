@@ -116,6 +116,7 @@ const spaceSlider = document.getElementById('space-slider');
 const spaceBtn1 = document.getElementById('space-btn-1');
 const spaceBtn2 = document.getElementById('space-btn-2');
 const space2TopSearch = document.getElementById('space2-top-search');
+const space2SearchWrap = space2TopSearch ? space2TopSearch.querySelector('.space2-search-wrap') : null;
 const space2Panel = document.getElementById('space2-panel');
 const space2ModeDock = document.getElementById('space2-mode-dock');
 const space2Search = document.getElementById('space2-search');
@@ -230,6 +231,11 @@ let space2LayoutMode=(localStorage.getItem('asq.space2.layout.mode')||'grid')===
 let space2ColumnsSetting=localStorage.getItem('asq.space2.layout.columns')||'auto';
 let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='1';
 let space2AutoMetaRunning=false;
+const space2SidebarHead=document.querySelector('#space2-sidebar .space2-sidebar-head');
+const space2MobileLayoutSlots=new Map();
+[space2ViewSwitch,space2SearchWrap,themeToggle].forEach(el=>{
+    if(el&&el.parentElement) space2MobileLayoutSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
+});
 let space2AiModels=[];
 let space2AiModel='openai';
 let space2AiCaptureArmed=false;
@@ -1321,8 +1327,37 @@ function initSpace2SidebarSizing(){
     });
 }
 
+function restoreSpace2MobileLayoutSlot(el){
+    if(!el) return;
+    const slot=space2MobileLayoutSlots.get(el);
+    if(!slot||!slot.parent) return;
+    if(slot.next&&slot.next.parentElement===slot.parent) slot.parent.insertBefore(el,slot.next);
+    else slot.parent.appendChild(el);
+}
+
 function applySpace2MobileHeaderLayout(){
-    const showDock=currentSpace==='space2';
+    const isMobile=window.innerWidth<=760;
+    const inSpace2=currentSpace==='space2';
+    const showDock=inSpace2&&isMobile;
+
+    if(isMobile&&inSpace2){
+        if(space2SidebarHead&&space2ViewSwitch&&space2ViewSwitch.parentElement!==space2SidebarHead){
+            space2SidebarHead.appendChild(space2ViewSwitch);
+        }
+        if(space2SidebarHead&&space2SearchWrap&&space2SearchWrap.parentElement!==space2SidebarHead){
+            space2SidebarHead.appendChild(space2SearchWrap);
+        }
+        if(space2ModeDock&&themeToggle&&themeToggle.parentElement!==space2ModeDock){
+            space2ModeDock.appendChild(themeToggle);
+        }
+    }else{
+        [space2ViewSwitch,space2SearchWrap,themeToggle].forEach(restoreSpace2MobileLayoutSlot);
+    }
+
+    if(space2TopSearch){
+        space2TopSearch.classList.toggle('hidden',!inSpace2||isMobile);
+        space2TopSearch.setAttribute('aria-hidden',(!inSpace2||isMobile)?'true':'false');
+    }
     if(space2ModeDock){
         space2ModeDock.classList.toggle('hidden',!showDock);
         space2ModeDock.setAttribute('aria-hidden',showDock?'false':'true');
