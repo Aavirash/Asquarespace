@@ -136,6 +136,9 @@ const space2CaptureStatus = document.getElementById('space2-capture-status');
 const space2LayoutGridBtn = document.getElementById('space2-layout-grid-btn');
 const space2LayoutFeedBtn = document.getElementById('space2-layout-feed-btn');
 const space2ColumnsSelect = document.getElementById('space2-columns-select');
+const space2AutoMetaToggle = document.getElementById('space2-auto-meta-toggle');
+const space2AutoMetaRun = document.getElementById('space2-auto-meta-run');
+const space2AutoMetaStatus = document.getElementById('space2-auto-meta-status');
 const space2Collections = document.getElementById('space2-collections');
 const space2Grid = document.getElementById('space2-grid');
 const space2ItemModal = document.getElementById('space2-item-modal');
@@ -219,6 +222,8 @@ let space2View='grid';
 let space2SidebarWidth=parseInt(localStorage.getItem('asq.space2.sidebar.width')||'264',10)||264;
 let space2LayoutMode=(localStorage.getItem('asq.space2.layout.mode')||'grid')==='feed'?'feed':'grid';
 let space2ColumnsSetting=localStorage.getItem('asq.space2.layout.columns')||'auto';
+let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='1';
+let space2AutoMetaRunning=false;
 let space2AiModels=[];
 let space2AiModel='openai';
 let space2AiCaptureArmed=false;
@@ -432,6 +437,178 @@ function escapeHtml(value=''){
         .replace(/>/g,'&gt;')
         .replace(/"/g,'&quot;')
         .replace(/'/g,'&#39;');
+}
+
+function setSpace2AutoMetaStatus(message,isError=false){
+    if(!space2AutoMetaStatus) return;
+    space2AutoMetaStatus.textContent=message||'';
+    space2AutoMetaStatus.style.color=isError?'#d25a5a':'';
+}
+
+function sanitizeMetaTitle(value=''){
+    const cleaned=String(value||'').replace(/\s+/g,' ').trim();
+    if(!cleaned) return 'Untitled';
+    return cleaned.slice(0,42);
+}
+
+function sanitizeMetaDescription(value=''){
+    const cleaned=String(value||'').replace(/\s+/g,' ').trim();
+    if(!cleaned) return 'Image';
+    return cleaned.slice(0,160);
+}
+
+function extractJsonObject(text=''){
+    const raw=String(text||'').trim();
+    if(!raw) return null;
+    try{return JSON.parse(raw);}catch{}
+    const first=raw.indexOf('{');
+    const last=raw.lastIndexOf('}');
+    if(first===-1||last===-1||last<=first) return null;
+    try{return JSON.parse(raw.slice(first,last+1));}catch{return null;}
+}
+
+function blobToDataUrl(blob){
+    return new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(String(reader.result||''));
+        reader.onerror=()=>reject(reader.error||new Error('Unable to read image blob'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function resolveSpace2AnalysisImageUrl(item,analysisBlob){
+    if(analysisBlob){
+        const dataUrl=await blobToDataUrl(analysisBlob);
+        if(dataUrl) return dataUrl;
+    }
+    const src=(item&&item.src||'').trim();
+    if(/^https?:\/\//i.test(src)||/^data:image\//i.test(src)) return src;
+    if(src){
+        try{
+            const res=await fetch(src);
+            if(res.ok){
+                const blob=await res.blob();
+                const dataUrl=await blobToDataUrl(blob);
+                if(dataUrl) return dataUrl;
+            }
+        }catch{}
+    }
+    if(item&&item.filePath){
+        try{
+            const res=await fetch(toFileUrl(item.filePath));
+            if(res.ok){
+                const blob=await res.blob();
+                const dataUrl=await blobToDataUrl(blob);
+                if(dataUrl) return dataUrl;
+            }
+        }catch{}
+    }
+    throw new Error('No analyzable image source available');
+}
+
+async function requestSpace2AutoMetadata(item,{analysisBlob=null}={}){
+    const imageUrl=await resolveSpace2AnalysisImageUrl(item,analysisBlob);
+    const titleHint=(item&&item.title||'').trim();
+    const prompt=[
+        'Analyze this image and return JSON only.',
+        'Return exactly this shape: {"title":"...","description":"..."}',
+        'Rules:',
+        '- title: short, specific, max 6 words',
+        '- description: max 2 lines of plain text, concise visual summary',
+        '- no markdown, no extra keys'
+    ].join('\n');
+    const body={
+        model:'gemini-fast',
+        stream:false,
+        temperature:0.2,
+        messages:[
+            {role:'system',content:'You generate concise visual metadata for images.'},
+            {role:'user',content:[
+                {type:'text',text:`${prompt}\nCurrent title hint: ${titleHint||'none'}`},
+                {type:'image_url',image_url:{url:imageUrl}}
+            ]}
+        ]
+    };
+    const res=await fetch(`${API_BASE}/v1/chat/completions`,{
+        method:'POST',
+        headers:buildAuthHeaders({'Content-Type':'application/json'}),
+        body:JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error(`Metadata request failed (${res.status})`);
+    const data=await res.json();
+    const text=data?.choices?.[0]?.message?.content||'';
+    const parsed=extractJsonObject(typeof text==='string'?text:JSON.stringify(text));
+    if(!parsed) throw new Error('Invalid metadata response');
+    return {
+        title:sanitizeMetaTitle(parsed.title||titleHint||'Untitled'),
+        description:sanitizeMetaDescription(parsed.description||'Image')
+    };
+}
+
+async function autoGenerateSpace2Metadata(item,{analysisBlob=null,force=false,silent=false}={}){
+    if(!item||!item.id) return false;
+    if(item.aiMetaState==='loading') return false;
+    if(!force&&item.title&&item.description) return false;
+
+    item.aiMetaState='loading';
+    item.updatedAt=Date.now();
+    saveSpace2State();
+    renderSpace2Grid();
+    if(space2ItemModal&&space2ActiveItemId===item.id&&!space2ItemModal.classList.contains('hidden')){
+        if(space2ItemTitle) space2ItemTitle.value='Generating...';
+        if(space2ItemDesc) space2ItemDesc.value='Generating description...';
+    }
+
+    try{
+        const meta=await requestSpace2AutoMetadata(item,{analysisBlob});
+        item.title=meta.title;
+        item.description=meta.description;
+        item.aiMetaState='ready';
+        item.updatedAt=Date.now();
+        if(!silent) setSpace2AutoMetaStatus('Image metadata generated.');
+        saveSpace2State();
+        renderSpace2Grid();
+        if(space2ItemModal&&space2ActiveItemId===item.id&&!space2ItemModal.classList.contains('hidden')){
+            if(space2ItemTitle) space2ItemTitle.value=item.title||'';
+            if(space2ItemDesc) space2ItemDesc.value=item.description||'';
+        }
+        return true;
+    }catch(err){
+        console.warn('space2 auto metadata failed',err);
+        item.aiMetaState='error';
+        item.updatedAt=Date.now();
+        if(!silent) setSpace2AutoMetaStatus((err&&err.message)||'Metadata generation failed.',true);
+        saveSpace2State();
+        renderSpace2Grid();
+        return false;
+    }
+}
+
+async function runBatchAutoMetadata(){
+    if(space2AutoMetaRunning) return;
+    const items=(space2State&&Array.isArray(space2State.items)?space2State.items:[]).slice();
+    if(!items.length){
+        setSpace2AutoMetaStatus('No items available for metadata generation.',true);
+        return;
+    }
+    space2AutoMetaRunning=true;
+    if(space2AutoMetaRun){
+        space2AutoMetaRun.disabled=true;
+        space2AutoMetaRun.textContent='Generating...';
+    }
+    let success=0;
+    let failed=0;
+    for(let i=0;i<items.length;i++){
+        setSpace2AutoMetaStatus(`Generating metadata ${i+1}/${items.length}...`);
+        const ok=await autoGenerateSpace2Metadata(items[i],{force:true,silent:true});
+        if(ok) success++; else failed++;
+    }
+    setSpace2AutoMetaStatus(`Done: ${success} updated${failed?`, ${failed} failed`:''}.`,failed>0&&success===0);
+    if(space2AutoMetaRun){
+        space2AutoMetaRun.disabled=false;
+        space2AutoMetaRun.textContent='Regenerate All Items';
+    }
+    space2AutoMetaRunning=false;
 }
 
 function closeCollectionMenu(){
@@ -654,11 +831,17 @@ function renderSpace2Grid(){
     }
     space2Grid.innerHTML='';
     list.forEach(item=>{
+        const isGenerating=item.aiMetaState==='loading';
         const card=document.createElement('button');
         card.type='button';
         card.className='space2-item img-pending';
         card.innerHTML=`
             <img class="space2-thumb" src="${item.src}" alt="" loading="lazy" decoding="async">
+            <div class="space2-card-action-left">
+                <button class="space2-card-action" data-action="meta" title="Regenerate metadata" aria-label="Regenerate metadata">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6V3L8 7l4 4V8c2.21 0 4 1.79 4 4a4 4 0 0 1-6.87 2.83l-1.42 1.42A6 6 0 1 0 12 6zm-4 4a4 4 0 0 1 6.87-2.83l1.42-1.42A6 6 0 1 0 12 18v3l4-4-4-4v3a4 4 0 0 1-4-4z"/></svg>
+                </button>
+            </div>
             <div class="space2-card-actions">
                 <button class="space2-card-action" data-action="collection" title="Add to collection" aria-label="Add to collection">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8a2 2 0 0 1 2 2v2H2V6a2 2 0 0 1 2-2h6zm12 8v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8h20zm-10 2v2H10v2h2v2h2v-2h2v-2h-2v-2h-2z"/></svg>
@@ -668,8 +851,8 @@ function renderSpace2Grid(){
                 </button>
             </div>
             <div class="space2-meta">
-                <div class="space2-name">${(item.title||'Untitled').replace(/</g,'&lt;')}</div>
-                <div class="space2-desc">${(item.description||'').replace(/</g,'&lt;')||'Image'}</div>
+                <div class="space2-name${isGenerating?' is-generating':''}">${isGenerating?'Generating...':(item.title||'Untitled').replace(/</g,'&lt;')}</div>
+                <div class="space2-desc${isGenerating?' is-generating':''}">${isGenerating?'Generating description...':((item.description||'').replace(/</g,'&lt;')||'Image')}</div>
             </div>
         `;
         const img=card.querySelector('.space2-thumb');
@@ -678,7 +861,7 @@ function renderSpace2Grid(){
             const onLoaded=()=>{
                 card.classList.remove('img-pending');
                 card.classList.add('img-loaded');
-                if(desc&&!item.description&&img.naturalWidth&&img.naturalHeight){
+                if(desc&&!item.description&&item.aiMetaState!=='loading'&&img.naturalWidth&&img.naturalHeight){
                     desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
                 }
                 scheduleSpace2GridLayout();
@@ -707,6 +890,13 @@ function renderSpace2Grid(){
             removeBtn.addEventListener('click',e=>{
                 e.stopPropagation();
                 removeItemFromSpace2View(item.id);
+            });
+        }
+        const metaBtn=card.querySelector('[data-action="meta"]');
+        if(metaBtn){
+            metaBtn.addEventListener('click',async e=>{
+                e.stopPropagation();
+                await autoGenerateSpace2Metadata(item,{force:true});
             });
         }
         space2Grid.appendChild(card);
@@ -871,6 +1061,7 @@ function upsertSpace2Items(items,{openEditor=false}={}){
     let added=0;
     let changed=false;
     let firstAddedItemId='';
+    const autoMetaQueue=[];
     items.forEach((item,idx)=>{
         const inserted=insertSpace2Item({
             ...item,
@@ -879,6 +1070,9 @@ function upsertSpace2Items(items,{openEditor=false}={}){
         if(inserted.added){
             added++;
             if(!firstAddedItemId&&inserted.item&&inserted.item.id) firstAddedItemId=inserted.item.id;
+            if(space2AutoMetaEnabled&&inserted.item){
+                autoMetaQueue.push({item:inserted.item,analysisBlob:item.analysisBlob||null});
+            }
         }
         if(inserted.changed) changed=true;
     });
@@ -886,6 +1080,16 @@ function upsertSpace2Items(items,{openEditor=false}={}){
     saveSpace2State();
     renderSpace2Collections();
     renderSpace2Grid();
+    if(autoMetaQueue.length){
+        setSpace2AutoMetaStatus(`Generating metadata for ${autoMetaQueue.length} new item${autoMetaQueue.length>1?'s':''}...`);
+        autoMetaQueue.forEach(({item,analysisBlob})=>{
+            autoGenerateSpace2Metadata(item,{analysisBlob,force:true,silent:true})
+                .finally(()=>{
+                    const pending=space2State.items.filter(i=>i.aiMetaState==='loading').length;
+                    if(!pending) setSpace2AutoMetaStatus('Auto metadata complete.');
+                });
+        });
+    }
     if(openEditor&&firstAddedItemId) openSpace2Item(firstAddedItemId);
     return added;
 }
@@ -964,7 +1168,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
             }
         }
         if(!src) continue;
-        items.push({src,filePath,title:f.name||'Upload',cloudPath});
+        items.push({src,filePath,title:f.name||'Upload',cloudPath,analysisBlob:f});
     }
     upsertSpace2Items(items,{openEditor});
 }
@@ -1054,6 +1258,8 @@ function initSpace2SidebarSizing(){
 function openSpace2SettingsModal(){
     if(space2CaptureStatus) space2CaptureStatus.textContent='';
     updateSpace2LayoutSettingsUI();
+    if(space2AutoMetaToggle) space2AutoMetaToggle.checked=space2AutoMetaEnabled;
+    setSpace2AutoMetaStatus(space2AutoMetaEnabled?'Auto metadata is enabled for new uploads.':'Auto metadata is disabled.');
     if(space2SettingsModal) space2SettingsModal.classList.remove('hidden');
 }
 
@@ -3576,6 +3782,12 @@ if(space2ColumnsSelect) space2ColumnsSelect.addEventListener('change',()=>{
     space2ColumnsSetting=(space2ColumnsSelect.value||'auto');
     applySpace2LayoutSettings();
 });
+if(space2AutoMetaToggle) space2AutoMetaToggle.addEventListener('change',()=>{
+    space2AutoMetaEnabled=!!space2AutoMetaToggle.checked;
+    localStorage.setItem('asq.space2.autoMeta',space2AutoMetaEnabled?'1':'0');
+    setSpace2AutoMetaStatus(space2AutoMetaEnabled?'Auto metadata will run on new uploads.':'Auto metadata is disabled.');
+});
+if(space2AutoMetaRun) space2AutoMetaRun.addEventListener('click',()=>{runBatchAutoMetadata();});
 if(space2SettingsModal) space2SettingsModal.addEventListener('click',e=>{if(e.target===space2SettingsModal) closeSpace2SettingsModal();});
 document.addEventListener('click',e=>{
     if(activeCollectionMenu && !activeCollectionMenu.contains(e.target)) closeCollectionMenu();
