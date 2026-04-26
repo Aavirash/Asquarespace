@@ -29,13 +29,19 @@
         "from": "../Asquarespace",
         "to": "Asquarespace",
         "filter": [
-          "**/*"
+          "**/*",
+          "!node_modules{,/**}",
+          "!Asquarespace-MacApp{,/**}",
+          "!dist{,/**}",
+          "!ios{,/**}",
+          "!capacitor-cordova-ios-plugins{,/**}"
         ]
       }
     ],
     "asar": true,
     "mac": {
       "category": "public.app-category.graphics-design",
+      "identity": null,
       "target": [
         "dmg",
         "zip"
