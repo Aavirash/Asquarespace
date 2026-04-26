@@ -2,6 +2,13 @@
 !.gitignore
 !Asquarespace-MacApp/
 !Asquarespace-MacApp/**
+!Asquarespace/
+!Asquarespace/www/
+!Asquarespace/www/index.html
+!Asquarespace/www/js/
+!Asquarespace/www/js/main.js
+!Asquarespace/www/css/
+!Asquarespace/www/css/style.css
 
 Asquarespace-MacApp/node_modules/
 Asquarespace-MacApp/dist/
