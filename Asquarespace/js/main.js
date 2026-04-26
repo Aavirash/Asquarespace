@@ -2163,7 +2163,7 @@ function updateModelScopeForSelection(){
         currentModel=allowed[0];
         modelLabel.textContent=currentModel;
     }
-    genBtn.textContent=editMode?'Edit selected images':'Create image';
+    genBtn.textContent=editMode?'Edit selected images':'Create';
 }
 
 function setMarqueeBox(x1,y1,x2,y2){
@@ -3981,7 +3981,7 @@ function setMode(m){
     // Animate slider
     requestAnimationFrame(updateSlider);
     sizeWrapper.style.display=(m==='ai'||m==='video')?'':'none';
-    const baseCta=m==='ai'?'Create image':m==='video'?'Create video':m==='audio'?'Create audio':m==='search'?'Search images':'Ask AI';
+    const baseCta=m==='ai'?'Create':m==='video'?'Create video':m==='audio'?'Create audio':m==='search'?'Search images':'Ask AI';
     genBtn.textContent=(window.innerWidth<=760&&(m==='ai'||m==='video'))?'Create':baseCta;
     updateBottomBarCompactUi();
     aiInput.placeholder=m==='ai'?'Describe what to generate...':m==='video'?'Describe the video to generate...':m==='audio'?'Describe the audio to generate...':m==='search'?'Search DuckDuckGo for images...':'Ask the AI anything...';
@@ -3997,7 +3997,7 @@ function updateBottomBarCompactUi(){
     }
     if(genBtn){
         const compact=window.innerWidth<=760&&(appMode==='ai'||appMode==='video');
-        const baseCta=appMode==='ai'?'Create image':appMode==='video'?'Create video':appMode==='audio'?'Create audio':appMode==='search'?'Search images':'Ask AI';
+        const baseCta=appMode==='ai'?'Create':appMode==='video'?'Create video':appMode==='audio'?'Create audio':appMode==='search'?'Search images':'Ask AI';
         genBtn.textContent=compact?'Create':baseCta;
     }
 }
