@@ -1,0 +1,23 @@
+
+> asquarespace-mac-app@1.0.0 build:mac
+> npm run make-icon && electron-builder --mac --universal
+
+
+> asquarespace-mac-app@1.0.0 make-icon
+> bash ./scripts/make-icon.sh
+
+Created /Users/aavirash/Desktop/After Effects Extension + Script Master/Asquarespace-MacApp/build/icon.icns
+  • electron-builder  version=25.1.8 os=25.3.0
+  • loaded configuration  file=package.json ("build" field)
+  • author is missed in the package.json  appPackageFile=/Users/aavirash/Desktop/After Effects Extension + Script Master/Asquarespace-MacApp/package.json
+  • executing @electron/rebuild  electronVersion=32.3.3 arch=x64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=x64 electron=32.3.3 appOutDir=dist/mac-universal-x64-temp
+  • executing @electron/rebuild  electronVersion=32.3.3 arch=arm64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=arm64
+  • cancelled by SIGINT
+  ⨯ Rebuilder failed with exit code: null  failedTask=build stackTrace=Error: Rebuilder failed with exit code: null
+    at ChildProcess.<anonymous> (/Users/aavirash/Desktop/After Effects Extension + Script Master/Asquarespace-MacApp/node_modules/app-builder-lib/src/util/rebuild/rebuild.ts:55:32)
+    at ChildProcess.emit (node:events:508:28)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:293:12)
