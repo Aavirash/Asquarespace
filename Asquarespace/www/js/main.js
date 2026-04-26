@@ -115,7 +115,7 @@ const spaceBtn1 = document.getElementById('space-btn-1');
 const spaceBtn2 = document.getElementById('space-btn-2');
 const space2TopSearch = document.getElementById('space2-top-search');
 const space2Panel = document.getElementById('space2-panel');
-const space2MobileNotch = document.getElementById('space2-mobile-notch');
+const space2ModeDock = document.getElementById('space2-mode-dock');
 const space2Search = document.getElementById('space2-search');
 const space2NewCollection = document.getElementById('space2-new-collection');
 const space2CameraBtn = document.getElementById('space2-camera-btn');
@@ -227,12 +227,6 @@ let space2LayoutMode=(localStorage.getItem('asq.space2.layout.mode')||'grid')===
 let space2ColumnsSetting=localStorage.getItem('asq.space2.layout.columns')||'auto';
 let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='1';
 let space2AutoMetaRunning=false;
-const space2HeaderRow=document.querySelector('.space2-sidebar-head .space2-head-row');
-const space2SearchWrap=document.querySelector('.space2-sidebar-head .space2-search-wrap');
-const space2DesktopSlots=new Map();
-[space2UploadBtn,space2NewCollection,themeToggle,space2CameraBtn,space2ViewSwitch].forEach(el=>{
-    if(el&&el.parentElement) space2DesktopSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
-});
 let space2AiModels=[];
 let space2AiModel='openai';
 let space2AiCaptureArmed=false;
@@ -1264,36 +1258,11 @@ function initSpace2SidebarSizing(){
     });
 }
 
-function restoreSpace2DesktopSlot(el){
-    if(!el) return;
-    const slot=space2DesktopSlots.get(el);
-    if(!slot||!slot.parent) return;
-    if(slot.next&&slot.next.parentElement===slot.parent) slot.parent.insertBefore(el,slot.next);
-    else slot.parent.appendChild(el);
-}
-
 function applySpace2MobileHeaderLayout(){
-    const isMobile=window.innerWidth<=760;
-
-    if(isMobile){
-        if(space2HeaderRow&&space2ViewSwitch&&space2ViewSwitch.parentElement!==space2HeaderRow){
-            space2HeaderRow.insertBefore(space2ViewSwitch,space2SearchWrap||null);
-        }
-        if(space2MobileNotch){
-            [space2UploadBtn,space2CameraBtn,space2NewCollection,themeToggle].forEach(btn=>{
-                if(btn&&btn.parentElement!==space2MobileNotch) space2MobileNotch.appendChild(btn);
-            });
-            const showNotch=currentSpace==='space2'&&space2View==='grid';
-            space2MobileNotch.classList.toggle('hidden',!showNotch);
-            space2MobileNotch.setAttribute('aria-hidden',showNotch?'false':'true');
-        }
-        return;
-    }
-
-    [space2UploadBtn,space2NewCollection,space2CameraBtn,themeToggle,space2ViewSwitch].forEach(restoreSpace2DesktopSlot);
-    if(space2MobileNotch){
-        space2MobileNotch.classList.add('hidden');
-        space2MobileNotch.setAttribute('aria-hidden','true');
+    const showDock=currentSpace==='space2';
+    if(space2ModeDock){
+        space2ModeDock.classList.toggle('hidden',!showDock);
+        space2ModeDock.setAttribute('aria-hidden',showDock?'false':'true');
     }
 }
 
