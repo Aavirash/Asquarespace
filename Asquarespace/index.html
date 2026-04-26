@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <title>Asquarespace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="ui-container">
+
+  <div id="space-switcher" class="space-switcher" aria-label="Workspace spaces">
+    <div id="space-slider" class="space-slider"></div>
+    <button id="space-btn-1" class="space-btn active" data-space="space1" title="Canvas Space">Space</button>
+    <button id="space-btn-2" class="space-btn" data-space="space2" title="Inspiration Grid">Grid</button>
+  </div>
+
+  <!-- Context Toolbar (images/video — above selection) -->
+  <div id="context-toolbar" class="context-toolbar hidden">
+    <button class="ctx-btn" id="ctx-duplicate" title="Duplicate">
+      <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+    </button>
+    <button class="ctx-btn" id="ctx-preview" title="Preview">
+      <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+    </button>
+    <button class="ctx-btn" id="ctx-regenerate" title="Regenerate image">
+      <svg viewBox="0 0 24 24"><path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5 0 .76-.17 1.48-.47 2.13l1.46 1.46A6.95 6.95 0 0 0 19 13c0-3.87-3.13-7-7-7zm-5 5c0-.76.17-1.48.47-2.13L6.01 7.41A6.95 6.95 0 0 0 5 11c0 3.87 3.13 7 7 7v3l4-4-4-4v3c-2.76 0-5-2.24-5-5z"/></svg>
+    </button>
+    <button class="ctx-btn" id="ctx-more-like" title="More like this">
+      <svg viewBox="0 0 24 24"><path d="M21 3H3v18h18V3zm-2 2v10h-6v4H5V5h14zm-4 3h-2v2h-2v2h2v2h2v-2h2v-2h-2V8zM7 13h4v4H7v-4z"/></svg>
+    </button>
+    <button class="ctx-btn" id="ctx-batch-size" title="Batch size">1x</button>
+    <div class="ctx-sep"></div>
+    <button class="ctx-btn" id="ctx-add-grid" title="Add to Grid">
+      <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm12 2h2v-2h2v2h2v2h-2v2h-2v-2h-2v-2z"/></svg>
+    </button>
+    <button class="ctx-btn" id="ctx-show-finder" title="Show in Finder">
+      <svg viewBox="0 0 24 24"><path d="M10 4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6zm-4 6v8h12v-8H6z"/></svg>
+    </button>
+    <button class="ctx-btn" id="ctx-move-board" title="Move to Board">
+      <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm4 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-6 12H10v-2h4v-3l4 4-4 4v-3z"/></svg>
+    </button>
+    <button class="ctx-btn" id="ctx-favorite" title="Favorite">
+      <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+    </button>
+    <div class="ctx-sep"></div>
+    <button class="ctx-btn" id="ctx-delete" title="Delete">
+      <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+    </button>
+  </div>
+
+  <!-- Multi-select Toolbar (images/video) -->
+  <div id="multi-toolbar" class="context-toolbar hidden">
+    <button class="ctx-btn" id="mt-align-left" title="Align Left">
+      <svg viewBox="0 0 24 24"><path d="M4 5h2v14H4V5zm4 3h12v2H8V8zm0 6h9v2H8v-2z"/></svg>
+    </button>
+    <button class="ctx-btn" id="mt-align-h-center" title="Align Horizontal Center">
+      <svg viewBox="0 0 24 24"><path d="M11 4h2v16h-2V4zM4 8h16v2H4V8zm3 6h10v2H7v-2z"/></svg>
+    </button>
+    <button class="ctx-btn" id="mt-align-right" title="Align Right">
+      <svg viewBox="0 0 24 24"><path d="M18 5h2v14h-2V5zM4 8h12v2H4V8zm7 6h5v2h-5v-2z"/></svg>
+    </button>
+    <div class="ctx-sep"></div>
+    <button class="ctx-btn" id="mt-align-top" title="Align Top">
+      <svg viewBox="0 0 24 24"><path d="M4 4h16v2H4V4zm3 4h2v12H7V8zm6 0h2v9h-2V8z"/></svg>
+    </button>
+    <button class="ctx-btn" id="mt-align-v-center" title="Align Vertical Center">
+      <svg viewBox="0 0 24 24"><path d="M4 11h16v2H4v-2zM8 4h2v16H8V4zm6 3h2v10h-2V7z"/></svg>
+    </button>
+    <button class="ctx-btn" id="mt-align-bottom" title="Align Bottom">
+      <svg viewBox="0 0 24 24"><path d="M4 18h16v2H4v-2zM7 4h2v12H7V4zm6 7h2v5h-2v-5z"/></svg>
+    </button>
+    <div class="ctx-sep"></div>
+    <button class="ctx-btn" id="mt-distribute-h" title="Distribute Horizontally">
+      <svg viewBox="0 0 24 24"><path d="M3 5h2v14H3V5zm16 0h2v14h-2V5zM8 9h3v6H8V9zm5 7h3V8h-3v8z"/></svg>
+    </button>
+    <button class="ctx-btn" id="mt-distribute-v" title="Distribute Vertically">
+      <svg viewBox="0 0 24 24"><path d="M5 3h14v2H5V3zm0 16h14v2H5v-2zM9 8h6v3H9V8zm8 5H7v3h10v-3z"/></svg>
+    </button>
+    <div class="ctx-sep"></div>
+    <button class="ctx-btn" id="mt-delete" title="Delete Selected">
+      <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+    </button>
+    <div class="ctx-sep"></div>
+  </div>
+
+  <!-- Note Card Toolbar -->
+  <div id="note-toolbar" class="note-toolbar hidden">
+    <div style="position:relative">
+      <div id="nt-color-swatch" class="nt-color-swatch" style="background:#fff9c4" title="Card color"></div>
+      <div class="color-picker-popup hidden" id="color-picker-popup">
+        <div class="color-swatch selected" data-color="#fff9c4" style="background:#fff9c4"></div>
+        <div class="color-swatch" data-color="#ffd6e0" style="background:#ffd6e0"></div>
+        <div class="color-swatch" data-color="#d6f5d6" style="background:#d6f5d6"></div>
+        <div class="color-swatch" data-color="#d6e8ff" style="background:#d6e8ff"></div>
+        <div class="color-swatch" data-color="#ffe4b5" style="background:#ffe4b5"></div>
+        <div class="color-swatch" data-color="#e8d6ff" style="background:#e8d6ff"></div>
+        <div class="color-swatch" data-color="#ffffff" style="background:#fff;border:1px solid rgba(255,255,255,0.3)"></div>
+        <div class="color-swatch" data-color="#2d2d2d" style="background:#2d2d2d"></div>
+        <div class="color-swatch" data-color="#ef4027" style="background:#ef4027"></div>
+        <div class="color-swatch" data-color="#4a90d9" style="background:#4a90d9"></div>
+      </div>
+    </div>
+    <div class="nt-sep"></div>
+    <button class="nt-btn" data-size="18">S</button>
+    <button class="nt-btn" data-size="24">M</button>
+    <button class="nt-btn active" data-size="30">L</button>
+    <button class="nt-btn" data-size="38">XL</button>
+    <div class="nt-sep"></div>
+    <select class="nt-font-select" id="nt-font-select">
+      <option value="Inter,-apple-system,sans-serif">Inter</option>
+      <option value="Georgia,serif">Georgia</option>
+      <option value="'Courier New',monospace">Courier</option>
+      <option value="'Times New Roman',serif">Times</option>
+      <option value="Arial,sans-serif">Arial</option>
+      <option value="'Trebuchet MS',sans-serif">Trebuchet</option>
+      <option value="Verdana,sans-serif">Verdana</option>
+      <option value="'Comic Sans MS',cursive">Comic Sans</option>
+      <option value="Impact,sans-serif">Impact</option>
+      <option value="'Palatino Linotype',serif">Palatino</option>
+    </select>
+    <input class="nt-font-select nt-size-input" id="nt-size-input" list="nt-size-list" type="number" min="8" max="240" step="1" value="30" title="Font size (px)">
+    <datalist id="nt-size-list">
+      <option value="18"></option>
+      <option value="24"></option>
+      <option value="30"></option>
+      <option value="38"></option>
+      <option value="48"></option>
+      <option value="64"></option>
+      <option value="80"></option>
+      <option value="96"></option>
+    </datalist>
+    <div class="nt-sep"></div>
+    <button class="nt-btn" id="nt-bold"><svg viewBox="0 0 24 24"><path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5S13.83 9.5 13 9.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg></button>
+    <button class="nt-btn" id="nt-align-l"><svg viewBox="0 0 24 24"><path d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg></button>
+    <button class="nt-btn" id="nt-align-c"><svg viewBox="0 0 24 24"><path d="M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"/></svg></button>
+    <button class="nt-btn" id="nt-align-r"><svg viewBox="0 0 24 24"><path d="M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z"/></svg></button>
+    <div class="nt-sep"></div>
+    <button class="nt-btn" id="nt-move-board" title="Move to Board"><svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm4 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-6 12H10v-2h4v-3l4 4-4 4v-3z"/></svg></button>
+    <button class="nt-btn" id="nt-favorite" title="Favorite"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+    <div class="nt-sep"></div>
+    <button class="nt-btn" id="nt-delete"><svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+  </div>
+
+  <div id="favorites-panel" class="favorites-panel hidden">
+    <div class="favorites-title">Favorites</div>
+    <div id="favorites-strip" class="favorites-strip"></div>
+  </div>
+
+  <div id="control-corner" class="control-corner">
+    <div id="workflow-dock" class="workflow-dock hidden">
+      <button id="workflow-launch-btn" class="workflow-launch-card" title="Workflows">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.7 3.1a1 1 0 0 1 .6 1.2l-.8 2.2a1 1 0 0 1-.6.6l-2.2.8a1 1 0 0 0 0 1.9l2.2.8a1 1 0 0 1 .6.6l.8 2.2a1 1 0 0 0 1.9 0l.8-2.2a1 1 0 0 1 .6-.6l2.2-.8a1 1 0 0 0 0-1.9l-2.2-.8a1 1 0 0 1-.6-.6l-.8-2.2a1 1 0 0 0-1.2-.6zM6 14a1 1 0 0 1 .95.68l.39 1.12 1.12.39a1 1 0 0 1 0 1.9l-1.12.39-.39 1.12a1 1 0 0 1-1.9 0l-.39-1.12-1.12-.39a1 1 0 0 1 0-1.9l1.12-.39.39-1.12A1 1 0 0 1 6 14zm12 1.5a1 1 0 0 1 .95.68l.17.47.47.17a1 1 0 0 1 0 1.9l-.47.17-.17.47a1 1 0 0 1-1.9 0l-.17-.47-.47-.17a1 1 0 0 1 0-1.9l.47-.17.17-.47A1 1 0 0 1 18 15.5z"/></svg>
+      </button>
+      <div id="workflow-stack" class="workflow-stack hidden">
+        <button id="workflow-thumb-card" class="workflow-card workflow-card-thumb" title="Open Thumbnail Workflow">
+          <div class="workflow-card-title">Thumbnail Workflow</div>
+          <div class="workflow-card-sub">Node flow on canvas</div>
+        </button>
+      </div>
+      <div id="workflow-active-card" class="workflow-active-card hidden">
+        <button id="workflow-active-close" class="workflow-active-close" title="Close workflow">×</button>
+        <div class="workflow-active-line">Thumbnail</div>
+        <div class="workflow-active-line">Flow Workflow</div>
+      </div>
+    </div>
+
+    <div id="space2-view-switch" class="space2-view-switch hidden" aria-label="Discover and Grid switch">
+      <button id="space2-view-toggle" class="space2-view-toggle" aria-label="Toggle Discover and Grid view" aria-pressed="false" title="Switch to Grid">
+        <span class="space2-view-icon space2-view-icon-discover" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 2l7.5 3v6c0 5.25-3.36 10.15-7.5 11-4.14-.85-7.5-5.75-7.5-11V5L12 2zm0 3.2L7 7v4c0 3.84 2.34 7.52 5 8.26 2.66-.74 5-4.42 5-8.26V7l-5-1.8z"/></svg>
+        </span>
+        <span class="space2-view-icon space2-view-icon-grid" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+        </span>
+        <span class="space2-view-thumb" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <div id="board-dock" class="board-dock">
+      <button id="board-menu-trigger" class="board-menu-trigger" title="Board and Media">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3H3V5zm0 6h8v10H5a2 2 0 0 1-2-2V11zm10 0h8v8a2 2 0 0 1-2 2h-6V11z"/></svg>
+      </button>
+      <div id="board-quick-menu" class="board-quick-menu hidden">
+        <div id="board-fan-grid" class="board-fan-grid"></div>
+        <button id="board-manage-btn" class="board-manage-btn" title="Manage Boards">Manage Boards</button>
+      </div>
+      <div id="board-panel" class="board-panel hidden">
+        <div class="board-panel-title">Boards</div>
+        <div id="board-list" class="board-list"></div>
+        <button id="board-new-btn" class="board-new-btn">+ New Board</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Viewport -->
+  <div id="viewport">
+    <div id="canvas"></div>
+    <div id="selection-box"></div>
+    <div id="multi-selection-box" class="multi-selection-box"></div>
+  </div>
+
+  <div id="space2-panel" class="space2-panel hidden">
+    <div class="space2-head">
+      <button id="space2-upload-btn" class="space2-top-icon-btn" title="Upload images" aria-label="Upload images">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l5 5h-3v7h-4V9H7l5-5zm-7 14h14v2H5v-2z"/></svg>
+      </button>
+      <button id="space2-new-collection" class="space2-top-icon-btn" title="New collection" aria-label="New collection">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z"/></svg>
+      </button>
+      <div class="space2-search-wrap">
+        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input id="space2-search" type="text" placeholder="Search title or description...">
+      </div>
+      <button id="theme-toggle" class="space2-top-icon-btn" title="Toggle dark/light mode" aria-label="Toggle dark/light mode">
+        <svg id="icon-sun" viewBox="0 0 24 24"><path d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0-13a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V5a1 1 0 0 1 1-1zm0 15a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1zm9-8a1 1 0 1 1 0 2h-1a1 1 0 1 1 0-2h1zM5 12a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2h1zm12.66-7.07a1 1 0 0 1 0 1.41l-.7.71a1 1 0 1 1-1.42-1.42l.71-.7a1 1 0 0 1 1.41 0zM7.05 16.95a1 1 0 0 1 0 1.41l-.7.71a1 1 0 1 1-1.42-1.42l.71-.7a1 1 0 0 1 1.41 0zm10.61 1.41a1 1 0 0 1-1.41 0l-.71-.7a1 1 0 1 1 1.42-1.42l.7.71a1 1 0 0 1 0 1.41zM7.05 7.05a1 1 0 0 1-1.41 0l-.71-.7A1 1 0 0 1 6.34 4.93l.71.7a1 1 0 0 1 0 1.42z"/></svg>
+        <svg id="icon-moon" viewBox="0 0 24 24" style="display:none"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8A9.15 9.15 0 0 0 12 3z"/></svg>
+      </button>
+      <input type="file" id="space2-file-input" hidden multiple accept="image/*">
+    </div>
+    <div class="space2-body">
+      <aside id="space2-sidebar" class="space2-sidebar">
+        <div id="space2-discover-controls" class="space2-discover-controls">
+          <div class="discover-tabs">
+            <button class="discover-tab active" data-feed="all">All</button>
+            <button class="discover-tab" data-feed="motion">Motion</button>
+            <button class="discover-tab" data-feed="design">Design</button>
+            <button class="discover-tab" data-feed="custom">Custom</button>
+          </div>
+          <button id="discover-manage-btn" class="space2-btn">Manage Sources</button>
+        </div>
+        <div class="space2-side-title">Collections</div>
+        <div id="space2-collections" class="space2-collections"></div>
+      </aside>
+      <div id="space2-sash" class="space2-sash" aria-label="Resize sidebar" role="separator" aria-orientation="vertical"></div>
+      <main id="space2-discover" class="space2-discover">
+        <div id="discover-feed" class="discover-feed"></div>
+        <div id="discover-manage" class="discover-manage hidden">
+          <div class="discover-manage-title">Manage Discover Sources</div>
+          <div class="discover-manage-add">
+            <input id="discover-page-name" class="settings-input" type="text" placeholder="Source name">
+            <input id="discover-page-url" class="settings-input" type="url" placeholder="https://example.com/feed">
+            <button id="discover-add-page" class="settings-btn primary">Add</button>
+          </div>
+          <div id="discover-custom-list" class="discover-custom-list"></div>
+          <div class="discover-manage-title">Active Sources</div>
+          <div id="discover-source-list" class="discover-source-list"></div>
+        </div>
+      </main>
+      <main id="space2-grid" class="space2-grid"></main>
+      <div id="space2-ai-hub" class="space2-ai-hub hidden">
+        <div id="space2-ai-output" class="space2-ai-output hidden"></div>
+        <div id="space2-ai-capture-preview" class="space2-ai-capture-preview hidden">
+          <img id="space2-ai-capture-img" alt="Capture preview">
+          <div class="space2-ai-capture-actions">
+            <button id="space2-ai-capture-cancel" class="space2-ai-cap-btn" type="button" aria-label="Discard capture">✕</button>
+            <button id="space2-ai-capture-confirm" class="space2-ai-cap-btn ok" type="button" aria-label="Attach capture">✓</button>
+          </div>
+        </div>
+        <div class="space2-ai-bar-wrap">
+          <div class="space2-ai-bar" id="space2-ai-bar">
+            <button id="space2-ai-eye" class="space2-ai-eye" type="button" title="Capture screen area" aria-label="Capture screen area">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.8 4.8 10.8 6-.9 1.2-5.3 6-10.8 6S2.2 12.2 1.2 11C2.1 9.8 6.5 5 12 5zm0 2.2A3.8 3.8 0 1 0 12 14.8 3.8 3.8 0 0 0 12 7.2zm0 2A1.8 1.8 0 1 1 12 12.8 1.8 1.8 0 0 1 12 9.2z"/></svg>
+            </button>
+            <div id="space2-ai-attach-chip" class="space2-ai-attach-chip hidden">
+              <div class="prompt-thumb-wrap space2-ai-attach-thumb-wrap">
+                <img id="space2-ai-attach-thumb" class="prompt-thumb" alt="Attached capture">
+                <button id="space2-ai-detach" class="prompt-thumb-badge" type="button" aria-label="Remove attached capture">×</button>
+              </div>
+            </div>
+            <textarea id="space2-ai-input" rows="1" placeholder="Ask AI about your grid or captured region..."></textarea>
+            <div class="space2-ai-model-wrap">
+              <button id="space2-ai-model-btn" class="space2-ai-model-btn" type="button">
+                <span id="space2-ai-model-label">Loading models...</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div id="space2-ai-model-dropdown" class="model-dropdown hidden"></div>
+            </div>
+            <button id="space2-ai-send" class="space2-ai-send" type="button" aria-label="Send prompt">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.6l17.7-8.1a1 1 0 0 0 0-1.8L3.4 2.6a1 1 0 0 0-1.4 1.1l1.6 6.3a1 1 0 0 0 .8.7l8 .9-8 .9a1 1 0 0 0-.8.7L2 19.5a1 1 0 0 0 1.4 1.1z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="space2-capture-overlay" class="space2-capture-overlay hidden" aria-hidden="true">
+        <div id="space2-capture-box" class="space2-capture-box"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="space2-item-modal" class="settings-modal hidden">
+    <div class="space2-item-card">
+      <div class="space2-item-layout">
+        <div id="space2-item-preview" class="space2-item-preview"></div>
+        <div class="space2-item-form">
+          <div class="settings-title">Inspiration Item</div>
+          <label class="settings-label" for="space2-item-title">Title</label>
+          <input id="space2-item-title" class="settings-input" type="text" placeholder="Name this image...">
+          <label class="settings-label" for="space2-item-desc" style="margin-top:10px;">Description</label>
+          <textarea id="space2-item-desc" class="space2-item-desc" placeholder="Describe style, mood, references..."></textarea>
+          <div class="space2-assign-title">Collections</div>
+          <div id="space2-assign-list" class="space2-assign-list"></div>
+          <div class="settings-actions" style="margin-top:12px;">
+            <button id="space2-item-delete" class="settings-btn">Delete</button>
+            <button id="space2-item-cancel" class="settings-btn">Cancel</button>
+            <button id="space2-item-save" class="settings-btn primary">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="space2-collection-modal" class="settings-modal hidden">
+    <div class="settings-card">
+      <div id="space2-collection-modal-title" class="settings-title">New Collection</div>
+      <label class="settings-label" for="space2-collection-name">Collection name</label>
+      <input id="space2-collection-name" class="settings-input" type="text" placeholder="Collection name">
+      <div class="settings-actions">
+        <button id="space2-collection-cancel" class="settings-btn">Cancel</button>
+        <button id="space2-collection-save" class="settings-btn primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ Toolbar Hub ════ -->
+  <div id="toolbar-hub">
+    <!-- ════ Floating Mode Switcher ════ -->
+    <div id="mode-switcher">
+    <div id="mode-slider"></div>
+    <button class="mode-sw-btn active" id="sw-ai" data-mode="ai">
+      <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+      Image
+    </button>
+    <button class="mode-sw-btn" id="sw-video" data-mode="video">
+      <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-1.1-.9-2-2-2H5C3.9 5 3 5.9 3 7v10c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2v-3.5l4 4v-11l-4 4z"/></svg>
+      Video
+    </button>
+    <button class="mode-sw-btn" id="sw-audio" data-mode="audio">
+      <svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+      Audio
+    </button>
+    <button class="mode-sw-btn" id="sw-search" data-mode="search">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      Search
+    </button>
+    <button class="mode-sw-btn" id="sw-chat" data-mode="chat">
+      <img src="icons/brain.svg" alt="" class="mode-icon-img">
+      AI chat
+    </button>
+  </div>
+
+  <!-- ════ Bottom Toolbar ════ -->
+  <div id="bottom-bar">
+    <!-- Prompt input row -->
+    <div class="bar-prompt-area">
+      <div class="thumb-list" id="thumb-list"></div>
+      <button id="prompt-magic-btn" class="prompt-magic-btn" title="Generate prompt">
+        <div class="magic-wand-icon"></div>
+      </button>
+      <textarea id="ai-prompt-input" rows="1" placeholder="Describe what you want to generate..."></textarea>
+      <button class="bar-menu-btn" id="bar-extra-btn" title="Options">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+      </button>
+    </div>
+
+    <!-- Controls row -->
+    <div class="bar-controls">
+      <!-- Model selector -->
+      <div class="bar-ctrl-wrapper" id="model-wrapper" style="position:relative">
+        <button id="model-btn" class="bar-ctrl-btn">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          <span id="model-label">Loading...</span>
+          <svg viewBox="0 0 24 24" width="10" height="10" style="opacity:.5"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+        <div class="model-dropdown hidden" id="model-dropdown"></div>
+      </div>
+
+      <!-- Size selector (AI image mode only) -->
+      <div class="bar-ctrl-wrapper" id="size-wrapper" style="position:relative">
+        <button id="size-btn" class="bar-ctrl-btn">
+          <svg viewBox="0 0 24 24"><path d="M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/></svg>
+          <span id="size-label">1024 × 1024</span>
+          <svg viewBox="0 0 24 24" width="10" height="10" style="opacity:.5"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+        <div class="size-dropdown hidden" id="size-dropdown">
+          <button class="size-opt" data-w="512" data-h="512">512 × 512</button>
+          <button class="size-opt active" data-w="1024" data-h="1024">1024 × 1024</button>
+          <button class="size-opt" data-w="1280" data-h="720">1280 × 720 (16:9)</button>
+          <button class="size-opt" data-w="720" data-h="1280">720 × 1280 (9:16)</button>
+          <button class="size-opt" data-w="1536" data-h="1024">1536 × 1024 (3:2)</button>
+        </div>
+      </div>
+
+      <!-- Note -->
+      <button id="bar-note-btn">
+        <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+        Note
+      </button>
+      <!-- Upload -->
+      <button id="bar-upload-btn">
+        <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
+        Upload
+      </button>
+      <input type="file" id="file-input" hidden multiple accept="image/*,video/*,audio/*,.svg">
+
+      <div class="bar-spacer"></div>
+      <button id="bar-gen-btn">Create image</button>
+    </div>
+
+    <!-- Hamburger dropdown (utilities only) -->
+    <div class="bar-extra-menu hidden" id="bar-extra-menu">
+      <button class="extra-menu-item" id="extra-reset-view">
+        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+        Reset View
+      </button>
+      <button class="extra-menu-item" id="extra-toggle-theme">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8A9.15 9.15 0 0 0 12 3z"/></svg>
+        Toggle Dark Mode
+      </button>
+      <button class="extra-menu-item" id="extra-settings">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.972 7.972 0 0 0 .06-.94 7.972 7.972 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.09 7.09 0 0 0-1.63-.94l-.36-2.54a.488.488 0 0 0-.49-.42h-3.84a.488.488 0 0 0-.49.42l-.36 2.54c-.58.24-1.12.55-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.51.39 1.05.71 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .44-.18.49-.42l.36-2.54c.58-.24 1.12-.55 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/></svg>
+        Settings
+      </button>
+      <button class="extra-menu-item" id="extra-media-browser">
+        <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+        Media Browser
+      </button>
+      <button class="extra-menu-item" id="extra-toggle-favorites">
+        <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+        Toggle Favorites
+      </button>
+    </div>
+  </div><!-- end #bottom-bar -->
+  </div><!-- end #toolbar-hub -->
+
+  <div id="settings-modal" class="settings-modal hidden">
+    <div class="settings-card">
+      <div class="settings-title">Settings</div>
+      <label class="settings-label" for="gemini-key-input">Gemini API Key</label>
+      <div class="settings-inline-row">
+        <input id="gemini-key-input" class="settings-input" type="password" placeholder="Paste Gemini key...">
+        <button id="gemini-toggle" class="settings-btn" type="button">Unhook</button>
+      </div>
+      <div id="gemini-status" class="settings-help"></div>
+      <div class="settings-actions">
+        <button id="settings-cancel" class="settings-btn">Cancel</button>
+        <button id="settings-save" class="settings-btn primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="move-board-modal" class="settings-modal hidden">
+    <div class="settings-card">
+      <div class="settings-title">Move to Board</div>
+      <div id="move-board-list" class="move-board-list"></div>
+      <div class="settings-actions">
+        <button id="move-board-cancel" class="settings-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="media-browser-modal" class="settings-modal hidden" style="z-index: 600;">
+    <div class="mb-container">
+      <div class="mb-topbar">
+        <div class="mb-title">Media Browser</div>
+        <div class="mb-search-wrap">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input type="text" id="mb-search" placeholder="Search files, tags...">
+        </div>
+        <div class="mb-top-rhs">
+          <button class="mb-icon-btn active" title="Grid View"><svg viewBox="0 0 24 24"><path d="M4 4h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 16h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z"/></svg></button>
+          <button class="mb-icon-btn" title="List View"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg></button>
+          <div class="mb-sep"></div>
+          <button class="mb-pill-dropdown">Date Added</button>
+          <div class="mb-size-slider">
+            <span>Size:</span>
+            <input type="range" id="mb-grid-size" min="1" max="5" value="3">
+          </div>
+          <button id="mb-close-btn" class="mb-icon-btn" style="margin-left:auto;"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+        </div>
+      </div>
+      <div class="mb-body">
+        <div class="mb-sidebar">
+          <div class="mb-sec">Board</div>
+          <button class="mb-nav-item active"><svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg> Current Board</button>
+          <div class="mb-sec" style="margin-top:10px;">Library</div>
+          <button class="mb-nav-item"><svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg> Board Files <span class="badge">0</span></button>
+          <button class="mb-nav-item"><svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg> Recent <span class="badge">0</span></button>
+          <button class="mb-nav-item"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg> Favorites <span class="badge">0</span></button>
+          <button class="mb-nav-item"><svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> Bin <span class="badge">0</span></button>
+
+          <div class="mb-sec" style="margin-top:10px;">Assets</div>
+          <button class="mb-nav-item" id="nav-assets-local"><svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg> Asquarespace Exports</button>
+        </div>
+        <div class="mb-main scrollable">
+          <div class="mb-grid" id="mb-grid">
+            <!-- Items injected by JS -->
+          </div>
+        </div>
+      </div>
+      <div class="mb-bottom-bar">
+        <div class="mb-selection-info"><span id="mb-sel-count">0 items selected</span> <button class="mb-text-btn" id="mb-clear-sel">Clear selection</button></div>
+        <div class="mb-actions">
+          <button class="mb-action-circle" id="mb-preview-file" title="Preview"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg></button>
+          <button class="mb-action-circle" id="mb-add-to-canvas" title="Add to Canvas"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
+          <button class="mb-action-circle" id="mb-show-finder" title="Show in Finder"><svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg></button>
+          <button class="mb-action-circle danger" id="mb-delete-files" title="Delete File(s)"><svg viewBox="0 0 24 24"><path d="M15 4V3H9v1H4v2h1v13c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V6h1V4h-5zm2 15H7V6h10v13z"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="preview-overlay" class="settings-modal hidden" style="z-index: 1000; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);">
+    <button id="preview-close-btn" class="mb-icon-btn" style="position:absolute; top:24px; right:24px; background:rgba(255,255,255,0.1); color:#fff; width:44px; height:44px; border-radius:50%;"><svg viewBox="0 0 24 24" style="width:20px;height:20px;"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+    <div id="preview-content"></div>
+  </div>
+
+</div>
+<script src="js/CSInterface.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

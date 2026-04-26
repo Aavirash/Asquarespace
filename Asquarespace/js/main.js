@@ -126,6 +126,24 @@ const space2CollectionModalTitle = document.getElementById('space2-collection-mo
 const space2CollectionNameInput = document.getElementById('space2-collection-name');
 const space2CollectionCancel = document.getElementById('space2-collection-cancel');
 const space2CollectionSave = document.getElementById('space2-collection-save');
+const space2AiHub = document.getElementById('space2-ai-hub');
+const space2AiBar = document.getElementById('space2-ai-bar');
+const space2AiInput = document.getElementById('space2-ai-input');
+const space2AiEye = document.getElementById('space2-ai-eye');
+const space2AiSend = document.getElementById('space2-ai-send');
+const space2AiOutput = document.getElementById('space2-ai-output');
+const space2AiModelBtn = document.getElementById('space2-ai-model-btn');
+const space2AiModelLabel = document.getElementById('space2-ai-model-label');
+const space2AiModelDropdown = document.getElementById('space2-ai-model-dropdown');
+const space2AiAttachChip = document.getElementById('space2-ai-attach-chip');
+const space2AiAttachThumb = document.getElementById('space2-ai-attach-thumb');
+const space2AiDetach = document.getElementById('space2-ai-detach');
+const space2AiCapturePreview = document.getElementById('space2-ai-capture-preview');
+const space2AiCaptureImg = document.getElementById('space2-ai-capture-img');
+const space2AiCaptureCancel = document.getElementById('space2-ai-capture-cancel');
+const space2AiCaptureConfirm = document.getElementById('space2-ai-capture-confirm');
+const space2CaptureOverlay = document.getElementById('space2-capture-overlay');
+const space2CaptureBox = document.getElementById('space2-capture-box');
 
 // ── State ─────────────────────────────────────────────────────────────────
 let tx=0, ty=0, sc=1;
@@ -173,6 +191,12 @@ let space2ActiveItemId='';
 let space2CollectionsOpen=true;
 let space2View='discover';
 let space2SidebarWidth=264;
+let space2AiModels=[];
+let space2AiModel='openai';
+let space2AiCaptureArmed=false;
+let space2AiCaptureDrag=null;
+let space2AiPendingCapture='';
+let space2AiAttachedCapture='';
 let discoverItems = [];
 let discoverVisibleCount = 0;
 let discoverLoading = false;
@@ -577,10 +601,14 @@ function openSpace2Item(itemId){
     if(space2AssignList){
         space2AssignList.innerHTML='';
         space2State.collections.forEach(col=>{
-            const label=document.createElement('label');
+            const label=document.createElement('button');
+            label.type='button';
             label.className='space2-check';
-            const checked=(item.collectionIds||[]).includes(col.id)?'checked':'';
-            label.innerHTML=`<input type="checkbox" data-col-id="${col.id}" ${checked}> <span>${col.name}</span>`;
+            label.dataset.colId=col.id;
+            const checked=(item.collectionIds||[]).includes(col.id);
+            if(checked) label.classList.add('active');
+            label.innerHTML=`<span class="space2-check-ind">✓</span><span>${col.name}</span>`;
+            label.addEventListener('click',()=>label.classList.toggle('active'));
             space2AssignList.appendChild(label);
         });
     }
@@ -597,7 +625,9 @@ function saveSpace2Item(){
     if(!item) return;
     item.title=(space2ItemTitle&&space2ItemTitle.value||'').trim()||'Untitled';
     item.description=(space2ItemDesc&&space2ItemDesc.value||'').trim();
-    const selectedCols=space2AssignList?[...space2AssignList.querySelectorAll('input[type="checkbox"]:checked')].map(i=>i.dataset.colId).filter(Boolean):[];
+    const selectedCols=space2AssignList
+        ? [...space2AssignList.querySelectorAll('.space2-check.active')].map(i=>i.dataset.colId).filter(Boolean)
+        : [];
     item.collectionIds=selectedCols;
     item.updatedAt=Date.now();
     saveSpace2State();
@@ -2473,6 +2503,7 @@ function setSpace(space){
         if(space2Panel) space2Panel.classList.add('hidden');
         if(space2TopSearch) space2TopSearch.classList.add('hidden');
     }
+    syncSpace2AIHubVisibility();
     updateControlCornerState();
     requestAnimationFrame(updateSpaceSlider);
     schedulePersist(120);
@@ -2697,7 +2728,15 @@ document.getElementById('ctx-favorite').addEventListener('click',toggleFavoriteO
 document.getElementById('nt-favorite').addEventListener('click',toggleFavoriteOnSelection);
 
 barExtraBtn.addEventListener('click',e=>{e.stopPropagation();barExtraMenu.classList.toggle('hidden');});
-function closeAllDD(){barExtraMenu.classList.add('hidden');modelDD.classList.add('hidden');sizeDD.classList.add('hidden');colorPopup.classList.add('hidden');closeBoardPanel();closeBoardQuickMenu();}
+function closeAllDD(){
+    barExtraMenu.classList.add('hidden');
+    modelDD.classList.add('hidden');
+    sizeDD.classList.add('hidden');
+    colorPopup.classList.add('hidden');
+    if(space2AiModelDropdown) space2AiModelDropdown.classList.add('hidden');
+    closeBoardPanel();
+    closeBoardQuickMenu();
+}
 window.addEventListener('click',closeAllDD);
 
 if(boardMenuTrigger){
@@ -2825,6 +2864,79 @@ if(space2CameraInput) space2CameraInput.addEventListener('change',async e=>{
     await importFilesToSpace2(e.target.files);
     e.target.value='';
 });
+if(space2AiInput){
+    space2AiInput.addEventListener('input',()=>{
+        space2AiInput.style.height='24px';
+        space2AiInput.style.height=Math.min(space2AiInput.scrollHeight,120)+'px';
+    });
+    space2AiInput.addEventListener('keydown',e=>{
+        if(e.key==='Enter'&&!e.shiftKey){
+            e.preventDefault();
+            askSpace2Ai();
+        }
+    });
+}
+if(space2AiSend) space2AiSend.addEventListener('click',e=>{e.stopPropagation();askSpace2Ai();});
+if(space2AiModelBtn&&space2AiModelDropdown){
+    space2AiModelBtn.addEventListener('click',e=>{
+        e.stopPropagation();
+        space2AiModelDropdown.classList.toggle('hidden');
+    });
+}
+if(space2AiEye){
+    space2AiEye.addEventListener('click',e=>{
+        e.stopPropagation();
+        setSpace2CaptureArmed(!space2AiCaptureArmed);
+        setSpace2AiOutput('');
+    });
+}
+if(space2AiCaptureCancel) space2AiCaptureCancel.addEventListener('click',()=>setSpace2CapturePreview(''));
+if(space2AiCaptureConfirm) space2AiCaptureConfirm.addEventListener('click',()=>{
+    if(!space2AiPendingCapture) return;
+    setSpace2CaptureArmed(false);
+    setSpace2AiAttachedCapture(space2AiPendingCapture);
+    setSpace2CapturePreview('');
+    setSpace2AiOutput('');
+});
+if(space2AiDetach) space2AiDetach.addEventListener('click',()=>setSpace2AiAttachedCapture(''));
+if(space2CaptureOverlay){
+    space2CaptureOverlay.addEventListener('mousedown',e=>{
+        if(!space2AiCaptureArmed) return;
+        const r=space2CaptureOverlay.getBoundingClientRect();
+        space2AiCaptureDrag={x:e.clientX-r.left,y:e.clientY-r.top};
+        updateSpace2CaptureBox({left:space2AiCaptureDrag.x,top:space2AiCaptureDrag.y,width:1,height:1});
+    });
+    window.addEventListener('mousemove',e=>{
+        if(!space2AiCaptureArmed||!space2AiCaptureDrag) return;
+        const r=space2CaptureOverlay.getBoundingClientRect();
+        const now={x:e.clientX-r.left,y:e.clientY-r.top};
+        updateSpace2CaptureBox(getCaptureRectFromPoints(space2AiCaptureDrag,now));
+    });
+    window.addEventListener('mouseup',async e=>{
+        if(!space2AiCaptureArmed||!space2AiCaptureDrag) return;
+        const r=space2CaptureOverlay.getBoundingClientRect();
+        const now={x:e.clientX-r.left,y:e.clientY-r.top};
+        const rect=getCaptureRectFromPoints(space2AiCaptureDrag,now);
+        space2AiCaptureDrag=null;
+        setSpace2CaptureArmed(false);
+        if(rect.width<8||rect.height<8){
+            setSpace2AiOutput('');
+            return;
+        }
+        try{
+            const dataUrl=await captureSpace2ScreenRegion(rect);
+            setSpace2CapturePreview(dataUrl);
+            setSpace2AiOutput('');
+        }catch(err){
+            console.error('space2 capture',err);
+            setSpace2AiOutput('Capture failed. Please allow screen capture and try again.');
+        }
+    });
+}
+setSpace2AiOutput('');
+setSpace2CapturePreview('');
+setSpace2AiAttachedCapture('');
+setSpace2CaptureArmed(false);
 // Tab switching: Grid vs Discover
 function showSpace2View(view) {
     const gridEl = document.getElementById('space2-grid');
@@ -2845,7 +2957,19 @@ function showSpace2View(view) {
         space2Panel.classList.toggle('grid-view', isGrid);
     }
     if(!isGrid) initDiscoverPanel();
+    syncSpace2AIHubVisibility();
     updateControlCornerState();
+}
+
+function syncSpace2AIHubVisibility(){
+    if(!space2AiHub) return;
+    const visible=currentSpace==='space2';
+    space2AiHub.classList.toggle('hidden',!visible);
+    if(visible&&(!space2AiModels||!space2AiModels.length)) refreshSpace2AiModels();
+    if(!visible){
+        if(space2AiModelDropdown) space2AiModelDropdown.classList.add('hidden');
+        setSpace2CaptureArmed(false);
+    }
 }
 
 function filterDiscoverFeedBySearch(){
@@ -3829,6 +3953,7 @@ function cycleImageBatchSize(){
 
 loadPromptHistory();
 loadImageModels(); // default
+refreshSpace2AiModels();
 if(geminiEnabled&&geminiApiKey){
     refreshGeminiCatalog(true).finally(()=>{
         if(appMode==='ai'||appMode==='video') loadImageModels();
@@ -4146,6 +4271,242 @@ async function askAI(){
     }finally{
         streamState.open=false;
         await flushTask;
+    }
+}
+
+function setSpace2AiOutput(text){
+    if(!space2AiOutput) return;
+    const next=(text||'').trim();
+    if(!next){
+        space2AiOutput.classList.add('hidden');
+        space2AiOutput.textContent='';
+        return;
+    }
+    space2AiOutput.textContent=next;
+    space2AiOutput.classList.remove('hidden');
+}
+
+function setSpace2AiAttachedCapture(dataUrl){
+    space2AiAttachedCapture=(dataUrl||'').trim();
+    if(space2AiAttachChip) space2AiAttachChip.classList.toggle('hidden',!space2AiAttachedCapture);
+    if(space2AiAttachThumb){
+        if(space2AiAttachedCapture) space2AiAttachThumb.src=space2AiAttachedCapture;
+        else space2AiAttachThumb.removeAttribute('src');
+    }
+    if(space2AiAttachedCapture) setSpace2CaptureArmed(false);
+}
+
+function setSpace2CaptureArmed(armed){
+    space2AiCaptureArmed=!!armed;
+    if(space2AiEye) space2AiEye.classList.toggle('active',space2AiCaptureArmed);
+    if(space2CaptureOverlay) space2CaptureOverlay.classList.toggle('hidden',!space2AiCaptureArmed);
+    if(space2CaptureBox){
+        space2CaptureBox.style.display='none';
+        space2CaptureBox.style.width='0px';
+        space2CaptureBox.style.height='0px';
+    }
+    space2AiCaptureDrag=null;
+}
+
+function setSpace2CapturePreview(dataUrl){
+    space2AiPendingCapture=(dataUrl||'').trim();
+    if(!space2AiCapturePreview||!space2AiCaptureImg) return;
+    if(!space2AiPendingCapture){
+        space2AiCapturePreview.classList.add('hidden');
+        space2AiCaptureImg.removeAttribute('src');
+        return;
+    }
+    space2AiCaptureImg.src=space2AiPendingCapture;
+    space2AiCapturePreview.classList.remove('hidden');
+}
+
+function getCaptureRectFromPoints(a,b){
+    const left=Math.min(a.x,b.x);
+    const top=Math.min(a.y,b.y);
+    const width=Math.abs(a.x-b.x);
+    const height=Math.abs(a.y-b.y);
+    return {left,top,width,height};
+}
+
+function updateSpace2CaptureBox(rect){
+    if(!space2CaptureBox) return;
+    if(!rect||rect.width<2||rect.height<2){
+        space2CaptureBox.style.display='none';
+        return;
+    }
+    space2CaptureBox.style.display='block';
+    space2CaptureBox.style.left=`${rect.left}px`;
+    space2CaptureBox.style.top=`${rect.top}px`;
+    space2CaptureBox.style.width=`${rect.width}px`;
+    space2CaptureBox.style.height=`${rect.height}px`;
+}
+
+async function captureSpace2ScreenRegion(rect){
+    if(!rect||rect.width<4||rect.height<4) throw new Error('Capture area too small');
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
+        throw new Error('Screen capture is not available in this environment');
+    }
+    const stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
+    let video;
+    try{
+        video=document.createElement('video');
+        video.srcObject=stream;
+        video.muted=true;
+        await video.play();
+        await wait(120);
+
+        const track=stream.getVideoTracks()[0];
+        const settings=track&&track.getSettings?track.getSettings():{};
+        const frameW=video.videoWidth||settings.width||window.innerWidth;
+        const frameH=video.videoHeight||settings.height||window.innerHeight;
+
+        const scaleX=frameW/Math.max(window.innerWidth,1);
+        const scaleY=frameH/Math.max(window.innerHeight,1);
+        const sx=Math.max(0,Math.floor(rect.left*scaleX));
+        const sy=Math.max(0,Math.floor(rect.top*scaleY));
+        const sw=Math.max(1,Math.floor(rect.width*scaleX));
+        const sh=Math.max(1,Math.floor(rect.height*scaleY));
+
+        const canvas=document.createElement('canvas');
+        canvas.width=sw;
+        canvas.height=sh;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
+        return canvas.toDataURL('image/png');
+    } finally {
+        if(video){
+            try{video.pause();}catch{}
+            try{video.srcObject=null;}catch{}
+        }
+        stream.getTracks().forEach(t=>t.stop());
+    }
+}
+
+function getSpace2AiModelGroups(){
+    const text=(modelCatalog.text||[]).filter(Boolean);
+    const img=(modelCatalog.image||[]).filter(Boolean);
+    const vision=(modelCatalog.imageVision||[]).filter(Boolean);
+    const vid=(modelCatalog.video||[]).filter(Boolean);
+    const unique=(arr)=>[...new Set(arr)];
+    return [
+        {label:'Text Models',models:unique(text)},
+        {label:'Image Models',models:unique(img)},
+        {label:'Vision Edit Models',models:unique(vision)},
+        {label:'Video Models',models:unique(vid)}
+    ].filter(g=>g.models.length);
+}
+
+function renderSpace2AiModels(){
+    if(!space2AiModelDropdown||!space2AiModelLabel) return;
+    space2AiModelDropdown.innerHTML='';
+    const groups=getSpace2AiModelGroups();
+    const all=[...new Set(groups.flatMap(g=>g.models))];
+    space2AiModels=all;
+    if(!space2AiModels.length){
+        space2AiModel='openai';
+        space2AiModelLabel.textContent='openai';
+        const btn=buildModelBtn('openai',true);
+        btn.addEventListener('click',()=>{space2AiModel='openai';space2AiModelLabel.textContent='openai';});
+        space2AiModelDropdown.appendChild(btn);
+        return;
+    }
+    if(!space2AiModels.includes(space2AiModel)) space2AiModel=space2AiModels[0];
+    space2AiModelLabel.textContent=space2AiModel;
+    let section=0;
+    groups.forEach(group=>{
+        if(section>0){
+            const sep=document.createElement('div');
+            sep.className='model-divider';
+            space2AiModelDropdown.appendChild(sep);
+        }
+        const lbl=document.createElement('div');
+        lbl.className='model-group-label';
+        lbl.textContent=group.label;
+        space2AiModelDropdown.appendChild(lbl);
+        group.models.forEach(name=>{
+            const btn=document.createElement('button');
+            btn.className=`model-opt${name===space2AiModel?' active':''}`;
+            btn.type='button';
+            btn.textContent=name;
+            btn.addEventListener('click',e=>{
+                e.stopPropagation();
+                space2AiModel=name;
+                space2AiModelLabel.textContent=name;
+                space2AiModelDropdown.querySelectorAll('.model-opt').forEach(b=>b.classList.toggle('active',b.textContent===name));
+                space2AiModelDropdown.classList.add('hidden');
+            });
+            space2AiModelDropdown.appendChild(btn);
+        });
+        section++;
+    });
+}
+
+async function refreshSpace2AiModels(){
+    if(space2AiModelLabel) space2AiModelLabel.textContent='Loading models...';
+    try{
+        const [imgRes,textRes]=await Promise.all([
+            fetch(`${API_BASE}/image/models`,{headers:buildAuthHeaders()}),
+            fetch(`${API_BASE}/text/models`,{headers:buildAuthHeaders()})
+        ]);
+        if(imgRes.ok){
+            const imgList=normalizeModelList(await imgRes.json()).filter(m=>!m.paid_only);
+            modelCatalog.image=imgList.filter(m=>!m.output_modalities.includes('video')).map(m=>m.name);
+            modelCatalog.video=imgList.filter(m=>m.output_modalities.includes('video')).map(m=>m.name);
+            modelCatalog.imageVision=imgList.filter(m=>{
+                const inMods=(m.input_modalities||[]).map(v=>String(v).toLowerCase());
+                const outMods=(m.output_modalities||[]).map(v=>String(v).toLowerCase());
+                const supportsEndpoint=(m.supported_endpoints||[]).some(ep=>String(ep).includes('/v1/images/edits'));
+                const desc=(m.description||'').toLowerCase();
+                return (inMods.includes('image')&&outMods.includes('image'))||supportsEndpoint||desc.includes('image-to-image')||desc.includes('edit');
+            }).map(m=>m.name);
+        }
+        if(textRes.ok){
+            const textList=normalizeModelList(await textRes.json()).filter(m=>!m.paid_only);
+            modelCatalog.text=textList.filter(m=>m.output_modalities.includes('text')||!m.output_modalities.length).map(m=>m.name);
+        }
+    }catch(err){
+        console.warn('space2 model refresh failed',err);
+    }
+    renderSpace2AiModels();
+}
+
+async function askSpace2Ai(){
+    if(!space2AiInput) return;
+    const prompt=(space2AiInput.value||'').trim();
+    if(!prompt&&!space2AiAttachedCapture) return;
+    if(prompt){
+        addPromptToHistory(prompt);
+        space2AiInput.value='';
+        space2AiInput.style.height='24px';
+    }
+    setSpace2AiOutput('Thinking...');
+    try{
+        const userContent=[];
+        if(prompt) userContent.push({type:'text',text:prompt});
+        if(space2AiAttachedCapture){
+            userContent.push({type:'image_url',image_url:{url:space2AiAttachedCapture}});
+        }
+        const body={
+            model:space2AiModel||'openai',
+            stream:false,
+            messages:[
+                {role:'system',content:'You are a helpful visual assistant for designers. Be concise and actionable.'},
+                {role:'user',content:(space2AiAttachedCapture||userContent.length>1)?userContent:(prompt||'Analyze this image and provide guidance.')}
+            ]
+        };
+        const res=await fetch(`${API_BASE}/v1/chat/completions`,{
+            method:'POST',
+            headers:buildAuthHeaders({'Content-Type':'application/json'}),
+            body:JSON.stringify(body)
+        });
+        if(!res.ok) throw new Error(`AI request failed (${res.status})`);
+        const data=await res.json();
+        const text=(data?.choices?.[0]?.message?.content||'').trim()||'No response text returned.';
+        setSpace2AiOutput(text);
+        if(space2AiAttachedCapture) setSpace2AiAttachedCapture('');
+    }catch(err){
+        console.error('Space2 AI chat',err);
+        setSpace2AiOutput('Could not get a response. Please retry.');
     }
 }
 
