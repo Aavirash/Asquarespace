@@ -21,6 +21,11 @@ const IS_MAC_APP = APP_QUERY.get('app') === 'mac';
 
 const API_KEY  = 'sk_CpXbaZAa5rqnfaDUxTtFrw4rVsOjtc7m';
 const API_BASE = 'https://gen.pollinations.ai';
+const SUPABASE_URL = 'https://idnuatrmilkjwcmqgysg.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_0fFfKFkffH43-8vX97na7A_H3mKg3K7';
+const APP_PASSCODE = '24176882';
+const SUPABASE_MEDIA_BUCKET = 'asq-media';
+const SUPABASE_STATE_TABLE = 'user_workspace_state';
 
 // ── Rotation cursor SVGs (curved arrow, rotated for each corner) ────────────
 // The SVG is a curved rotate arrow (Asquarespace branded in #ef4027).
@@ -42,6 +47,15 @@ const ROT_CURSORS = {
 // ── DOM ─────────────────────────────────────────────────────────────────
 const html        = document.documentElement;
 const uiContainer = document.getElementById('ui-container');
+const authScreen  = document.getElementById('auth-screen');
+const authPasscodeForm = document.getElementById('auth-passcode-form');
+const authEmailForm = document.getElementById('auth-email-form');
+const authOtpForm = document.getElementById('auth-otp-form');
+const authPasscodeInput = document.getElementById('auth-passcode-input');
+const authEmailInput = document.getElementById('auth-email-input');
+const authOtpInput = document.getElementById('auth-otp-input');
+const authChangeEmailBtn = document.getElementById('auth-change-email-btn');
+const authStatus = document.getElementById('auth-status');
 const viewport    = document.getElementById('viewport');
 const canvas      = document.getElementById('canvas');
 const selBox      = document.getElementById('selection-box');
@@ -217,6 +231,12 @@ let discoverLoading = false;
 let space2CollectionModalMode='create';
 let space2CollectionEditingId='';
 let activeCollectionMenu=null;
+let supabaseClient=null;
+let currentSupabaseUser=null;
+let currentAuthEmail='';
+let cloudSyncTimer=null;
+let appBootstrapped=false;
+let pendingSpace2CloudLoad=false;
 const DISCOVER_PAGE_SIZE = 18;
 
 // ── Persistence ────────────────────────────────────────────────────────────
@@ -263,6 +283,116 @@ function defaultSpace2State(){
     return {items:[],collections:[]};
 }
 
+function initSupabaseClient(){
+    if(supabaseClient) return supabaseClient;
+    if(!window.supabase||!window.supabase.createClient) return null;
+    supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{
+        auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+    });
+    return supabaseClient;
+}
+
+function setAuthStatus(message,isError=false){
+    if(!authStatus) return;
+    authStatus.textContent=message||'';
+    authStatus.classList.toggle('error',!!isError);
+}
+
+function showAuthStep(step){
+    if(!authPasscodeForm||!authEmailForm||!authOtpForm) return;
+    authPasscodeForm.classList.toggle('hidden',step!=='passcode');
+    authEmailForm.classList.toggle('hidden',step!=='email');
+    authOtpForm.classList.toggle('hidden',step!=='otp');
+}
+
+function getCloudBoardKey(projectKey=currentProjectKey,boardId=currentBoardId){
+    return `${projectKey||'local-default'}::${boardId||'board-1'}`;
+}
+
+async function uploadBlobToSupabase(blob,{folder='uploads',nameHint='image'}={}){
+    const client=initSupabaseClient();
+    if(!client||!currentSupabaseUser||!blob) return null;
+    const ext=extFromMime(blob.type||'image/png');
+    const cleanHint=(nameHint||'image').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28)||'image';
+    const path=`${currentSupabaseUser.id}/${folder}/${Date.now()}_${Math.floor(Math.random()*100000)}_${cleanHint}.${ext}`;
+    const upload=await client.storage.from(SUPABASE_MEDIA_BUCKET).upload(path,blob,{upsert:false,contentType:blob.type||'image/png'});
+    if(upload.error){
+        console.warn('supabase storage upload failed',upload.error.message||upload.error);
+        return null;
+    }
+    const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(path,60*60*24*14);
+    if(signed.error){
+        console.warn('supabase signed url failed',signed.error.message||signed.error);
+        return {path,url:''};
+    }
+    return {path,url:signed.data?.signedUrl||''};
+}
+
+async function refreshSpace2SignedUrls(){
+    const client=initSupabaseClient();
+    if(!client||!currentSupabaseUser||!space2State||!Array.isArray(space2State.items)) return;
+    const targets=space2State.items.filter(item=>item&&item.cloudPath);
+    if(!targets.length) return;
+    await Promise.all(targets.map(async item=>{
+        const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(item.cloudPath,60*60*24*14);
+        if(!signed.error&&signed.data&&signed.data.signedUrl){
+            item.src=signed.data.signedUrl;
+        }
+    }));
+}
+
+function scheduleCloudSync(delay=700){
+    if(!currentSupabaseUser) return;
+    if(cloudSyncTimer) clearTimeout(cloudSyncTimer);
+    cloudSyncTimer=setTimeout(()=>{cloudSyncTimer=null;syncStateToSupabase().catch(err=>console.warn('cloud sync failed',err));},delay);
+}
+
+async function syncStateToSupabase(){
+    const client=initSupabaseClient();
+    if(!client||!currentSupabaseUser) return;
+    const boardPayload=buildBoardPayload();
+    const spacePayload=JSON.parse(JSON.stringify(space2State||defaultSpace2State()));
+    const payload={
+        user_id:currentSupabaseUser.id,
+        board_key:getCloudBoardKey(),
+        project_key:currentProjectKey||'local-default',
+        board_id:currentBoardId||'board-1',
+        canvas_state:boardPayload,
+        space2_state:spacePayload,
+        updated_at:new Date().toISOString()
+    };
+    const {error}=await client.from(SUPABASE_STATE_TABLE).upsert(payload,{onConflict:'user_id,board_key'});
+    if(error) console.warn('supabase state upsert failed',error.message||error);
+}
+
+async function restoreStateFromSupabase(){
+    const client=initSupabaseClient();
+    if(!client||!currentSupabaseUser) return;
+    const {data,error}=await client
+        .from(SUPABASE_STATE_TABLE)
+        .select('canvas_state,space2_state')
+        .eq('user_id',currentSupabaseUser.id)
+        .eq('board_key',getCloudBoardKey())
+        .maybeSingle();
+    if(error){
+        console.warn('supabase state fetch failed',error.message||error);
+        return;
+    }
+    if(!data) return;
+    if(data.canvas_state){
+        try{ localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(data.canvas_state)); }catch{}
+    }
+    if(data.space2_state){
+        try{ localStorage.setItem(getSpace2Key(currentProjectKey,currentBoardId),JSON.stringify(data.space2_state)); }catch{}
+    }
+    if(data.canvas_state&&Array.isArray(data.canvas_state.nodes)) loadBoardState(currentProjectKey,currentBoardId);
+    if(data.space2_state){
+        loadSpace2State(currentProjectKey,currentBoardId);
+        await refreshSpace2SignedUrls();
+        renderSpace2Grid();
+    }
+}
+
 function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     try{
         const raw=localStorage.getItem(getSpace2Key(projectKey,boardId));
@@ -280,6 +410,7 @@ function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
 
 function saveSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(space2State));
+    scheduleCloudSync(760);
 }
 
 function getFilteredSpace2Items(){
@@ -524,9 +655,9 @@ function renderSpace2Grid(){
     list.forEach(item=>{
         const card=document.createElement('button');
         card.type='button';
-        card.className='space2-item';
+        card.className='space2-item img-pending';
         card.innerHTML=`
-            <img class="space2-thumb" src="${item.src}" alt="">
+            <img class="space2-thumb" src="${item.src}" alt="" loading="lazy" decoding="async">
             <div class="space2-card-actions">
                 <button class="space2-card-action" data-action="collection" title="Add to collection" aria-label="Add to collection">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8a2 2 0 0 1 2 2v2H2V6a2 2 0 0 1 2-2h6zm12 8v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8h20zm-10 2v2H10v2h2v2h2v-2h2v-2h-2v-2h-2z"/></svg>
@@ -540,14 +671,25 @@ function renderSpace2Grid(){
                 <div class="space2-desc">${(item.description||'').replace(/</g,'&lt;')||'Image'}</div>
             </div>
         `;
-                const img=card.querySelector('.space2-thumb');
-                const desc=card.querySelector('.space2-desc');
-                if(img&&desc&&!item.description){
-                        img.addEventListener('load',()=>{
-                                if(img.naturalWidth&&img.naturalHeight) desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
-                        scheduleSpace2GridLayout();
-                        },{once:true});
+        const img=card.querySelector('.space2-thumb');
+        const desc=card.querySelector('.space2-desc');
+        if(img){
+            const onLoaded=()=>{
+                card.classList.remove('img-pending');
+                card.classList.add('img-loaded');
+                if(desc&&!item.description&&img.naturalWidth&&img.naturalHeight){
+                    desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
                 }
+                scheduleSpace2GridLayout();
+            };
+            if(img.complete&&img.naturalWidth) onLoaded();
+            else img.addEventListener('load',onLoaded,{once:true});
+            img.addEventListener('error',()=>{
+                card.classList.remove('img-pending');
+                card.classList.add('img-loaded');
+                scheduleSpace2GridLayout();
+            },{once:true});
+        }
         card.addEventListener('click',()=>openSpace2Item(item.id));
         const collectionBtn=card.querySelector('[data-action="collection"]');
         if(collectionBtn){
@@ -690,6 +832,7 @@ function insertSpace2Item(item,{collectionIds}={}){
     const src=item&&item.src||'';
     if(!src) return {item:null,added:false,changed:false};
     const filePath=item.filePath||'';
+    const cloudPath=item.cloudPath||'';
     const existing=space2State.items.find(i=>(filePath&&i.filePath===filePath)||i.src===src);
     const normalizedCollectionIds=Array.isArray(collectionIds)
         ? [...new Set(collectionIds.filter(Boolean))]
@@ -697,9 +840,11 @@ function insertSpace2Item(item,{collectionIds}={}){
     if(existing){
         const currentIds=Array.isArray(existing.collectionIds)?existing.collectionIds:[];
         const mergedIds=[...new Set([...currentIds,...normalizedCollectionIds])];
-        const changed=mergedIds.length!==currentIds.length;
+        const hasCloudUpdate=!!(cloudPath&&existing.cloudPath!==cloudPath);
+        const changed=mergedIds.length!==currentIds.length||hasCloudUpdate;
         if(changed){
             existing.collectionIds=mergedIds;
+            if(hasCloudUpdate) existing.cloudPath=cloudPath;
             existing.updatedAt=Date.now();
         }
         return {item:existing,added:false,changed};
@@ -709,6 +854,7 @@ function insertSpace2Item(item,{collectionIds}={}){
         id:`item-${now}-${Math.floor(Math.random()*99999)}`,
         src,
         filePath,
+        cloudPath,
         title:item.title||(filePath?filePath.split('/').pop():'Untitled'),
         description:item.description||'',
         collectionIds:normalizedCollectionIds,
@@ -792,6 +938,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
     for(const f of list){
         let src='';
         let filePath='';
+        let cloudPath='';
         if(f.path){
             filePath=f.path;
             src=toFileUrl(f.path);
@@ -804,8 +951,19 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
                 src=URL.createObjectURL(f);
             }
         }
+        if(currentSupabaseUser){
+            try{
+                const uploaded=await uploadBlobToSupabase(f,{folder:'space2',nameHint:f.name||'capture'});
+                if(uploaded&&uploaded.path){
+                    cloudPath=uploaded.path;
+                    if(uploaded.url) src=uploaded.url;
+                }
+            }catch(err){
+                console.warn('space2 upload sync failed',err);
+            }
+        }
         if(!src) continue;
-        items.push({src,filePath,title:f.name||'Upload'});
+        items.push({src,filePath,title:f.name||'Upload',cloudPath});
     }
     upsertSpace2Items(items,{openEditor});
 }
@@ -1524,6 +1682,7 @@ function saveProjectState(){
         localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(payload));
         saveBoards(currentProjectKey);
         renderBoardList();
+        scheduleCloudSync(760);
     }catch(err){
         console.warn('persist save failed',err);
     }
@@ -1652,6 +1811,9 @@ async function switchProjectContextIfNeeded(){
     space2ActiveCollection='all';
     if(space2Search) space2Search.value='';
     loadSpace2State(currentProjectKey,currentBoardId);
+    if(currentSupabaseUser){
+        restoreStateFromSupabase().catch(err=>console.warn('cloud context restore failed',err));
+    }
     recoverCanvasIfEmpty(currentProjectKey);
     undoStack=[];
     redoStack=[];
@@ -1679,6 +1841,139 @@ async function initPersistence(){
     const observer=new MutationObserver(()=>{schedulePersist(350);scheduleHistoryCapture(350);renderFavoritesStrip();});
     observer.observe(canvas,{childList:true,subtree:true,attributes:true,characterData:true});
     aiInput.addEventListener('input',()=>schedulePersist(500));
+}
+
+async function bootstrapAppAfterAuth(){
+    if(appBootstrapped) return;
+    appBootstrapped=true;
+    if(ENABLE_PROJECT_PERSISTENCE){
+        await initPersistence();
+        if(currentSupabaseUser){
+            await restoreStateFromSupabase();
+            pendingSpace2CloudLoad=false;
+        }
+    }
+}
+
+function lockAppForAuth(){
+    document.body.classList.add('auth-locked');
+    if(authScreen) authScreen.classList.remove('hidden');
+}
+
+function unlockAppAfterAuth(){
+    document.body.classList.remove('auth-locked');
+    if(authScreen) authScreen.classList.add('hidden');
+}
+
+function bindAuthUi(){
+    if(!authPasscodeForm||!authEmailForm||!authOtpForm) return;
+
+    authPasscodeForm.addEventListener('submit',e=>{
+        e.preventDefault();
+        const entered=(authPasscodeInput?.value||'').trim();
+        if(entered!==APP_PASSCODE){
+            setAuthStatus('Invalid passcode. Try again.',true);
+            return;
+        }
+        showAuthStep('email');
+        setAuthStatus('Passcode accepted. Enter your email to continue.');
+        if(authEmailInput) authEmailInput.focus();
+    });
+
+    authEmailForm.addEventListener('submit',async e=>{
+        e.preventDefault();
+        const client=initSupabaseClient();
+        if(!client){
+            setAuthStatus('Supabase client failed to initialize.',true);
+            return;
+        }
+        const email=(authEmailInput?.value||'').trim().toLowerCase();
+        if(!email||!email.includes('@')){
+            setAuthStatus('Enter a valid email address.',true);
+            return;
+        }
+        currentAuthEmail=email;
+        setAuthStatus('Sending verification code...');
+        const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:true}});
+        if(error){
+            setAuthStatus(error.message||'Unable to send code.',true);
+            return;
+        }
+        showAuthStep('otp');
+        setAuthStatus('Code sent. Check your email and enter it below.');
+        if(authOtpInput) authOtpInput.focus();
+    });
+
+    authOtpForm.addEventListener('submit',async e=>{
+        e.preventDefault();
+        const client=initSupabaseClient();
+        if(!client||!currentAuthEmail){
+            setAuthStatus('Missing email session. Try again.',true);
+            showAuthStep('email');
+            return;
+        }
+        const token=(authOtpInput?.value||'').trim();
+        if(token.length<6){
+            setAuthStatus('Enter the 6-digit code.',true);
+            return;
+        }
+        setAuthStatus('Verifying code...');
+        const {data,error}=await client.auth.verifyOtp({email:currentAuthEmail,token,type:'email'});
+        if(error||!data?.session){
+            setAuthStatus((error&&error.message)||'Invalid code. Please try again.',true);
+            return;
+        }
+        setAuthStatus('Signed in. Loading workspace...');
+    });
+
+    if(authChangeEmailBtn){
+        authChangeEmailBtn.addEventListener('click',()=>{
+            showAuthStep('email');
+            setAuthStatus('Enter another email to receive a code.');
+            if(authOtpInput) authOtpInput.value='';
+            if(authEmailInput) authEmailInput.focus();
+        });
+    }
+}
+
+async function initAuthGate(){
+    lockAppForAuth();
+    bindAuthUi();
+    showAuthStep('passcode');
+    setAuthStatus('Enter your passcode to continue.');
+    if(authPasscodeInput) authPasscodeInput.focus();
+
+    const client=initSupabaseClient();
+    if(!client){
+        setAuthStatus('Auth unavailable. Running local mode only.',true);
+        return;
+    }
+
+    client.auth.onAuthStateChange((event,session)=>{
+        currentSupabaseUser=session&&session.user?session.user:null;
+        if(currentSupabaseUser){
+            setAuthStatus(`Signed in as ${currentSupabaseUser.email||'user'}. Preparing workspace...`);
+            unlockAppAfterAuth();
+            bootstrapAppAfterAuth().catch(err=>console.warn('boot after auth failed',err));
+        }else if(event==='SIGNED_OUT'){
+            appBootstrapped=false;
+            lockAppForAuth();
+            showAuthStep('passcode');
+            setAuthStatus('Signed out. Enter passcode to continue.');
+        }
+    });
+
+    const {data,error}=await client.auth.getSession();
+    if(error){
+        setAuthStatus('Could not check existing session. Continue manually.',true);
+        return;
+    }
+    if(data&&data.session&&data.session.user){
+        currentSupabaseUser=data.session.user;
+        setAuthStatus(`Restoring session for ${currentSupabaseUser.email||'user'}...`);
+        unlockAppAfterAuth();
+        await bootstrapAppAfterAuth();
+    }
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────
@@ -2723,6 +3018,9 @@ function switchBoard(boardId){
     space2ActiveCollection='all';
     if(space2Search) space2Search.value='';
     loadSpace2State(currentProjectKey,currentBoardId);
+    if(currentSupabaseUser){
+        restoreStateFromSupabase().catch(err=>console.warn('cloud board restore failed',err));
+    }
     saveBoards(currentProjectKey);
     renderBoardList();
     undoStack=[];
@@ -3677,12 +3975,25 @@ function setMode(m){
     // Animate slider
     requestAnimationFrame(updateSlider);
     sizeWrapper.style.display=(m==='ai'||m==='video')?'':'none';
-    genBtn.textContent=m==='ai'?'Create image':m==='video'?'Create video':m==='audio'?'Create audio':m==='search'?'Search images':'Ask AI';
+    const baseCta=m==='ai'?'Create image':m==='video'?'Create video':m==='audio'?'Create audio':m==='search'?'Search images':'Ask AI';
+    genBtn.textContent=(window.innerWidth<=760&&(m==='ai'||m==='video'))?'Create':baseCta;
+    updateBottomBarCompactUi();
     aiInput.placeholder=m==='ai'?'Describe what to generate...':m==='video'?'Describe the video to generate...':m==='audio'?'Describe the audio to generate...':m==='search'?'Search DuckDuckGo for images...':'Ask the AI anything...';
     if(m==='ai'||m==='video') loadImageModels();
     else if(m==='chat'||m==='audio') loadTextModels();
     modelWrapper.style.display=m==='search'?'none':'';
     schedulePersist(250);
+}
+
+function updateBottomBarCompactUi(){
+    if(sizeBtn&&sizeLabel){
+        sizeBtn.title=`Aspect ratio ${sizeLabel.textContent||`${genW} x ${genH}`}`;
+    }
+    if(genBtn){
+        const compact=window.innerWidth<=760&&(appMode==='ai'||appMode==='video');
+        const baseCta=appMode==='ai'?'Create image':appMode==='video'?'Create video':appMode==='audio'?'Create audio':appMode==='search'?'Search images':'Ask AI';
+        genBtn.textContent=compact?'Create':baseCta;
+    }
 }
 
 function cycleMode(step){
@@ -3696,8 +4007,9 @@ window.addEventListener('load',()=>requestAnimationFrame(updateSlider));
 window.addEventListener('resize',()=>requestAnimationFrame(updateSlider));
 setTimeout(updateSlider,200);
 window.addEventListener('load',()=>requestAnimationFrame(updateSpaceSlider));
-window.addEventListener('resize',()=>requestAnimationFrame(updateSpaceSlider));
+window.addEventListener('resize',()=>{requestAnimationFrame(updateSpaceSlider);updateBottomBarCompactUi();});
 setTimeout(updateSpaceSlider,200);
+setTimeout(updateBottomBarCompactUi,220);
 
 // ── Models ─────────────────────────────────────────────────────────────────
 function jsonReq(url,extra={}){
@@ -4715,9 +5027,12 @@ async function askSpace2Ai(){
     }
 }
 
-if(ENABLE_PROJECT_PERSISTENCE){
-    initPersistence().catch(err=>console.warn('persistence init failed',err));
-}
+initAuthGate().then(()=>{
+    if(!currentSupabaseUser) return;
+    if(!appBootstrapped){
+        bootstrapAppAfterAuth().catch(err=>console.warn('persistence init failed',err));
+    }
+}).catch(err=>console.warn('auth init failed',err));
 
 // ── Media Browser ──
 const mbModal = document.getElementById('media-browser-modal');
