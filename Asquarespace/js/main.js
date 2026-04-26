@@ -110,6 +110,11 @@ const space2DiscoverControls = document.getElementById('space2-discover-controls
 const space2ViewSwitch = document.getElementById('space2-view-switch');
 const space2Sash = document.getElementById('space2-sash');
 const space2Sidebar = document.getElementById('space2-sidebar');
+const space2SettingsBtn = document.getElementById('space2-settings-btn');
+const space2SettingsModal = document.getElementById('space2-settings-modal');
+const space2SettingsClose = document.getElementById('space2-settings-close');
+const space2CapturePermissionBtn = document.getElementById('space2-capture-permission-btn');
+const space2CaptureStatus = document.getElementById('space2-capture-status');
 const space2Collections = document.getElementById('space2-collections');
 const space2Grid = document.getElementById('space2-grid');
 const space2ItemModal = document.getElementById('space2-item-modal');
@@ -188,15 +193,16 @@ let space2ActiveCollection='all';
 let space2SearchText='';
 let space2State={items:[],collections:[]};
 let space2ActiveItemId='';
-let space2CollectionsOpen=true;
+let space2CollectionsOpen=false;
 let space2View='discover';
-let space2SidebarWidth=264;
+let space2SidebarWidth=parseInt(localStorage.getItem('asq.space2.sidebar.width')||'264',10)||264;
 let space2AiModels=[];
 let space2AiModel='openai';
 let space2AiCaptureArmed=false;
 let space2AiCaptureDrag=null;
 let space2AiPendingCapture='';
 let space2AiAttachedCapture='';
+let space2CapturePermissionBootAttempted=false;
 let discoverItems = [];
 let discoverVisibleCount = 0;
 let discoverLoading = false;
@@ -809,13 +815,22 @@ function setSpace2SidebarWidth(width,{persist=true}={}){
     space2SidebarWidth=clamped;
     if(space2Panel) space2Panel.style.setProperty('--space2-sidebar-width',`${clamped}px`);
     if(persist) localStorage.setItem('asq.space2.sidebar.width',String(clamped));
+    if(currentSpace==='space2'&&space2View==='grid'){
+        scheduleSpace2GridLayout();
+        setTimeout(scheduleSpace2GridLayout,190);
+    }
 }
 
 function setSpace2CollectionsOpen(open,{skipPersist=false}={}){
     space2CollectionsOpen=!!open;
     if(space2Panel) space2Panel.classList.toggle('sidebar-collapsed',!space2CollectionsOpen);
     if(space2Sidebar) space2Sidebar.setAttribute('aria-hidden',space2CollectionsOpen?'false':'true');
+    if(!skipPersist) localStorage.setItem('asq.space2.sidebar.open',space2CollectionsOpen?'1':'0');
     if(space2CollectionsOpen) setSpace2SidebarWidth(space2SidebarWidth,{persist:!skipPersist});
+    if(currentSpace==='space2'&&space2View==='grid'){
+        scheduleSpace2GridLayout();
+        setTimeout(scheduleSpace2GridLayout,190);
+    }
 }
 
 function updateControlCornerState(){
@@ -839,6 +854,44 @@ function initSpace2SidebarSizing(){
         e.preventDefault();
         setSpace2CollectionsOpen(!space2CollectionsOpen);
     });
+}
+
+function openSpace2SettingsModal(){
+    if(space2CaptureStatus) space2CaptureStatus.textContent='';
+    if(space2SettingsModal) space2SettingsModal.classList.remove('hidden');
+}
+
+function closeSpace2SettingsModal(){
+    if(space2SettingsModal) space2SettingsModal.classList.add('hidden');
+}
+
+async function requestSpace2CapturePermission({silent=false}={}){
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
+        if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Screen capture is not available in this environment.';
+        return false;
+    }
+    if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Requesting macOS screen capture access...';
+    let stream=null;
+    try{
+        stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
+        stream.getTracks().forEach(t=>t.stop());
+        if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Access granted. You can now use region capture.';
+        return true;
+    }catch(err){
+        console.warn('space2 capture permission request failed',err);
+        if(!silent&&space2CaptureStatus){
+            space2CaptureStatus.textContent='Access not granted. Allow Screen Recording for Asquarespace in macOS System Settings and try again.';
+        }
+        return false;
+    }finally{
+        if(stream) stream.getTracks().forEach(t=>t.stop());
+    }
+}
+
+function maybeAutoRequestSpace2CapturePermission(){
+    if(space2CapturePermissionBootAttempted) return;
+    space2CapturePermissionBootAttempted=true;
+    requestSpace2CapturePermission({silent:true});
 }
 
 function getActiveProjectKey(){
@@ -2495,6 +2548,7 @@ function setSpace(space){
         document.body.classList.add('space-2');
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
+        maybeAutoRequestSpace2CapturePermission();
         loadSpace2State();
         setSpace2CollectionsOpen(space2CollectionsOpen);
         showSpace2View(space2View);
@@ -3068,6 +3122,11 @@ if(space2CollectionCancel) space2CollectionCancel.addEventListener('click',close
 if(space2CollectionSave) space2CollectionSave.addEventListener('click',saveCollectionModal);
 if(space2CollectionNameInput) space2CollectionNameInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveCollectionModal();}});
 if(space2CollectionModal) space2CollectionModal.addEventListener('click',e=>{if(e.target===space2CollectionModal) closeCollectionModal();});
+if(space2SettingsBtn) space2SettingsBtn.addEventListener('click',openSpace2SettingsModal);
+if(space2SettingsClose) space2SettingsClose.addEventListener('click',closeSpace2SettingsModal);
+if(space2CapturePermissionBtn) space2CapturePermissionBtn.addEventListener('click',()=>requestSpace2CapturePermission({silent:false}));
+if(space2SettingsModal) space2SettingsModal.addEventListener('click',e=>{if(e.target===space2SettingsModal) closeSpace2SettingsModal();});
+setTimeout(maybeAutoRequestSpace2CapturePermission,700);
 document.addEventListener('click',e=>{
     if(activeCollectionMenu && !activeCollectionMenu.contains(e.target)) closeCollectionMenu();
 });
