@@ -4371,8 +4371,10 @@ function updateSlider(){
     const slider=document.getElementById('mode-slider');
     const container=document.getElementById('mode-switcher');
     if(!active||!slider||!container) return;
+    const w=active.offsetWidth;
+    if(w===0){requestAnimationFrame(updateSlider);return;}
     slider.style.left=active.offsetLeft+'px';
-    slider.style.width=active.offsetWidth+'px';
+    slider.style.width=w+'px';
 }
 
 ['ai','video','audio','search','chat'].forEach(m=>{
@@ -4419,6 +4421,8 @@ function cycleMode(step){
 window.addEventListener('load',()=>requestAnimationFrame(updateSlider));
 window.addEventListener('resize',()=>requestAnimationFrame(updateSlider));
 setTimeout(updateSlider,200);
+setTimeout(updateSlider,800);
+(()=>{const sw=document.getElementById('mode-switcher');if(sw&&typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>requestAnimationFrame(updateSlider)).observe(sw);}})();
 window.addEventListener('load',()=>requestAnimationFrame(updateSpaceSlider));
 window.addEventListener('resize',()=>{requestAnimationFrame(updateSpaceSlider);updateBottomBarCompactUi();});
 setTimeout(updateSpaceSlider,200);
