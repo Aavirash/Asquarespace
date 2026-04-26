@@ -1,20 +1,9 @@
-# OS
-.DS_Store
+*
+!.gitignore
+!Asquarespace-MacApp/
+!Asquarespace-MacApp/**
 
-# Dependencies
-node_modules/
-**/node_modules/
-
-# Build outputs
+Asquarespace-MacApp/node_modules/
 Asquarespace-MacApp/dist/
-Asquarespace-MacApp/build/icon.iconset/
-Asquarespace-MacApp/build/*.icns
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Local/editor
-.vscode/
-.chat-history/
+Asquarespace-MacApp/.DS_Store
+Asquarespace-MacApp/**/.DS_Store
