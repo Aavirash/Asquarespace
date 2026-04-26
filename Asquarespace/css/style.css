@@ -1046,12 +1046,12 @@ body.space-2 #favorites-panel{display:none!important;}
     .space2-view-icon-grid{left:38px;right:auto;}
     .space2-view-thumb{top:2px;left:2px;width:34px;height:26px;border-radius:7px;transition:left .2s cubic-bezier(.4,0,.2,1);}
     .space2-view-toggle.is-grid .space2-view-thumb{left:38px;top:2px;}
-    .space2-mobile-notch{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom));z-index:336;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:14px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(12px);box-shadow:var(--shadow-lg);}
+    .space2-mobile-notch{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom));z-index:336;display:flex;align-items:center;gap:2px;padding:4px 5px 5px;border-radius:12px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(10px);box-shadow:var(--shadow);}
     .space2-mobile-notch.hidden{display:none;}
-    .space2-mobile-notch .space2-top-icon-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-mid);}
+    .space2-mobile-notch .space2-top-icon-btn{width:42px;height:34px;border-radius:8px;border:none;background:transparent;color:var(--text-mid);box-shadow:none;}
     .space2-mobile-notch .space2-top-icon-btn:hover{background:var(--surface);color:var(--text);}
-    .space2-mobile-notch .space2-camera-float{position:static;top:auto;right:auto;z-index:auto;border-color:color-mix(in srgb,var(--app-red) 42%,var(--border));background:color-mix(in srgb,var(--app-red) 14%,var(--surface));color:var(--app-red);}
-    .space2-mobile-notch .space2-camera-float:hover{border-color:color-mix(in srgb,var(--app-red) 56%,var(--border));background:color-mix(in srgb,var(--app-red) 20%,var(--surface));}
+    .space2-mobile-notch .space2-camera-float{position:static;top:auto;right:auto;z-index:auto;background:transparent;color:var(--app-red);}
+    .space2-mobile-notch .space2-camera-float:hover{background:color-mix(in srgb,var(--app-red) 12%,var(--surface));color:var(--app-red);}
     .board-fan-grid{grid-template-columns:repeat(3,38px);}
     .board-fan-btn{width:38px;height:38px;}
     #toolbar-hub{bottom:calc(8px + env(safe-area-inset-bottom));width:calc(100% - 12px);}

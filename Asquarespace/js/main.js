@@ -1278,10 +1278,10 @@ function applySpace2MobileHeaderLayout(){
             space2HeaderRow.insertBefore(space2ViewSwitch,space2SearchWrap||null);
         }
         if(space2MobileNotch){
-            [space2UploadBtn,space2NewCollection,space2CameraBtn,themeToggle].forEach(btn=>{
+            [space2UploadBtn,space2CameraBtn,space2NewCollection,themeToggle].forEach(btn=>{
                 if(btn&&btn.parentElement!==space2MobileNotch) space2MobileNotch.appendChild(btn);
             });
-            const showNotch=currentSpace==='space2';
+            const showNotch=currentSpace==='space2'&&space2View==='grid';
             space2MobileNotch.classList.toggle('hidden',!showNotch);
             space2MobileNotch.setAttribute('aria-hidden',showNotch?'false':'true');
         }
