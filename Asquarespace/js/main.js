@@ -2095,6 +2095,61 @@ document.querySelectorAll('.color-swatch').forEach(sw=>{
 // Cmd/Ctrl + left drag (or middle drag) = pan
 // Option/Alt + left drag (or Cmd/Ctrl+middle drag) = zoom
 // Cmd+scroll = zoom; two-finger scroll = pan; pinch = zoom
+const syntheticPointerBridge={id:null,target:null,lastX:0,lastY:0};
+function dispatchSyntheticMouseEvent(type,target,{clientX,clientY,ctrlKey=false,shiftKey=false}={}){
+    const evt=new MouseEvent(type,{bubbles:true,cancelable:true,clientX,clientY,button:0,buttons:type==='mouseup'?0:1,ctrlKey,shiftKey});
+    (target||window).dispatchEvent(evt);
+}
+function releaseSyntheticPointerBridge(){
+    if(syntheticPointerBridge.id===null) return;
+    dispatchSyntheticMouseEvent('mouseup',window,{clientX:syntheticPointerBridge.lastX,clientY:syntheticPointerBridge.lastY});
+    syntheticPointerBridge.id=null;
+    syntheticPointerBridge.target=null;
+}
+function isCanvasInputTarget(target){
+    return target===viewport||target===canvas||(target&&target.closest&&target.closest('.canvas-node'));
+}
+function isSpace2CaptureTarget(target){
+    return !!(space2CaptureOverlay&&(target===space2CaptureOverlay||(target&&target.closest&&target.closest('#space2-capture-overlay'))));
+}
+document.addEventListener('pointerdown',e=>{
+    if(e.pointerType==='mouse') return;
+    if(e.pointerType==='touch'&&syntheticPointerBridge.id!==null&&e.pointerId!==syntheticPointerBridge.id){
+        releaseSyntheticPointerBridge();
+        return;
+    }
+    const target=e.target;
+    const canvasTarget=isCanvasInputTarget(target);
+    const captureTarget=isSpace2CaptureTarget(target);
+    if(!canvasTarget&&!captureTarget) return;
+    if(e.pointerType==='touch'&&!e.isPrimary) return;
+    e.preventDefault();
+    syntheticPointerBridge.id=e.pointerId;
+    syntheticPointerBridge.target=target;
+    syntheticPointerBridge.lastX=e.clientX;
+    syntheticPointerBridge.lastY=e.clientY;
+    const ctrlKey=(target===viewport||target===canvas)&&e.pointerType==='touch';
+    dispatchSyntheticMouseEvent('mousedown',captureTarget?target:(target===viewport||target===canvas?viewport:target),{clientX:e.clientX,clientY:e.clientY,ctrlKey,shiftKey:e.shiftKey});
+},{passive:false,capture:true});
+document.addEventListener('pointermove',e=>{
+    if(e.pointerId!==syntheticPointerBridge.id) return;
+    e.preventDefault();
+    syntheticPointerBridge.lastX=e.clientX;
+    syntheticPointerBridge.lastY=e.clientY;
+    dispatchSyntheticMouseEvent('mousemove',window,{clientX:e.clientX,clientY:e.clientY,shiftKey:e.shiftKey});
+},{passive:false,capture:true});
+document.addEventListener('pointerup',e=>{
+    if(e.pointerId!==syntheticPointerBridge.id) return;
+    e.preventDefault();
+    syntheticPointerBridge.lastX=e.clientX;
+    syntheticPointerBridge.lastY=e.clientY;
+    releaseSyntheticPointerBridge();
+},{passive:false,capture:true});
+document.addEventListener('pointercancel',e=>{
+    if(e.pointerId!==syntheticPointerBridge.id) return;
+    e.preventDefault();
+    releaseSyntheticPointerBridge();
+},{passive:false,capture:true});
 viewport.addEventListener('mousedown',e=>{
     const navModifier=e.altKey||e.metaKey||e.ctrlKey||e.button===1;
     if(e.target!==viewport&&e.target!==canvas&&!navModifier) return;
