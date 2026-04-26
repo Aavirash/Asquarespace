@@ -154,6 +154,7 @@ const space2ItemCancel = document.getElementById('space2-item-cancel');
 const space2ItemSave = document.getElementById('space2-item-save');
 const space2CollectionModal = document.getElementById('space2-collection-modal');
 let space2LayoutFrame=0;
+let space2LazyImageObserver=null;
 const space2CollectionModalTitle = document.getElementById('space2-collection-modal-title');
 const space2CollectionNameInput = document.getElementById('space2-collection-name');
 const space2CollectionCancel = document.getElementById('space2-collection-cancel');
@@ -856,11 +857,12 @@ function renderSpace2Grid(){
     space2Grid.innerHTML='';
     list.forEach(item=>{
         const isGenerating=item.aiMetaState==='loading';
+        const thumbSrc=String(item.src||'').trim();
         const card=document.createElement('button');
         card.type='button';
         card.className='space2-item img-pending';
         card.innerHTML=`
-            <img class="space2-thumb" src="${item.src}" alt="" loading="lazy" decoding="async">
+            <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" alt="" loading="lazy" decoding="async">
             <div class="space2-card-action-left">
                 <button class="space2-card-action" data-action="meta" title="Regenerate metadata" aria-label="Regenerate metadata">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6V3L8 7l4 4V8c2.21 0 4 1.79 4 4a4 4 0 0 1-6.87 2.83l-1.42 1.42A6 6 0 1 0 12 6zm-4 4a4 4 0 0 1 6.87-2.83l1.42-1.42A6 6 0 1 0 12 18v3l4-4-4-4v3a4 4 0 0 1-4-4z"/></svg>
@@ -890,13 +892,14 @@ function renderSpace2Grid(){
                 }
                 scheduleSpace2GridLayout();
             };
-            if(img.complete&&img.naturalWidth) onLoaded();
+            if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth) onLoaded();
             else img.addEventListener('load',onLoaded,{once:true});
             img.addEventListener('error',()=>{
                 card.classList.remove('img-pending');
                 card.classList.add('img-loaded');
                 scheduleSpace2GridLayout();
             },{once:true});
+            observeSpace2LazyImage(img);
         }
         card.addEventListener('click',()=>openSpace2Item(item.id));
         const collectionBtn=card.querySelector('[data-action="collection"]');
@@ -983,6 +986,39 @@ function layoutSpace2Grid(){
 
     const contentHeight=Math.max(...columnHeights)-gap+paddingBottom;
     space2Grid.style.setProperty('--space2-grid-content-height',`${Math.max(contentHeight,0)}px`);
+}
+
+function ensureSpace2LazyImageObserver(){
+    if(space2LazyImageObserver||typeof IntersectionObserver==='undefined') return;
+    space2LazyImageObserver=new IntersectionObserver(entries=>{
+        entries.forEach(entry=>{
+            if(!entry.isIntersecting) return;
+            const img=entry.target;
+            const src=(img&&img.dataset&&img.dataset.src||'').trim();
+            if(src&&img.dataset.loaded!=='1'){
+                img.dataset.loaded='1';
+                img.src=src;
+            }
+            space2LazyImageObserver.unobserve(img);
+        });
+    },{
+        root:space2Grid||null,
+        rootMargin:'460px 0px',
+        threshold:0.01
+    });
+}
+
+function observeSpace2LazyImage(img){
+    if(!img) return;
+    const src=(img.dataset&&img.dataset.src||'').trim();
+    if(!src) return;
+    if(typeof IntersectionObserver==='undefined'){
+        img.dataset.loaded='1';
+        img.src=src;
+        return;
+    }
+    ensureSpace2LazyImageObserver();
+    if(space2LazyImageObserver) space2LazyImageObserver.observe(img);
 }
 
 function openSpace2Item(itemId){
