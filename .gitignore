@@ -1,5 +1,8 @@
 *
 !.gitignore
+!AGENTS.md
+!.github/
+!.github/**
 !Asquarespace-MacApp/
 !Asquarespace-MacApp/**
 !Asquarespace/
