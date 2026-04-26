@@ -1894,7 +1894,7 @@ function bindAuthUi(){
             return;
         }
         currentAuthEmail=email;
-        setAuthStatus('Sending verification code...');
+        setAuthStatus('Sending login email...');
         const {error}=await client.auth.signInWithOtp({
             email,
             options:{
@@ -1903,11 +1903,11 @@ function bindAuthUi(){
             }
         });
         if(error){
-            setAuthStatus(error.message||'Unable to send code.',true);
+            setAuthStatus(error.message||'Unable to send login email.',true);
             return;
         }
         showAuthStep('otp');
-        setAuthStatus('Code sent. Check your email and enter it below.');
+        setAuthStatus('Email sent. Click the confirm link in your email, then return here and press "I Confirmed in Email".');
         if(authOtpInput) authOtpInput.focus();
     });
 
@@ -1920,17 +1920,29 @@ function bindAuthUi(){
             return;
         }
         const token=(authOtpInput?.value||'').trim();
-        if(token.length<6){
-            setAuthStatus('Enter the 6-digit code.',true);
+
+        if(token.length>=6){
+            setAuthStatus('Verifying code...');
+            const {data,error}=await client.auth.verifyOtp({email:currentAuthEmail,token,type:'email'});
+            if(error||!data?.session){
+                setAuthStatus((error&&error.message)||'Invalid code. Please try again.',true);
+                return;
+            }
+            setAuthStatus('Signed in. Loading workspace...');
             return;
         }
-        setAuthStatus('Verifying code...');
-        const {data,error}=await client.auth.verifyOtp({email:currentAuthEmail,token,type:'email'});
-        if(error||!data?.session){
-            setAuthStatus((error&&error.message)||'Invalid code. Please try again.',true);
+
+        setAuthStatus('Checking confirmation status...');
+        const {data,error}=await client.auth.getSession();
+        if(error){
+            setAuthStatus(error.message||'Could not verify session yet. Try again in a moment.',true);
             return;
         }
-        setAuthStatus('Signed in. Loading workspace...');
+        if(data?.session?.user){
+            setAuthStatus('Signed in. Loading workspace...');
+            return;
+        }
+        setAuthStatus('No active session yet. Please click the confirm link in your email, then try again.',true);
     });
 
     if(authChangeEmailBtn){
