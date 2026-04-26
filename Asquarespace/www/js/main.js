@@ -868,7 +868,7 @@ function renderSpace2Grid(){
         card.type='button';
         card.className='space2-item img-pending';
         card.innerHTML=`
-            <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" alt="" loading="lazy" decoding="async">
+            <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id||thumbSrc)}" alt="" loading="lazy" decoding="async">
             <div class="space2-card-action-left">
                 <button class="space2-card-action" data-action="meta" title="Regenerate metadata" aria-label="Regenerate metadata">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6V3L8 7l4 4V8c2.21 0 4 1.79 4 4a4 4 0 0 1-6.87 2.83l-1.42 1.42A6 6 0 1 0 12 6zm-4 4a4 4 0 0 1 6.87-2.83l1.42-1.42A6 6 0 1 0 12 18v3l4-4-4-4v3a4 4 0 0 1-4-4z"/></svg>
@@ -994,6 +994,61 @@ function layoutSpace2Grid(){
     space2Grid.style.setProperty('--space2-grid-content-height',`${Math.max(contentHeight,0)}px`);
 }
 
+// ── IndexedDB image blob cache — prevents re-downloading images on every reload ──
+const _IMG_CACHE_DB='asq-img-cache';
+const _IMG_CACHE_STORE='blobs';
+let _imgCacheDb=null;
+function _openImgCacheDb(){
+    if(_imgCacheDb) return Promise.resolve(_imgCacheDb);
+    return new Promise((resolve,reject)=>{
+        const req=indexedDB.open(_IMG_CACHE_DB,1);
+        req.onupgradeneeded=e=>{
+            const db=e.target.result;
+            if(!db.objectStoreNames.contains(_IMG_CACHE_STORE)) db.createObjectStore(_IMG_CACHE_STORE);
+        };
+        req.onsuccess=e=>{_imgCacheDb=e.target.result;resolve(_imgCacheDb);};
+        req.onerror=()=>reject(req.error);
+    });
+}
+async function _getCachedImgBlob(key){
+    try{
+        const db=await _openImgCacheDb();
+        return new Promise(resolve=>{
+            const req=db.transaction(_IMG_CACHE_STORE,'readonly').objectStore(_IMG_CACHE_STORE).get(key);
+            req.onsuccess=()=>resolve(req.result||null);
+            req.onerror=()=>resolve(null);
+        });
+    }catch{return null;}
+}
+async function _setCachedImgBlob(key,blob){
+    try{
+        const db=await _openImgCacheDb();
+        return new Promise(resolve=>{
+            const tx=db.transaction(_IMG_CACHE_STORE,'readwrite');
+            tx.objectStore(_IMG_CACHE_STORE).put(blob,key);
+            tx.oncomplete=()=>resolve();
+            tx.onerror=()=>resolve();
+        });
+    }catch{}
+}
+async function _loadImgWithBlobCache(img,url,cacheKey){
+    if(!url) return;
+    const cached=await _getCachedImgBlob(cacheKey);
+    if(cached){
+        img.src=URL.createObjectURL(cached);
+        return;
+    }
+    try{
+        const resp=await fetch(url);
+        if(!resp.ok){img.src=url;return;}
+        const blob=await resp.blob();
+        _setCachedImgBlob(cacheKey,blob).catch(()=>{});
+        img.src=URL.createObjectURL(blob);
+    }catch{
+        img.src=url;
+    }
+}
+
 function ensureSpace2LazyImageObserver(){
     if(space2LazyImageObserver||typeof IntersectionObserver==='undefined') return;
     space2LazyImageObserver=new IntersectionObserver(entries=>{
@@ -1003,7 +1058,8 @@ function ensureSpace2LazyImageObserver(){
             const src=(img&&img.dataset&&img.dataset.src||'').trim();
             if(src&&img.dataset.loaded!=='1'){
                 img.dataset.loaded='1';
-                img.src=src;
+                const cacheKey=img.dataset.cacheKey||src;
+                _loadImgWithBlobCache(img,src,cacheKey).catch(()=>{img.src=src;});
             }
             space2LazyImageObserver.unobserve(img);
         });
@@ -1020,7 +1076,8 @@ function observeSpace2LazyImage(img){
     if(!src) return;
     if(typeof IntersectionObserver==='undefined'){
         img.dataset.loaded='1';
-        img.src=src;
+        const cacheKey=img.dataset.cacheKey||src;
+        _loadImgWithBlobCache(img,src,cacheKey).catch(()=>{img.src=src;});
         return;
     }
     ensureSpace2LazyImageObserver();
