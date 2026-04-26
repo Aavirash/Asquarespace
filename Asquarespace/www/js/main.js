@@ -339,9 +339,47 @@ function shouldRefreshSpace2SignedUrl(item){
     return (exp-nowEpochSec())<=SPACE2_SIGNED_URL_REFRESH_GRACE_SEC;
 }
 
+// ── Image compression (Canvas API — works in browser + Capacitor WebView) ──
+// maxPx: longest side cap. quality: 0-1 for WebP/JPEG. Returns compressed Blob.
+// Falls back to original blob if canvas/WebP unavailable.
+const IMG_COMPRESS_MAX_PX = 2048;
+const IMG_COMPRESS_QUALITY = 0.88;
+const IMG_COMPRESS_FORMAT  = 'image/webp';
+const IMG_COMPRESS_MIN_BYTES = 80 * 1024; // skip compression for images already < 80 KB
+
+function _compressImageBlob(blob, {maxPx=IMG_COMPRESS_MAX_PX, quality=IMG_COMPRESS_QUALITY, format=IMG_COMPRESS_FORMAT}={}){
+    return new Promise(resolve=>{
+        if(!blob||!blob.type||!blob.type.startsWith('image/')){resolve(blob);return;}
+        // skip tiny images — compression won't help much
+        if(blob.size < IMG_COMPRESS_MIN_BYTES){resolve(blob);return;}
+        const url=URL.createObjectURL(blob);
+        const img=new Image();
+        img.onload=()=>{
+            URL.revokeObjectURL(url);
+            let {naturalWidth:w, naturalHeight:h}=img;
+            if(w>maxPx||h>maxPx){
+                if(w>=h){h=Math.round(h*(maxPx/w));w=maxPx;}
+                else{w=Math.round(w*(maxPx/h));h=maxPx;}
+            }
+            const canvas=document.createElement('canvas');
+            canvas.width=w; canvas.height=h;
+            const ctx=canvas.getContext('2d');
+            ctx.drawImage(img,0,0,w,h);
+            canvas.toBlob(compressed=>{
+                // only use compressed if it's actually smaller
+                resolve(compressed&&compressed.size<blob.size?compressed:blob);
+            },format,quality);
+        };
+        img.onerror=()=>{URL.revokeObjectURL(url);resolve(blob);};
+        img.src=url;
+    });
+}
+
 async function uploadBlobToSupabase(blob,{folder='uploads',nameHint='image'}={}){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser||!blob) return null;
+    // compress before upload — reduces Supabase storage + all future egress
+    blob=await _compressImageBlob(blob).catch(()=>blob);
     const ext=extFromMime(blob.type||'image/png');
     const cleanHint=(nameHint||'image').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28)||'image';
     const path=`${currentSupabaseUser.id}/${folder}/${Date.now()}_${Math.floor(Math.random()*100000)}_${cleanHint}.${ext}`;
@@ -1041,7 +1079,9 @@ async function _loadImgWithBlobCache(img,url,cacheKey){
     try{
         const resp=await fetch(url);
         if(!resp.ok){img.src=url;return;}
-        const blob=await resp.blob();
+        const rawBlob=await resp.blob();
+        // compress on first fetch before caching — existing cloud images get compressed locally
+        const blob=await _compressImageBlob(rawBlob).catch(()=>rawBlob);
         _setCachedImgBlob(cacheKey,blob).catch(()=>{});
         img.src=URL.createObjectURL(blob);
     }catch{
