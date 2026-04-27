@@ -2198,6 +2198,7 @@ function loadBoardState(projectKey,boardId){
         if(ui.currentModel){currentModel=ui.currentModel;modelLabel.textContent=ui.currentModel;}
         if(ui.appMode) setMode(ui.appMode);
         if(ui.currentSpace) setSpace(ui.currentSpace);
+        else setSpace('space2');
         renderFavoritesStrip();
         return true;
     }catch(err){
@@ -2241,7 +2242,7 @@ async function initPersistence(){
     boards=meta.boards;
     currentBoardId=meta.currentBoardId;
     renderBoardList();
-    loadBoardState(currentProjectKey,currentBoardId);
+    if(!loadBoardState(currentProjectKey,currentBoardId)) setSpace('space2');
     loadSpace2State(currentProjectKey,currentBoardId);
     recoverCanvasIfEmpty(currentProjectKey);
     persistenceReady=true;
@@ -3535,12 +3536,15 @@ function openBoardPanel(){
 
 function updateSpaceSlider(){
     if(!spaceSwitcher||!spaceSlider) return;
-    // Clear any inline style overrides so the CSS transition owns the animation.
-    // CSS already has: .space-slider{transition:left .22s...} and
-    // .space-switcher.is-grid .space-slider{left:109px} / @media left:101px.
-    // Toggling the class is all that's needed — identical to how .space2-view-thumb works.
+    // Clear any legacy inline overrides (left, width, transform) so CSS rules own the position.
     spaceSlider.style.left = '';
     spaceSlider.style.width = '';
+    spaceSlider.style.transform = '';
+    // Force a synchronous style flush. Without this, toggling the class in the same JS tick
+    // can be batched with pending style changes, meaning the browser never sees a "from" state
+    // and the CSS transform transition doesn't fire.
+    void spaceSlider.getBoundingClientRect();
+    // Toggle class — CSS transition fires automatically (transform:translateX 0↔106px).
     spaceSwitcher.classList.toggle('is-grid', currentSpace === 'space2');
 }
 
