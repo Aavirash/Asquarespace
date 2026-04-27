@@ -2683,6 +2683,16 @@ async function bootstrapAppAfterAuth(){
         if(currentSupabaseUser){
             await restoreStateFromSupabase();
             pendingSpace2CloudLoad=false;
+            // Diagnostic write-test: immediately attempt a sync and surface any error.
+            const writeOk=await syncSpace2StateToSupabase({force:true});
+            if(!writeOk){
+                // Error already shown in setSpace2AutoMetaStatus via syncSpace2StateToSupabase.
+                // Also show a persistent alert so it can't be missed.
+                setTimeout(()=>alert('⚠️ Supabase write test FAILED.\nCheck the Space 2 status bar for the error message.\nPersistence will not work until this is resolved.'),1000);
+            } else {
+                setSpace2AutoMetaStatus('✅ Cloud sync connected.');
+                setTimeout(()=>setSpace2AutoMetaStatus(''),4000);
+            }
         }
     }
 }
