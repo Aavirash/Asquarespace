@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20260427-49">
+    <link rel="stylesheet" href="css/style.css?v=20260427-50">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -46,11 +46,11 @@
 <div id="ui-container">
 
   <div id="space-switcher" class="space-switcher" aria-label="Workspace spaces">
-    <button id="space-toggle" class="space-toggle" aria-label="Toggle Space and Grid" aria-pressed="true" title="Switch workspace space" type="button">
-      <span class="space-toggle-label space-toggle-label-space">Space</span>
-      <span class="space-toggle-label space-toggle-label-grid">Grid</span>
+    <div id="space-toggle" class="space-toggle" role="tablist" aria-label="Toggle Space and Grid">
       <span id="space-toggle-thumb" class="space-toggle-thumb" aria-hidden="true"></span>
-    </button>
+      <button id="space-toggle-space" class="space-toggle-btn" type="button" role="tab" aria-selected="false" title="Canvas Space">Space</button>
+      <button id="space-toggle-grid" class="space-toggle-btn" type="button" role="tab" aria-selected="true" title="Inspiration Grid">Grid</button>
+    </div>
   </div>
 
   <div id="space2-top-corner" class="space2-top-corner hidden">
@@ -614,6 +614,6 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/CSInterface.js"></script>
-<script src="js/main.js?v=20260427-49"></script>
+<script src="js/main.js?v=20260427-50"></script>
 </body>
 </html>

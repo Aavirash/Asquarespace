@@ -117,6 +117,8 @@ if(document.body) document.body.classList.toggle('is-mobile-shell',IS_MOBILE_SHE
 
 const spaceToggle = document.getElementById('space-toggle');
 const spaceToggleThumb = document.getElementById('space-toggle-thumb');
+const spaceToggleSpaceBtn = document.getElementById('space-toggle-space');
+const spaceToggleGridBtn = document.getElementById('space-toggle-grid');
 const space2Panel = document.getElementById('space2-panel');
 const space2ModeDock = document.getElementById('space2-mode-dock');
 const space2Search = document.getElementById('space2-search');
@@ -3532,45 +3534,42 @@ function openBoardPanel(){
     boardPanel.classList.remove('hidden');
 }
 
-function getSpaceToggleTargetX(){
-    if(!spaceToggle||!spaceToggleThumb) return 0;
-    if(currentSpace!=='space2') return 0;
-    const trackWidth=spaceToggle.clientWidth||0;
-    const thumbWidth=spaceToggleThumb.offsetWidth||0;
-    return Math.max(0,trackWidth-thumbWidth);
+function getSpaceToggleTargetButton(){
+    return currentSpace==='space2' ? spaceToggleGridBtn : spaceToggleSpaceBtn;
 }
 
 function updateSpaceSlider({animate=true}={}){
-    if(!spaceToggle) return;
+    if(!spaceToggle||!spaceToggleThumb||!spaceToggleSpaceBtn||!spaceToggleGridBtn) return;
     const isGrid=currentSpace==='space2';
     spaceToggle.classList.toggle('is-grid',isGrid);
-    spaceToggle.setAttribute('aria-pressed',isGrid?'true':'false');
-    if(!spaceToggleThumb) return;
+    spaceToggle.setAttribute('aria-activedescendant',isGrid?'space-toggle-grid':'space-toggle-space');
+    spaceToggleSpaceBtn.setAttribute('aria-selected',isGrid?'false':'true');
+    spaceToggleGridBtn.setAttribute('aria-selected',isGrid?'true':'false');
 
-    const toX=getSpaceToggleTargetX();
-    const ready=spaceToggle.dataset.ready==='1';
-    const fromX=Number(spaceToggle.dataset.thumbX ?? toX);
+    const targetBtn=getSpaceToggleTargetButton();
+    const fromLeft=parseFloat(getComputedStyle(spaceToggleThumb).left) || spaceToggleSpaceBtn.offsetLeft || 0;
+    const fromWidth=parseFloat(getComputedStyle(spaceToggleThumb).width) || targetBtn.offsetWidth || 0;
+    const toLeft=targetBtn.offsetLeft || 0;
+    const toWidth=targetBtn.offsetWidth || 0;
 
     if(typeof spaceToggleThumb.getAnimations==='function'){
         spaceToggleThumb.getAnimations().forEach(animation=>animation.cancel());
     }
 
-    if(!animate||!ready||Math.abs(fromX-toX)<0.5||typeof spaceToggleThumb.animate!=='function'){
-        spaceToggleThumb.style.transform=`translateX(${toX}px)`;
-        spaceToggle.dataset.thumbX=String(toX);
-        spaceToggle.dataset.ready='1';
+    spaceToggleThumb.style.left=`${toLeft}px`;
+    spaceToggleThumb.style.width=`${toWidth}px`;
+
+    if(!animate||typeof spaceToggleThumb.animate!=='function'||(Math.abs(fromLeft-toLeft)<0.5&&Math.abs(fromWidth-toWidth)<0.5)){
         return;
     }
 
-    spaceToggleThumb.style.transform=`translateX(${toX}px)`;
     spaceToggleThumb.animate(
         [
-            {transform:`translateX(${fromX}px)`},
-            {transform:`translateX(${toX}px)`}
+            {left:`${fromLeft}px`,width:`${fromWidth}px`},
+            {left:`${toLeft}px`,width:`${toWidth}px`}
         ],
         {duration:220,easing:'cubic-bezier(0.4,0,0.2,1)'}
     );
-    spaceToggle.dataset.thumbX=String(toX);
     spaceToggle.dataset.ready='1';
 }
 
@@ -3950,22 +3949,9 @@ if(geminiToggleBtn) geminiToggleBtn.addEventListener('click',e=>{
 settingsModal.addEventListener('click',e=>{if(e.target===settingsModal) closeSettings();});
 
 if(spaceToggle){
-    spaceToggle.addEventListener('click',e=>{
-        e.stopPropagation();
-        if(e.detail===0) return;
-        const rect=spaceToggle.getBoundingClientRect();
-        const clickX=typeof e.clientX==='number'?e.clientX-rect.left:rect.width;
-        setSpace(clickX>=rect.width/2?'space2':'space1');
-    });
-    spaceToggle.addEventListener('keydown',e=>{
-        if(e.key===' '||e.key==='Enter'){
-            e.preventDefault();
-            setSpace(currentSpace==='space2'?'space1':'space2');
-        }
-    });
+    if(spaceToggleSpaceBtn) spaceToggleSpaceBtn.addEventListener('click',e=>{e.stopPropagation();setSpace('space1');});
+    if(spaceToggleGridBtn) spaceToggleGridBtn.addEventListener('click',e=>{e.stopPropagation();setSpace('space2');});
 }
-window.addEventListener('resize',()=>updateSpaceSlider({animate:false}));
-window.addEventListener('orientationchange',()=>updateSpaceSlider({animate:false}));
 if(space2Search) space2Search.addEventListener('input',()=>{
     space2SearchText=space2Search.value||'';
     if(space2View==='discover') filterDiscoverFeedBySearch();
@@ -4669,15 +4655,15 @@ window.addEventListener('resize',()=>requestAnimationFrame(updateSlider));
 setTimeout(updateSlider,200);
 setTimeout(updateSlider,800);
 (()=>{const sw=document.getElementById('mode-switcher');if(sw&&typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>requestAnimationFrame(updateSlider)).observe(sw);}})();
-window.addEventListener('load',()=>requestAnimationFrame(updateSpaceSlider));
-window.addEventListener('resize',()=>{requestAnimationFrame(updateSpaceSlider);updateBottomBarCompactUi();});
-window.addEventListener('orientationchange',()=>{requestAnimationFrame(updateSpaceSlider);setTimeout(updateSpaceSlider,120);});
+window.addEventListener('load',()=>requestAnimationFrame(()=>updateSpaceSlider({animate:false})));
+window.addEventListener('resize',()=>{requestAnimationFrame(()=>updateSpaceSlider({animate:false}));updateBottomBarCompactUi();});
+window.addEventListener('orientationchange',()=>{requestAnimationFrame(()=>updateSpaceSlider({animate:false}));setTimeout(()=>updateSpaceSlider({animate:false}),120);});
 if(window.visualViewport){
-    window.visualViewport.addEventListener('resize',()=>requestAnimationFrame(updateSpaceSlider));
+    window.visualViewport.addEventListener('resize',()=>requestAnimationFrame(()=>updateSpaceSlider({animate:false})));
 }
-setTimeout(updateSpaceSlider,200);
+setTimeout(()=>updateSpaceSlider({animate:false}),200);
 setTimeout(updateBottomBarCompactUi,220);
-(()=>{const sw=document.getElementById('space-switcher');if(sw&&typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>requestAnimationFrame(updateSpaceSlider)).observe(sw);}})();
+(()=>{const sw=document.getElementById('space-switcher');if(sw&&typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>requestAnimationFrame(()=>updateSpaceSlider({animate:false}))).observe(sw);}})();
 
 // ── Models ─────────────────────────────────────────────────────────────────
 function jsonReq(url,extra={}){
