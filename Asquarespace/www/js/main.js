@@ -1418,6 +1418,7 @@ function updateControlCornerState(){
 function initSpace2SidebarSizing(){
     if(!space2Sash||!space2Panel) return;
     setSpace2SidebarWidth(space2SidebarWidth,{persist:false});
+    setSpace2CollectionsOpen((localStorage.getItem('asq.space2.sidebar.open')||'0')==='1',{skipPersist:true});
     space2Sash.addEventListener('click',(e)=>{
         e.preventDefault();
         setSpace2CollectionsOpen(!space2CollectionsOpen);
@@ -3528,7 +3529,6 @@ function updateSpaceSlider(){
     if(!spaceSwitcher||!spaceSlider) return;
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
-    if(spaceSwitcher.offsetParent===null){requestAnimationFrame(updateSpaceSlider);return;}
     const w=active.offsetWidth;
     if(w===0){requestAnimationFrame(updateSpaceSlider);return;}
     const activeRect=active.getBoundingClientRect();
