@@ -3536,8 +3536,10 @@ function updateSpaceSlider(){
     if(!spaceSwitcher||!spaceSlider) return;
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
+    const w=active.offsetWidth;
+    if(w===0){requestAnimationFrame(updateSpaceSlider);return;}
     spaceSlider.style.left=active.offsetLeft+'px';
-    spaceSlider.style.width=active.offsetWidth+'px';
+    spaceSlider.style.width=w+'px';
 }
 
 function setSpace(space){
