@@ -477,6 +477,17 @@ function writeSpace2StateToLocal(projectKey=currentProjectKey,boardId=currentBoa
     localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(payload));
 }
 
+function flushCloudSync({force=false}={}){
+    const hadPending=!!cloudSyncTimer;
+    if(cloudSyncTimer){
+        clearTimeout(cloudSyncTimer);
+        cloudSyncTimer=null;
+    }
+    if(!currentSupabaseUser) return;
+    if(!force&&!hadPending) return;
+    syncStateToSupabase().catch(err=>console.warn('cloud sync flush failed',err));
+}
+
 function scheduleCloudSync(delay=700){
     if(!currentSupabaseUser) return;
     if(cloudSyncTimer) clearTimeout(cloudSyncTimer);
@@ -2365,6 +2376,7 @@ async function switchProjectContextIfNeeded(){
     if(key===currentProjectKey) return;
     saveProjectState();
     saveSpace2State();
+    flushCloudSync({force:true});
     currentProjectKey=key;
     const meta=readBoards(currentProjectKey);
     boards=meta.boards;
@@ -2401,7 +2413,17 @@ async function initPersistence(){
 
     // Switch project context only on regaining focus (safe, non-destructive).
     window.addEventListener('focus',()=>{switchProjectContextIfNeeded();});
-    window.addEventListener('beforeunload',()=>{saveProjectState();saveSpace2State();if(projectPollTimer)clearInterval(projectPollTimer);});
+    const flushWorkspaceSync=()=>{
+        saveProjectState();
+        saveSpace2State();
+        flushCloudSync({force:true});
+        if(projectPollTimer) clearInterval(projectPollTimer);
+    };
+    window.addEventListener('beforeunload',flushWorkspaceSync);
+    window.addEventListener('pagehide',flushWorkspaceSync);
+    document.addEventListener('visibilitychange',()=>{
+        if(document.visibilityState==='hidden') flushWorkspaceSync();
+    });
 
     // Any canvas/content mutation schedules a debounced save.
     const observer=new MutationObserver(()=>{schedulePersist(350);scheduleHistoryCapture(350);renderFavoritesStrip();});
@@ -3785,6 +3807,7 @@ function switchBoard(boardId){
     if(boardId===currentBoardId) return;
     saveProjectState();
     saveSpace2State();
+    flushCloudSync({force:true});
     currentBoardId=boardId;
     clearCanvasNodes();
     loadBoardState(currentProjectKey,currentBoardId);
