@@ -3534,7 +3534,9 @@ function updateSpaceSlider(){
     const activeRect=active.getBoundingClientRect();
     const switchRect=spaceSwitcher.getBoundingClientRect();
     const left=activeRect.left-switchRect.left;
-    spaceSlider.style.left=left+'px';
+    const baseLeft=3;
+    spaceSlider.style.left=baseLeft+'px';
+    spaceSlider.style.transform=`translateX(${Math.max(0,left-baseLeft)}px)`;
     spaceSlider.style.width=w+'px';
 }
 
@@ -3547,7 +3549,8 @@ function setSpace(space){
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
         loadSpace2State();
-        setSpace2CollectionsOpen(space2CollectionsOpen);
+        if(window.innerWidth<=760) setSpace2CollectionsOpen(false,{skipPersist:true});
+        else setSpace2CollectionsOpen(space2CollectionsOpen);
         showSpace2View(space2View);
     }else{
         document.body.classList.remove('space-2');
