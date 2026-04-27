@@ -1401,7 +1401,7 @@ function setSpace2CollectionsOpen(open,{skipPersist=false}={}){
     if(space2CollectionsOpen) setSpace2SidebarWidth(space2SidebarWidth,{persist:!skipPersist});
     if(currentSpace==='space2'&&space2View==='grid'){
         scheduleSpace2GridLayout();
-        setTimeout(scheduleSpace2GridLayout,190);
+        setTimeout(scheduleSpace2GridLayout,220);
     }
 }
 
@@ -1428,7 +1428,7 @@ function updateSpace2TopCornerVisibility(){
 function initSpace2SidebarSizing(){
     if(!space2Sash||!space2Panel) return;
     setSpace2SidebarWidth(space2SidebarWidth,{persist:false});
-    const restoreOpen=window.innerWidth>980&&((localStorage.getItem('asq.space2.sidebar.open')||'0')==='1');
+    const restoreOpen=window.innerWidth>760&&((localStorage.getItem('asq.space2.sidebar.open')||'0')==='1');
     setSpace2CollectionsOpen(restoreOpen,{skipPersist:true});
     space2Sash.addEventListener('click',(e)=>{
         e.preventDefault();
@@ -1445,7 +1445,7 @@ function restoreSpace2MobileLayoutSlot(el){
 }
 
 function applySpace2MobileHeaderLayout(){
-    const isMobile=window.innerWidth<=980;
+    const isMobile=window.innerWidth<=760;
     const inSpace2=currentSpace==='space2';
 
     if(isMobile&&inSpace2){
@@ -3538,11 +3538,21 @@ function updateSpaceSlider(){
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
     const isGrid=active===spaceBtn2||currentSpace==='space2';
+    // Read from position BEFORE class change (class change alters CSS computed value).
+    const fromLeft  = parseFloat(getComputedStyle(spaceSlider).left)  || 3;
+    const fromWidth = parseFloat(getComputedStyle(spaceSlider).width) || 104;
     spaceSwitcher.classList.toggle('is-grid',isGrid);
-    if(spaceSlider.style.left||spaceSlider.style.width||spaceSlider.style.transition){
-        spaceSlider.style.left='';
-        spaceSlider.style.width='';
-        spaceSlider.style.transition='';
+    const toLeft  = active.offsetLeft;
+    const toWidth = active.offsetWidth;
+    // Set final position as inline style immediately (always kept in sync).
+    spaceSlider.style.left  = toLeft  + 'px';
+    spaceSlider.style.width = toWidth + 'px';
+    // Web Animations API: runs on the compositor thread, no CSS-transition tricks needed.
+    if(fromLeft!==toLeft||fromWidth!==toWidth){
+        spaceSlider.animate(
+            [{left:fromLeft+'px',width:fromWidth+'px'},{left:toLeft+'px',width:toWidth+'px'}],
+            {duration:220,easing:'cubic-bezier(0.4,0,0.2,1)'}
+        );
     }
 }
 
@@ -3553,13 +3563,16 @@ function setSpace(space){
     if(currentSpace==='space2'){
         document.body.classList.add('space-2');
         const forcedCollapsed=window.innerWidth<=760;
+        // Collapse sidebar BEFORE removing 'hidden' so no CSS transition fires on initial load.
+        // If we remove hidden first, the browser paints the open sidebar, then starts a 180ms
+        // collapse transition — layoutSpace2Grid() would measure the wrong width mid-animation.
         if(forcedCollapsed&&space2Panel) space2Panel.classList.add('sidebar-collapsed');
         // Set view BEFORE unhiding panel so discover is already display:none on first paint.
         // This ensures layoutSpace2Grid() always measures full clientWidth, not 50%.
         showSpace2View(space2View);
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
-        if(window.innerWidth<=980) setSpace2CollectionsOpen(false,{skipPersist:true});
+        if(forcedCollapsed) setSpace2CollectionsOpen(false,{skipPersist:true});
         else setSpace2CollectionsOpen(space2CollectionsOpen);
         loadSpace2State();
         // Safety re-layouts for async image loads and Supabase-restored state
@@ -4018,9 +4031,32 @@ function showSpace2View(view) {
     const isGrid = view === 'grid';
     space2View=isGrid?'grid':'discover';
     if(space2ViewToggle){
-        space2ViewToggle.classList.toggle('is-grid', isGrid);
-        space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
-        space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
+        const thumb = space2ViewToggle.querySelector('.space2-view-thumb');
+        if(thumb){
+            const mobile = window.innerWidth <= 760;
+            const fromLeft = parseFloat(getComputedStyle(thumb).left) || 2;
+            const toLeft   = isGrid ? (mobile ? 34 : 42) : 2;
+            space2ViewToggle.classList.toggle('is-grid', isGrid);
+            space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
+            space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
+            // Set final position immediately.
+            thumb.style.left = toLeft + 'px';
+            // Web Animations API for the slide.
+            if(fromLeft !== toLeft){
+                thumb.animate(
+                    [{left:fromLeft+'px'},{left:toLeft+'px'}],
+                    {duration:200,easing:'cubic-bezier(0.4,0,0.2,1)'}
+                );
+            }
+        } else {
+            space2ViewToggle.classList.toggle('is-grid', isGrid);
+            space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
+            space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
+        }
+        // Desktop only: float the view-switch to top-left of the app in grid mode.
+        if(space2ViewSwitch){
+            space2ViewSwitch.classList.toggle('grid-float', isGrid && window.innerWidth > 760);
+        }
     }
     if(space2DiscoverControls) space2DiscoverControls.classList.toggle('hidden', isGrid);
     if(space2Search) space2Search.placeholder = isGrid ? 'Search...' : 'Search in discover...';
