@@ -596,9 +596,14 @@ async function restoreStateFromSupabase(){
     }
     const boardData=boardRes.data||null;
     const hasGlobalSpace2=!!(space2Res.data&&space2Res.data.space2_state&&Array.isArray(space2Res.data.space2_state.items));
+    const legacyBoardSpace2State=boardData&&boardData.space2_state&&Array.isArray(boardData.space2_state.items)&&(
+        (Array.isArray(boardData.space2_state.items)&&boardData.space2_state.items.length>0)||
+        (Array.isArray(boardData.space2_state.collections)&&boardData.space2_state.collections.length>0)||
+        ((parseInt(boardData.space2_state.savedAt,10)||0)>0)
+    ) ? {space2_state:boardData.space2_state,updated_at:boardData.updated_at} : null;
     const space2Data=hasGlobalSpace2
         ? space2Res.data
-        : (boardData&&boardData.space2_state&&Array.isArray(boardData.space2_state.items)?{space2_state:boardData.space2_state,updated_at:boardData.updated_at}:null);
+        : legacyBoardSpace2State;
     if(!boardData&&!space2Data) return;
     if(boardData){
         lastBoardCloudSyncSignature=JSON.stringify({
