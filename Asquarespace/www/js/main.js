@@ -98,6 +98,7 @@ const geminiToggleBtn = document.getElementById('gemini-toggle');
 const geminiStatus  = document.getElementById('gemini-status');
 const settingsSave  = document.getElementById('settings-save');
 const settingsCancel= document.getElementById('settings-cancel');
+const settingsSignOut = document.getElementById('settings-signout');
 const settingsBtn   = document.getElementById('extra-settings');
 const favoritesPanel= document.getElementById('favorites-panel');
 const favoritesStrip= document.getElementById('favorites-strip');
@@ -263,6 +264,7 @@ let currentAuthEmail='';
 let cloudSyncTimer=null;
 let lastBoardCloudSyncSignature='';
 let lastSpace2CloudSyncSignature='';
+let boardSyncAlertShown=false;
 let appBootstrapped=false;
 let pendingSpace2CloudLoad=false;
 const DISCOVER_PAGE_SIZE = 18;
@@ -613,8 +615,19 @@ async function syncStateToSupabase(){
         writes.push(
             client.from(SUPABASE_STATE_TABLE).upsert(boardSync.payload,{onConflict:'user_id,board_key'})
                 .then(({error})=>{
-                    if(error) console.warn('supabase board state upsert failed',error.message||error);
-                    else lastBoardCloudSyncSignature=boardSync.signature;
+                    if(error){
+                        const msg='Board sync failed: '+(error.message||JSON.stringify(error));
+                        console.warn(msg);
+                        setSpace2AutoMetaStatus('⚠️ '+msg,true);
+                        if(!boardSyncAlertShown){
+                            boardSyncAlertShown=true;
+                            setTimeout(()=>alert('⚠️ Supabase board sync FAILED.\nOpen Settings → Log Out, sign back in, then retry.\nIf this repeats, share the exact error shown in the status message.'),120);
+                        }
+                    }
+                    else{
+                        lastBoardCloudSyncSignature=boardSync.signature;
+                        boardSyncAlertShown=false;
+                    }
                 })
         );
     }
@@ -691,7 +704,19 @@ async function restoreStateFromSupabase(){
         lastSpace2CloudSyncSignature='';
     }
     if(boardData&&boardData.canvas_state){
-        try{ localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(boardData.canvas_state)); }catch{}
+        let remoteIsNewer=true;
+        try{
+            const localRaw=localStorage.getItem(getStorageKey(currentProjectKey,currentBoardId));
+            const localParsed=localRaw?JSON.parse(localRaw):null;
+            const localSavedAt=parseInt(localParsed&&localParsed.savedAt,10)||0;
+            const remoteSavedAt=parseInt(boardData.canvas_state&&boardData.canvas_state.savedAt,10)||0;
+            if(localSavedAt>0&&remoteSavedAt>0&&localSavedAt>remoteSavedAt) remoteIsNewer=false;
+        }catch{}
+        if(remoteIsNewer){
+            try{ localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(boardData.canvas_state)); }catch{}
+        }else{
+            setSpace2AutoMetaStatus('ℹ️ Kept newer local board state (cloud row appears older).');
+        }
     }
     // Trust remote Space 2 state only if it has items, OR local has none.
     // This prevents an early/empty remote row from wiping items that were saved locally
@@ -4387,6 +4412,28 @@ function openSettings(){
 function closeSettings(){
     settingsModal.classList.add('hidden');
 }
+
+async function signOutCurrentUser(){
+    const client=initSupabaseClient();
+    if(!client){
+        setSpace2AutoMetaStatus('⚠️ Unable to sign out: Supabase client unavailable.',true);
+        return;
+    }
+    setSpace2AutoMetaStatus('Signing out...');
+    const {error}=await client.auth.signOut();
+    if(error){
+        const msg='Sign out failed: '+(error.message||JSON.stringify(error));
+        setSpace2AutoMetaStatus('⚠️ '+msg,true);
+        setAuthStatus(msg,true);
+        return;
+    }
+    currentSupabaseUser=null;
+    lastBoardCloudSyncSignature='';
+    lastSpace2CloudSyncSignature='';
+    closeSettings();
+    setSpace2AutoMetaStatus('Signed out. Please sign in again.');
+}
+
 if(settingsBtn) settingsBtn.addEventListener('click',e=>{e.stopPropagation();closeAllDD();openSettings();});
 if(extraMediaBrowserBtn) extraMediaBrowserBtn.addEventListener('click',e=>{e.stopPropagation();closeAllDD();openMediaBrowser();});
 if(settingsCancel) settingsCancel.addEventListener('click',e=>{e.stopPropagation();closeSettings();});
@@ -4400,6 +4447,11 @@ if(settingsSave) settingsSave.addEventListener('click',e=>{
         if(appMode==='ai'||appMode==='video') loadImageModels();
         if(appMode==='chat'||appMode==='audio') loadTextModels();
     });
+});
+if(settingsSignOut) settingsSignOut.addEventListener('click',async e=>{
+    e.stopPropagation();
+    if(!window.confirm('Log out of this device and return to sign-in?')) return;
+    await signOutCurrentUser();
 });
 if(geminiToggleBtn) geminiToggleBtn.addEventListener('click',e=>{
     e.stopPropagation();
