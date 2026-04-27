@@ -581,6 +581,23 @@ async function syncSpace2StateToSupabase({force=false}={}){
     }
     space2SyncAlertShown=false;
     lastSpace2CloudSyncSignature=space2Sync.signature;
+
+    // Keep Space 2 mirrored in the active board row for compatibility and
+    // recovery when one of the two row paths (board/global) is stale or missing.
+    try{
+        const boardMirror=buildBoardCloudSyncPayload().payload;
+        boardMirror.space2_state=space2Sync.payload.space2_state||null;
+        boardMirror.updated_at=new Date().toISOString();
+        const mirrorRes=await client.from(SUPABASE_STATE_TABLE).upsert(boardMirror,{onConflict:'user_id,board_key'});
+        if(mirrorRes&&mirrorRes.error){
+            const msg='Board mirror sync failed: '+(mirrorRes.error.message||JSON.stringify(mirrorRes.error));
+            console.warn(msg);
+            setSpace2AutoMetaStatus('⚠️ '+msg,true);
+        }
+    }catch(err){
+        console.warn('board mirror sync threw',err);
+    }
+
     return true;
 }
 
@@ -705,9 +722,15 @@ async function restoreStateFromSupabase(){
         (Array.isArray(boardData.space2_state.collections)&&boardData.space2_state.collections.length>0)||
         ((parseInt(boardData.space2_state.savedAt,10)||0)>0)
     ) ? {space2_state:boardData.space2_state,updated_at:boardData.updated_at} : null;
-    const space2Data=hasGlobalSpace2
-        ? space2Res.data
-        : legacyBoardSpace2State;
+
+    const globalSpace2Data=hasGlobalSpace2?space2Res.data:null;
+    const globalSavedAt=parseInt(globalSpace2Data&&globalSpace2Data.space2_state&&globalSpace2Data.space2_state.savedAt,10)||0;
+    const boardSavedAt=parseInt(legacyBoardSpace2State&&legacyBoardSpace2State.space2_state&&legacyBoardSpace2State.space2_state.savedAt,10)||0;
+    let space2Data=globalSpace2Data||legacyBoardSpace2State;
+    if(globalSpace2Data&&legacyBoardSpace2State){
+        if(boardSavedAt>globalSavedAt) space2Data=legacyBoardSpace2State;
+        else space2Data=globalSpace2Data;
+    }
     if(!boardData&&!space2Data){
         setSpace2AutoMetaStatus('ℹ️ No cloud state rows found yet for this workspace.');
         return;
