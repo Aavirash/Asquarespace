@@ -63,9 +63,7 @@ body.auth-locked #ui-container{display:none;}
 .space-toggle-btn{position:relative;z-index:2;flex:1 1 0;min-width:0;height:30px;border:none;border-radius:8px;background:transparent;color:var(--text-mid);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;transition:color .16s ease,opacity .16s ease;}
 .space-toggle-btn:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:2px;}
 .space-toggle-btn[aria-selected="true"]{color:var(--text);}
-.space-toggle-thumb{position:absolute;top:0;left:0;width:104px;height:30px;border-radius:8px;background:color-mix(in srgb,var(--app-red) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--app-red) 42%,var(--border));box-shadow:0 1px 3px rgba(0,0,0,.06),0 2px 12px rgba(239,64,39,.14);backdrop-filter:blur(10px);transition:left .22s cubic-bezier(.4,0,.2,1),width .22s cubic-bezier(.4,0,.2,1),background .18s ease,border-color .18s ease,box-shadow .18s ease;z-index:1;}
-.space-toggle.is-grid .space-toggle-thumb{left:106px;}
-.space-toggle.no-animate .space-toggle-thumb{transition:none;}
+.space-toggle-thumb{position:absolute;top:0;left:0;width:104px;height:30px;border-radius:8px;background:color-mix(in srgb,var(--app-red) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--app-red) 42%,var(--border));box-shadow:0 1px 3px rgba(0,0,0,.06),0 2px 12px rgba(239,64,39,.14);backdrop-filter:blur(10px);z-index:1;will-change:left;}
 
 .space2-panel{position:absolute;inset:52px 16px 18px;z-index:170;border:none;border-radius:0;background:transparent;backdrop-filter:none;box-shadow:none;display:flex;flex-direction:column;overflow:visible;--space2-sidebar-width:238px;}
 .space2-panel.hidden{display:none;}
@@ -1066,7 +1064,6 @@ body.space-2 #space2-mode-dock{display:none!important;}
     .space-switcher{top:10px;}
     .space-toggle{width:194px;height:30px;}
     .space-toggle-thumb{width:96px;height:30px;}
-    .space-toggle.is-grid .space-toggle-thumb{left:98px;}
     .space2-panel{inset:58px 10px calc(112px + env(safe-area-inset-bottom)) 10px;}
     .space2-panel{--space2-sidebar-width:198px;}
     .space2-sidebar{overflow:auto;padding-top:8px;padding-bottom:10px;-webkit-overflow-scrolling:touch;top:10px;}

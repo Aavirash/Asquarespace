@@ -223,6 +223,8 @@ let promptHistory=[];
 let promptHistoryIndex=-1;
 let promptHistoryDraft='';
 let currentSpace='space1';
+let spaceToggleAnimationFrame=0;
+let spaceToggleCurrentLeft=0;
 let space2ActiveCollection='all';
 let space2SearchText='';
 let space2State={items:[],collections:[]};
@@ -3540,21 +3542,50 @@ function updateSpaceSlider({animate=true}={}){
     spaceToggle.setAttribute('aria-activedescendant',isGrid?'space-toggle-grid':'space-toggle-space');
     spaceToggleSpaceBtn.setAttribute('aria-selected',isGrid?'false':'true');
     spaceToggleGridBtn.setAttribute('aria-selected',isGrid?'true':'false');
-    spaceToggleThumb.style.left='';
-    spaceToggleThumb.style.width='';
-    if(!animate){
-        spaceToggle.classList.add('no-animate');
-        spaceToggle.classList.toggle('is-grid',isGrid);
-        void spaceToggleThumb.offsetWidth;
-        requestAnimationFrame(()=>spaceToggle.classList.remove('no-animate'));
+    const targetLeft=window.innerWidth<=760 ? (isGrid?98:0) : (isGrid?106:0);
+    const targetWidth=window.innerWidth<=760 ? 96 : 104;
+
+    if(spaceToggleAnimationFrame){
+        cancelAnimationFrame(spaceToggleAnimationFrame);
+        spaceToggleAnimationFrame=0;
+    }
+
+    spaceToggleThumb.style.width=`${targetWidth}px`;
+
+    const computedLeft=parseFloat(spaceToggleThumb.style.left || getComputedStyle(spaceToggleThumb).left);
+    const fromLeft=Number.isFinite(computedLeft) ? computedLeft : spaceToggleCurrentLeft;
+
+    if(!animate || Math.abs(fromLeft-targetLeft)<0.5){
+        spaceToggleThumb.style.left=`${targetLeft}px`;
+        spaceToggleCurrentLeft=targetLeft;
         return;
     }
-    spaceToggle.classList.remove('no-animate');
-    spaceToggle.classList.toggle('is-grid',isGrid);
+
+    const start=performance.now();
+    const duration=220;
+    const delta=targetLeft-fromLeft;
+    const ease=t=>1-Math.pow(1-t,3);
+
+    function tick(now){
+        const progress=Math.min(1,(now-start)/duration);
+        const nextLeft=fromLeft+(delta*ease(progress));
+        spaceToggleThumb.style.left=`${nextLeft}px`;
+        spaceToggleCurrentLeft=nextLeft;
+        if(progress<1){
+            spaceToggleAnimationFrame=requestAnimationFrame(tick);
+            return;
+        }
+        spaceToggleThumb.style.left=`${targetLeft}px`;
+        spaceToggleCurrentLeft=targetLeft;
+        spaceToggleAnimationFrame=0;
+    }
+
+    spaceToggleAnimationFrame=requestAnimationFrame(tick);
 }
 
 function setSpace(space,{animateToggle=true}={}){
     currentSpace=space==='space2'?'space2':'space1';
+    updateSpaceSlider({animate:animateToggle});
     if(currentSpace==='space2'){
         document.body.classList.add('space-2');
         const forcedCollapsed=window.innerWidth<=760;
@@ -3583,7 +3614,6 @@ function setSpace(space,{animateToggle=true}={}){
     updateControlCornerState();
     updateSpace2TopCornerVisibility();
     applySpace2MobileHeaderLayout();
-    updateSpaceSlider({animate:animateToggle});
     schedulePersist(120);
 }
 
