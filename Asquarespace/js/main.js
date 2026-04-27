@@ -462,11 +462,22 @@ function sanitizeSpace2ItemForCloud(item){
     return clean;
 }
 
+function hasRenderableSpace2Source(item){
+    if(!item||typeof item!=='object') return false;
+    if(item.cloudPath) return true;
+    if(item.browserBlobKey) return true;
+    const src=String(item.src||'').trim();
+    return !!src;
+}
+
 function buildSpace2StatePayload({forCloud=false}={}){
     const items=JSON.parse(JSON.stringify((space2State&&space2State.items)||[]));
     const collections=JSON.parse(JSON.stringify((space2State&&space2State.collections)||[]));
+    const preparedItems=forCloud
+        ? items.map(sanitizeSpace2ItemForCloud).filter(item=>item&&item.id&&hasRenderableSpace2Source(item))
+        : items;
     return {
-        items:forCloud?items.map(sanitizeSpace2ItemForCloud):items,
+        items:preparedItems,
         collections,
         savedAt:Date.now()
     };
@@ -529,6 +540,16 @@ async function syncSpace2StateToSupabase({force=false}={}){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return false;
     const space2Sync=buildSpace2CloudSyncPayload();
+    const localItemCount=Array.isArray(space2State&&space2State.items)?space2State.items.length:0;
+    const cloudItemCount=Array.isArray(space2Sync.payload&&space2Sync.payload.space2_state&&space2Sync.payload.space2_state.items)
+        ? space2Sync.payload.space2_state.items.length
+        : 0;
+    if(localItemCount>0&&cloudItemCount===0){
+        const msg='Sync blocked: Space 2 items have no restorable media source.';
+        console.warn(msg);
+        setSpace2AutoMetaStatus('⚠️ '+msg,true);
+        return false;
+    }
     if(!force&&space2Sync.signature===lastSpace2CloudSyncSignature) return true;
     const {error}=await client.from(SUPABASE_STATE_TABLE).upsert(space2Sync.payload,{onConflict:'user_id,board_key'});
     if(error){
@@ -643,7 +664,10 @@ async function restoreStateFromSupabase(){
     const space2Data=hasGlobalSpace2
         ? space2Res.data
         : legacyBoardSpace2State;
-    if(!boardData&&!space2Data) return;
+    if(!boardData&&!space2Data){
+        setSpace2AutoMetaStatus('ℹ️ No cloud state rows found yet for this workspace.');
+        return;
+    }
     if(boardData){
         lastBoardCloudSyncSignature=JSON.stringify({
             user_id:currentSupabaseUser.id,
@@ -674,13 +698,18 @@ async function restoreStateFromSupabase(){
     // but not yet cloud-synced (e.g. user uploaded and reloaded very fast).
     if(space2Data&&space2Data.space2_state){
         const remoteItems=(space2Data.space2_state.items||[]).length;
+        const remoteRenderableItems=(space2Data.space2_state.items||[]).filter(hasRenderableSpace2Source).length;
         let localItems=0;
         try{
             const localRaw=localStorage.getItem(getSpace2Key(currentProjectKey));
             const localParsed=localRaw?JSON.parse(localRaw):null;
             localItems=Array.isArray(localParsed&&localParsed.items)?localParsed.items.length:0;
         }catch{}
-        if(remoteItems>0||localItems===0){
+        if(remoteItems>0&&remoteRenderableItems===0&&localItems>0){
+            const msg='Cloud Space 2 row had media entries without valid sources; kept local state.';
+            console.warn(msg);
+            setSpace2AutoMetaStatus('⚠️ '+msg,true);
+        }else if(remoteItems>0||localItems===0){
             try{ localStorage.setItem(getSpace2Key(currentProjectKey),JSON.stringify(space2Data.space2_state)); }catch{}
         }
     }
@@ -690,6 +719,14 @@ async function restoreStateFromSupabase(){
         await refreshSpace2SignedUrls();
         renderSpace2Grid();
     }
+    const boardNodeCount=Array.isArray(boardData&&boardData.canvas_state&&boardData.canvas_state.nodes)
+        ? boardData.canvas_state.nodes.length
+        : 0;
+    const space2ItemCount=Array.isArray(space2Data&&space2Data.space2_state&&space2Data.space2_state.items)
+        ? space2Data.space2_state.items.length
+        : 0;
+    setSpace2AutoMetaStatus(`✅ Cloud restore OK • board ${boardNodeCount} • space2 ${space2ItemCount}`);
+    setTimeout(()=>setSpace2AutoMetaStatus(''),5000);
 }
 
 function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
