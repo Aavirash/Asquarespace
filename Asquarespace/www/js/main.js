@@ -233,7 +233,7 @@ let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='
 let space2AutoMetaRunning=false;
 const space2SidebarHead=document.querySelector('#space2-sidebar .space2-sidebar-head');
 const space2MobileLayoutSlots=new Map();
-[space2ViewSwitch,space2SearchWrap,themeToggle].forEach(el=>{
+[space2ViewSwitch,space2SearchWrap].forEach(el=>{
     if(el&&el.parentElement) space2MobileLayoutSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
 });
 let space2AiModels=[];
@@ -1450,10 +1450,7 @@ function applySpace2MobileHeaderLayout(){
         [space2ViewSwitch,space2SearchWrap].forEach(restoreSpace2MobileLayoutSlot);
     }
 
-    if(space2TopCorner){
-        space2TopCorner.classList.toggle('hidden',!inSpace2);
-        space2TopCorner.setAttribute('aria-hidden',!inSpace2?'true':'false');
-    }
+    // Theme toggle always visible, regardless of space
 }
 
 function openSpace2SettingsModal(){
