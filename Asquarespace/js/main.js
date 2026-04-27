@@ -1418,7 +1418,8 @@ function updateControlCornerState(){
 function initSpace2SidebarSizing(){
     if(!space2Sash||!space2Panel) return;
     setSpace2SidebarWidth(space2SidebarWidth,{persist:false});
-    setSpace2CollectionsOpen((localStorage.getItem('asq.space2.sidebar.open')||'0')==='1',{skipPersist:true});
+    const restoreOpen=window.innerWidth>980&&((localStorage.getItem('asq.space2.sidebar.open')||'0')==='1');
+    setSpace2CollectionsOpen(restoreOpen,{skipPersist:true});
     space2Sash.addEventListener('click',(e)=>{
         e.preventDefault();
         setSpace2CollectionsOpen(!space2CollectionsOpen);
@@ -1434,7 +1435,7 @@ function restoreSpace2MobileLayoutSlot(el){
 }
 
 function applySpace2MobileHeaderLayout(){
-    const isMobile=window.innerWidth<=760;
+    const isMobile=window.innerWidth<=980;
     const inSpace2=currentSpace==='space2';
 
     if(isMobile&&inSpace2){
@@ -3531,12 +3532,10 @@ function updateSpaceSlider(){
     if(!active) return;
     const w=active.offsetWidth;
     if(w===0){requestAnimationFrame(updateSpaceSlider);return;}
-    const activeRect=active.getBoundingClientRect();
-    const switchRect=spaceSwitcher.getBoundingClientRect();
-    const left=activeRect.left-switchRect.left;
+    const left=Number.isFinite(active.offsetLeft)?active.offsetLeft:(active.getBoundingClientRect().left-spaceSwitcher.getBoundingClientRect().left);
     const baseLeft=3;
     spaceSlider.style.left=baseLeft+'px';
-    spaceSlider.style.transform=`translateX(${Math.max(0,left-baseLeft)}px)`;
+    spaceSlider.style.transform=`translate3d(${Math.max(0,left-baseLeft)}px,0,0)`;
     spaceSlider.style.width=w+'px';
 }
 
@@ -3549,7 +3548,7 @@ function setSpace(space){
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
         loadSpace2State();
-        if(window.innerWidth<=760) setSpace2CollectionsOpen(false,{skipPersist:true});
+        if(window.innerWidth<=980) setSpace2CollectionsOpen(false,{skipPersist:true});
         else setSpace2CollectionsOpen(space2CollectionsOpen);
         showSpace2View(space2View);
     }else{
