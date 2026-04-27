@@ -3537,21 +3537,23 @@ function updateSpaceSlider(){
     const newWidth=active.offsetWidth;
     const newLeft=active.offsetLeft;
     if(newWidth===0){requestAnimationFrame(updateSpaceSlider);return;}
+    const baseLeft=3;
+    const x=Math.max(0,newLeft-baseLeft);
+    const nextX=`${x}px`;
+    const nextWidth=`${newWidth}px`;
 
     if(!spaceSlider.dataset.ready){
         spaceSlider.style.transition='none';
-        spaceSlider.style.left=`${newLeft}px`;
-        spaceSlider.style.width=`${newWidth}px`;
+        spaceSlider.style.setProperty('--space-slider-x',nextX);
+        spaceSlider.style.width=nextWidth;
         void spaceSlider.offsetWidth;
         spaceSlider.style.transition='';
         spaceSlider.dataset.ready='1';
         return;
     }
 
-    const nextLeft=`${newLeft}px`;
-    const nextWidth=`${newWidth}px`;
-    if(spaceSlider.style.left!==nextLeft||spaceSlider.style.width!==nextWidth){
-        spaceSlider.style.left=nextLeft;
+    if(spaceSlider.style.getPropertyValue('--space-slider-x')!==nextX||spaceSlider.style.width!==nextWidth){
+        spaceSlider.style.setProperty('--space-slider-x',nextX);
         spaceSlider.style.width=nextWidth;
     }
 }
