@@ -1211,8 +1211,16 @@ function openCollectionMenu(anchor,{itemId='',discoverItem=null,allowGrid=false,
 
     document.body.appendChild(menu);
     const rect=anchor.getBoundingClientRect();
-    menu.style.left=`${Math.max(10,rect.left)}px`;
-    menu.style.top=`${Math.min(window.innerHeight-10,rect.bottom+8)}px`;
+    const menuWidth=Math.max(180,menu.offsetWidth||180);
+    const menuHeight=Math.max(44,menu.offsetHeight||44);
+    const edge=10;
+    const mobileNudge=window.innerWidth<=760?18:0;
+    const leftBase=rect.left-mobileNudge;
+    const left=Math.max(edge,Math.min(leftBase,window.innerWidth-menuWidth-edge));
+    const topBase=rect.bottom+8;
+    const top=Math.max(edge,Math.min(topBase,window.innerHeight-menuHeight-edge));
+    menu.style.left=`${left}px`;
+    menu.style.top=`${top}px`;
     activeCollectionMenu=menu;
 }
 
