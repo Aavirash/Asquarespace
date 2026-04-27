@@ -3538,11 +3538,19 @@ function updateSpaceSlider(){
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
     const isGrid=active===spaceBtn2||currentSpace==='space2';
+    // Snapshot current position BEFORE the class change.
+    const frozenLeft  = getComputedStyle(spaceSlider).left;
+    const frozenWidth = getComputedStyle(spaceSlider).width;
     spaceSwitcher.classList.toggle('is-grid',isGrid);
-    // Force a layout flush so the browser records the slider's current position
-    // BEFORE we change it — required for iOS WebKit to fire the CSS transition.
-    void spaceSlider.getBoundingClientRect();
-    spaceSlider.style.left  = active.offsetLeft + 'px';
+    // Freeze so the class-driven CSS change can't snap the slider.
+    spaceSlider.style.transition = 'none';
+    spaceSlider.style.left  = frozenLeft;
+    spaceSlider.style.width = frozenWidth;
+    // Flush: commit frozen position as the animation start frame.
+    void spaceSlider.offsetHeight;
+    // Animate to the active button's position.
+    spaceSlider.style.transition = 'left .22s cubic-bezier(.4,0,.2,1),width .22s cubic-bezier(.4,0,.2,1)';
+    spaceSlider.style.left  = active.offsetLeft  + 'px';
     spaceSlider.style.width = active.offsetWidth + 'px';
 }
 
@@ -4021,16 +4029,28 @@ function showSpace2View(view) {
     const isGrid = view === 'grid';
     space2View=isGrid?'grid':'discover';
     if(space2ViewToggle){
-        space2ViewToggle.classList.toggle('is-grid', isGrid);
-        space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
-        space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
-        // Force a layout flush before setting the new left — guarantees iOS WebKit
-        // transitions from the current position rather than jumping.
         const thumb = space2ViewToggle.querySelector('.space2-view-thumb');
+        // Snapshot current position BEFORE the class change so we always have
+        // a valid start point regardless of whether style.left is set yet.
         if(thumb){
-            void thumb.getBoundingClientRect();
+            const frozenLeft = getComputedStyle(thumb).left;
+            space2ViewToggle.classList.toggle('is-grid', isGrid);
+            space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
+            space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
+            // Lock the frozen position as inline style with no transition so the
+            // class change can't cause a jump.
+            thumb.style.transition = 'none';
+            thumb.style.left = frozenLeft;
+            // Flush: forces the browser to commit frozenLeft as the start frame.
+            void thumb.offsetHeight;
+            // Animate to the target.
             const mobile = window.innerWidth <= 760;
+            thumb.style.transition = 'left .2s cubic-bezier(.4,0,.2,1)';
             thumb.style.left = isGrid ? (mobile ? '34px' : '42px') : '2px';
+        } else {
+            space2ViewToggle.classList.toggle('is-grid', isGrid);
+            space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
+            space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
         }
     }
     if(space2DiscoverControls) space2DiscoverControls.classList.toggle('hidden', isGrid);
