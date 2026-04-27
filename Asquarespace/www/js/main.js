@@ -3532,10 +3532,13 @@ function updateSpaceSlider(){
     if(!active) return;
     const w=active.offsetWidth;
     if(w===0){requestAnimationFrame(updateSpaceSlider);return;}
-    const left=Number.isFinite(active.offsetLeft)?active.offsetLeft:(active.getBoundingClientRect().left-spaceSwitcher.getBoundingClientRect().left);
-    const baseLeft=3;
-    spaceSlider.style.left=baseLeft+'px';
-    spaceSlider.style.transform=`translate3d(${Math.max(0,left-baseLeft)}px,0,0)`;
+    // Use getBoundingClientRect for reliable positioning on phone where offsetLeft
+    // may return 0 inside a fixed/transformed parent context.
+    const parentRect=spaceSwitcher.getBoundingClientRect();
+    const activeRect=active.getBoundingClientRect();
+    const left=activeRect.left-parentRect.left;
+    spaceSlider.style.left=Math.max(0,left)+'px';
+    spaceSlider.style.transform='';
     spaceSlider.style.width=w+'px';
 }
 
@@ -3545,15 +3548,18 @@ function setSpace(space){
     if(spaceBtn2) spaceBtn2.classList.toggle('active',currentSpace==='space2');
     if(currentSpace==='space2'){
         document.body.classList.add('space-2');
+        const forcedCollapsed=window.innerWidth<=760;
+        // Collapse sidebar BEFORE removing 'hidden' so no CSS transition fires on initial load.
+        // If we remove hidden first, the browser paints the open sidebar, then starts a 180ms
+        // collapse transition — layoutSpace2Grid() would measure the wrong width mid-animation.
+        if(forcedCollapsed&&space2Panel) space2Panel.classList.add('sidebar-collapsed');
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
-        const forcedCollapsed=window.innerWidth<=760;
-        if(forcedCollapsed&&space2Panel) space2Panel.classList.add('sidebar-collapsed');
         loadSpace2State();
         if(forcedCollapsed) setSpace2CollectionsOpen(false,{skipPersist:true});
         else setSpace2CollectionsOpen(space2CollectionsOpen);
         showSpace2View(space2View);
-        if(forcedCollapsed){scheduleSpace2GridLayout();setTimeout(scheduleSpace2GridLayout,240);}
+        if(forcedCollapsed){scheduleSpace2GridLayout();setTimeout(scheduleSpace2GridLayout,120);}
     }else{
         document.body.classList.remove('space-2');
         if(space2Panel) space2Panel.classList.add('hidden');
@@ -4017,6 +4023,7 @@ function showSpace2View(view) {
         space2Panel.classList.toggle('grid-view', isGrid);
     }
     if(!isGrid) initDiscoverPanel();
+    if(isGrid) scheduleSpace2GridLayout();
     syncSpace2AIHubVisibility();
     updateControlCornerState();
 }
