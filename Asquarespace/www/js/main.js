@@ -1397,7 +1397,7 @@ function setSpace2CollectionsOpen(open,{skipPersist=false}={}){
     if(space2CollectionsOpen) setSpace2SidebarWidth(space2SidebarWidth,{persist:!skipPersist});
     if(currentSpace==='space2'&&space2View==='grid'){
         scheduleSpace2GridLayout();
-        setTimeout(scheduleSpace2GridLayout,190);
+        setTimeout(scheduleSpace2GridLayout,220);
     }
 }
 
@@ -3547,10 +3547,13 @@ function setSpace(space){
         document.body.classList.add('space-2');
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
+        const forcedCollapsed=window.innerWidth<=980;
+        if(forcedCollapsed&&space2Panel) space2Panel.classList.add('sidebar-collapsed');
         loadSpace2State();
-        if(window.innerWidth<=980) setSpace2CollectionsOpen(false,{skipPersist:true});
+        if(forcedCollapsed) setSpace2CollectionsOpen(false,{skipPersist:true});
         else setSpace2CollectionsOpen(space2CollectionsOpen);
         showSpace2View(space2View);
+        if(forcedCollapsed){scheduleSpace2GridLayout();setTimeout(scheduleSpace2GridLayout,240);}
     }else{
         document.body.classList.remove('space-2');
         if(space2Panel) space2Panel.classList.add('hidden');
