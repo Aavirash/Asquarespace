@@ -1100,6 +1100,7 @@ body.space-2 #space2-mode-dock{display:none!important;}
 
 @media (max-width:390px){
     #toolbar-hub{width:calc(100% - 10px);}
+    .space2-ai-hub{width:calc(100% - 10px);}
     .space2-panel{inset:56px 8px calc(126px + env(safe-area-inset-bottom)) 8px;}
 }
 
@@ -1115,7 +1116,7 @@ body.space-2 #space2-mode-dock{display:none!important;}
     .space2-grid{padding:24px 10px 10px;--space2-grid-gap:10px;touch-action:pan-y;-webkit-overflow-scrolling:touch;}
     .discover-feed{padding:24px 10px 10px;columns:1;column-gap:0;}
     .discover-card{margin-bottom:16px;}
-    .space2-ai-hub{width:calc(100% - 12px);bottom:0;gap:0;padding-bottom:env(safe-area-inset-bottom);}
+    .space2-ai-hub{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 12px);bottom:0;gap:0;padding-bottom:env(safe-area-inset-bottom);}
     .space2-ai-bar{min-height:50px;border-radius:12px;padding:5px 6px;gap:6px;}
     #bottom-bar{border-radius:12px;}
     .space2-ai-eye,.space2-ai-send{width:32px;height:32px;border-radius:8px;}
