@@ -27,6 +27,8 @@ const APP_WEB_URL = 'https://space.asquareportal.com';
 const APP_PASSCODE = '24176882';
 const SUPABASE_MEDIA_BUCKET = 'asq-media';
 const SUPABASE_STATE_TABLE = 'user_workspace_state';
+const SPACE2_SIGNED_URL_TTL_SEC = 60 * 60 * 24 * 14;
+const SPACE2_SIGNED_URL_REFRESH_GRACE_SEC = 60 * 60 * 6;
 
 // ── Rotation cursor SVGs (curved arrow, rotated for each corner) ────────────
 // The SVG is a curved rotate arrow (Asquarespace branded in #ef4027).
@@ -114,8 +116,9 @@ const spaceSlider = document.getElementById('space-slider');
 const spaceBtn1 = document.getElementById('space-btn-1');
 const spaceBtn2 = document.getElementById('space-btn-2');
 const space2TopSearch = document.getElementById('space2-top-search');
+const space2SearchWrap = space2TopSearch ? space2TopSearch.querySelector('.space2-search-wrap') : null;
 const space2Panel = document.getElementById('space2-panel');
-const space2MobileNotch = document.getElementById('space2-mobile-notch');
+const space2ModeDock = document.getElementById('space2-mode-dock');
 const space2Search = document.getElementById('space2-search');
 const space2NewCollection = document.getElementById('space2-new-collection');
 const space2CameraBtn = document.getElementById('space2-camera-btn');
@@ -152,6 +155,7 @@ const space2ItemCancel = document.getElementById('space2-item-cancel');
 const space2ItemSave = document.getElementById('space2-item-save');
 const space2CollectionModal = document.getElementById('space2-collection-modal');
 let space2LayoutFrame=0;
+let space2LazyImageObserver=null;
 const space2CollectionModalTitle = document.getElementById('space2-collection-modal-title');
 const space2CollectionNameInput = document.getElementById('space2-collection-name');
 const space2CollectionCancel = document.getElementById('space2-collection-cancel');
@@ -227,11 +231,10 @@ let space2LayoutMode=(localStorage.getItem('asq.space2.layout.mode')||'grid')===
 let space2ColumnsSetting=localStorage.getItem('asq.space2.layout.columns')||'auto';
 let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='1';
 let space2AutoMetaRunning=false;
-const space2HeaderRow=document.querySelector('.space2-sidebar-head .space2-head-row');
-const space2SearchWrap=document.querySelector('.space2-sidebar-head .space2-search-wrap');
-const space2DesktopSlots=new Map();
-[space2UploadBtn,space2NewCollection,themeToggle,space2CameraBtn,space2ViewSwitch].forEach(el=>{
-    if(el&&el.parentElement) space2DesktopSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
+const space2SidebarHead=document.querySelector('#space2-sidebar .space2-sidebar-head');
+const space2MobileLayoutSlots=new Map();
+[space2ViewSwitch,space2SearchWrap,themeToggle].forEach(el=>{
+    if(el&&el.parentElement) space2MobileLayoutSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
 });
 let space2AiModels=[];
 let space2AiModel='openai';
@@ -324,34 +327,85 @@ function getCloudBoardKey(projectKey=currentProjectKey,boardId=currentBoardId){
     return `${projectKey||'local-default'}::${boardId||'board-1'}`;
 }
 
+function nowEpochSec(){
+    return Math.floor(Date.now()/1000);
+}
+
+function shouldRefreshSpace2SignedUrl(item){
+    if(!item||!item.cloudPath) return false;
+    if(!item.src) return true;
+    const exp=parseInt(item.signedUrlExpiresAt||0,10)||0;
+    if(!exp) return true;
+    return (exp-nowEpochSec())<=SPACE2_SIGNED_URL_REFRESH_GRACE_SEC;
+}
+
+// ── Image compression (Canvas API — works in browser + Capacitor WebView) ──
+// maxPx: longest side cap. quality: 0-1 for WebP/JPEG. Returns compressed Blob.
+// Falls back to original blob if canvas/WebP unavailable.
+const IMG_COMPRESS_MAX_PX = 2048;
+const IMG_COMPRESS_QUALITY = 0.88;
+const IMG_COMPRESS_FORMAT  = 'image/webp';
+const IMG_COMPRESS_MIN_BYTES = 80 * 1024; // skip compression for images already < 80 KB
+
+function _compressImageBlob(blob, {maxPx=IMG_COMPRESS_MAX_PX, quality=IMG_COMPRESS_QUALITY, format=IMG_COMPRESS_FORMAT}={}){
+    return new Promise(resolve=>{
+        if(!blob||!blob.type||!blob.type.startsWith('image/')){resolve(blob);return;}
+        // skip tiny images — compression won't help much
+        if(blob.size < IMG_COMPRESS_MIN_BYTES){resolve(blob);return;}
+        const url=URL.createObjectURL(blob);
+        const img=new Image();
+        img.onload=()=>{
+            URL.revokeObjectURL(url);
+            let {naturalWidth:w, naturalHeight:h}=img;
+            if(w>maxPx||h>maxPx){
+                if(w>=h){h=Math.round(h*(maxPx/w));w=maxPx;}
+                else{w=Math.round(w*(maxPx/h));h=maxPx;}
+            }
+            const canvas=document.createElement('canvas');
+            canvas.width=w; canvas.height=h;
+            const ctx=canvas.getContext('2d');
+            ctx.drawImage(img,0,0,w,h);
+            canvas.toBlob(compressed=>{
+                // only use compressed if it's actually smaller
+                resolve(compressed&&compressed.size<blob.size?compressed:blob);
+            },format,quality);
+        };
+        img.onerror=()=>{URL.revokeObjectURL(url);resolve(blob);};
+        img.src=url;
+    });
+}
+
 async function uploadBlobToSupabase(blob,{folder='uploads',nameHint='image'}={}){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser||!blob) return null;
+    // compress before upload — reduces Supabase storage + all future egress
+    blob=await _compressImageBlob(blob).catch(()=>blob);
     const ext=extFromMime(blob.type||'image/png');
     const cleanHint=(nameHint||'image').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28)||'image';
     const path=`${currentSupabaseUser.id}/${folder}/${Date.now()}_${Math.floor(Math.random()*100000)}_${cleanHint}.${ext}`;
-    const upload=await client.storage.from(SUPABASE_MEDIA_BUCKET).upload(path,blob,{upsert:false,contentType:blob.type||'image/png'});
+    const upload=await client.storage.from(SUPABASE_MEDIA_BUCKET).upload(path,blob,{upsert:false,contentType:blob.type||'image/png',cacheControl:'31536000'});
     if(upload.error){
         console.warn('supabase storage upload failed',upload.error.message||upload.error);
         return null;
     }
-    const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(path,60*60*24*14);
+    const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(path,SPACE2_SIGNED_URL_TTL_SEC);
     if(signed.error){
         console.warn('supabase signed url failed',signed.error.message||signed.error);
-        return {path,url:''};
+        return {path,url:'',expiresAt:0};
     }
-    return {path,url:signed.data?.signedUrl||''};
+    return {path,url:signed.data?.signedUrl||'',expiresAt:nowEpochSec()+SPACE2_SIGNED_URL_TTL_SEC};
 }
 
 async function refreshSpace2SignedUrls(){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser||!space2State||!Array.isArray(space2State.items)) return;
-    const targets=space2State.items.filter(item=>item&&item.cloudPath);
+    const targets=space2State.items.filter(shouldRefreshSpace2SignedUrl);
     if(!targets.length) return;
     await Promise.all(targets.map(async item=>{
-        const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(item.cloudPath,60*60*24*14);
+        const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(item.cloudPath,SPACE2_SIGNED_URL_TTL_SEC);
         if(!signed.error&&signed.data&&signed.data.signedUrl){
             item.src=signed.data.signedUrl;
+            item.signedUrlExpiresAt=nowEpochSec()+SPACE2_SIGNED_URL_TTL_SEC;
         }
     }));
 }
@@ -412,13 +466,19 @@ function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     try{
         const raw=localStorage.getItem(getSpace2Key(projectKey,boardId));
         const parsed=raw?JSON.parse(raw):null;
-        const items=Array.isArray(parsed&&parsed.items)?parsed.items.filter(i=>i&&i.id&&i.src):[];
+        const items=Array.isArray(parsed&&parsed.items)?parsed.items.filter(i=>i&&i.id&&(i.src||i.cloudPath)):[];
         const collections=Array.isArray(parsed&&parsed.collections)?parsed.collections.filter(c=>c&&c.id&&c.name):[];
         space2State={items,collections};
     }catch{
         space2State=defaultSpace2State();
     }
     if(!space2State.collections.some(c=>c.id===space2ActiveCollection)) space2ActiveCollection='all';
+    if(currentSupabaseUser&&space2State.items.some(shouldRefreshSpace2SignedUrl)){
+        refreshSpace2SignedUrls().then(()=>{
+            saveSpace2State(projectKey,boardId);
+            renderSpace2Grid();
+        }).catch(err=>console.warn('space2 signed url refresh failed',err));
+    }
     renderSpace2Collections();
     renderSpace2Grid();
 }
@@ -841,11 +901,12 @@ function renderSpace2Grid(){
     space2Grid.innerHTML='';
     list.forEach(item=>{
         const isGenerating=item.aiMetaState==='loading';
+        const thumbSrc=String(item.src||'').trim();
         const card=document.createElement('button');
         card.type='button';
         card.className='space2-item img-pending';
         card.innerHTML=`
-            <img class="space2-thumb" src="${item.src}" alt="" loading="lazy" decoding="async">
+            <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id||thumbSrc)}" alt="" loading="lazy" decoding="async">
             <div class="space2-card-action-left">
                 <button class="space2-card-action" data-action="meta" title="Regenerate metadata" aria-label="Regenerate metadata">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6V3L8 7l4 4V8c2.21 0 4 1.79 4 4a4 4 0 0 1-6.87 2.83l-1.42 1.42A6 6 0 1 0 12 6zm-4 4a4 4 0 0 1 6.87-2.83l1.42-1.42A6 6 0 1 0 12 18v3l4-4-4-4v3a4 4 0 0 1-4-4z"/></svg>
@@ -875,13 +936,14 @@ function renderSpace2Grid(){
                 }
                 scheduleSpace2GridLayout();
             };
-            if(img.complete&&img.naturalWidth) onLoaded();
+            if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth) onLoaded();
             else img.addEventListener('load',onLoaded,{once:true});
             img.addEventListener('error',()=>{
                 card.classList.remove('img-pending');
                 card.classList.add('img-loaded');
                 scheduleSpace2GridLayout();
             },{once:true});
+            observeSpace2LazyImage(img);
         }
         card.addEventListener('click',()=>openSpace2Item(item.id));
         const collectionBtn=card.querySelector('[data-action="collection"]');
@@ -970,6 +1032,98 @@ function layoutSpace2Grid(){
     space2Grid.style.setProperty('--space2-grid-content-height',`${Math.max(contentHeight,0)}px`);
 }
 
+// ── IndexedDB image blob cache — prevents re-downloading images on every reload ──
+const _IMG_CACHE_DB='asq-img-cache';
+const _IMG_CACHE_STORE='blobs';
+let _imgCacheDb=null;
+function _openImgCacheDb(){
+    if(_imgCacheDb) return Promise.resolve(_imgCacheDb);
+    return new Promise((resolve,reject)=>{
+        const req=indexedDB.open(_IMG_CACHE_DB,1);
+        req.onupgradeneeded=e=>{
+            const db=e.target.result;
+            if(!db.objectStoreNames.contains(_IMG_CACHE_STORE)) db.createObjectStore(_IMG_CACHE_STORE);
+        };
+        req.onsuccess=e=>{_imgCacheDb=e.target.result;resolve(_imgCacheDb);};
+        req.onerror=()=>reject(req.error);
+    });
+}
+async function _getCachedImgBlob(key){
+    try{
+        const db=await _openImgCacheDb();
+        return new Promise(resolve=>{
+            const req=db.transaction(_IMG_CACHE_STORE,'readonly').objectStore(_IMG_CACHE_STORE).get(key);
+            req.onsuccess=()=>resolve(req.result||null);
+            req.onerror=()=>resolve(null);
+        });
+    }catch{return null;}
+}
+async function _setCachedImgBlob(key,blob){
+    try{
+        const db=await _openImgCacheDb();
+        return new Promise(resolve=>{
+            const tx=db.transaction(_IMG_CACHE_STORE,'readwrite');
+            tx.objectStore(_IMG_CACHE_STORE).put(blob,key);
+            tx.oncomplete=()=>resolve();
+            tx.onerror=()=>resolve();
+        });
+    }catch{}
+}
+async function _loadImgWithBlobCache(img,url,cacheKey){
+    if(!url) return;
+    const cached=await _getCachedImgBlob(cacheKey);
+    if(cached){
+        img.src=URL.createObjectURL(cached);
+        return;
+    }
+    try{
+        const resp=await fetch(url);
+        if(!resp.ok){img.src=url;return;}
+        const rawBlob=await resp.blob();
+        // compress on first fetch before caching — existing cloud images get compressed locally
+        const blob=await _compressImageBlob(rawBlob).catch(()=>rawBlob);
+        _setCachedImgBlob(cacheKey,blob).catch(()=>{});
+        img.src=URL.createObjectURL(blob);
+    }catch{
+        img.src=url;
+    }
+}
+
+function ensureSpace2LazyImageObserver(){
+    if(space2LazyImageObserver||typeof IntersectionObserver==='undefined') return;
+    space2LazyImageObserver=new IntersectionObserver(entries=>{
+        entries.forEach(entry=>{
+            if(!entry.isIntersecting) return;
+            const img=entry.target;
+            const src=(img&&img.dataset&&img.dataset.src||'').trim();
+            if(src&&img.dataset.loaded!=='1'){
+                img.dataset.loaded='1';
+                const cacheKey=img.dataset.cacheKey||src;
+                _loadImgWithBlobCache(img,src,cacheKey).catch(()=>{img.src=src;});
+            }
+            space2LazyImageObserver.unobserve(img);
+        });
+    },{
+        root:space2Grid||null,
+        rootMargin:'460px 0px',
+        threshold:0.01
+    });
+}
+
+function observeSpace2LazyImage(img){
+    if(!img) return;
+    const src=(img.dataset&&img.dataset.src||'').trim();
+    if(!src) return;
+    if(typeof IntersectionObserver==='undefined'){
+        img.dataset.loaded='1';
+        const cacheKey=img.dataset.cacheKey||src;
+        _loadImgWithBlobCache(img,src,cacheKey).catch(()=>{img.src=src;});
+        return;
+    }
+    ensureSpace2LazyImageObserver();
+    if(space2LazyImageObserver) space2LazyImageObserver.observe(img);
+}
+
 function openSpace2Item(itemId){
     const item=space2State.items.find(i=>i.id===itemId);
     if(!item) return;
@@ -1033,6 +1187,7 @@ function insertSpace2Item(item,{collectionIds}={}){
     if(!src) return {item:null,added:false,changed:false};
     const filePath=item.filePath||'';
     const cloudPath=item.cloudPath||'';
+    const signedUrlExpiresAt=parseInt(item.signedUrlExpiresAt||0,10)||0;
     const existing=space2State.items.find(i=>(filePath&&i.filePath===filePath)||i.src===src);
     const normalizedCollectionIds=Array.isArray(collectionIds)
         ? [...new Set(collectionIds.filter(Boolean))]
@@ -1041,10 +1196,12 @@ function insertSpace2Item(item,{collectionIds}={}){
         const currentIds=Array.isArray(existing.collectionIds)?existing.collectionIds:[];
         const mergedIds=[...new Set([...currentIds,...normalizedCollectionIds])];
         const hasCloudUpdate=!!(cloudPath&&existing.cloudPath!==cloudPath);
-        const changed=mergedIds.length!==currentIds.length||hasCloudUpdate;
+        const hasExpUpdate=!!(signedUrlExpiresAt&&existing.signedUrlExpiresAt!==signedUrlExpiresAt);
+        const changed=mergedIds.length!==currentIds.length||hasCloudUpdate||hasExpUpdate;
         if(changed){
             existing.collectionIds=mergedIds;
             if(hasCloudUpdate) existing.cloudPath=cloudPath;
+            if(hasExpUpdate) existing.signedUrlExpiresAt=signedUrlExpiresAt;
             existing.updatedAt=Date.now();
         }
         return {item:existing,added:false,changed};
@@ -1055,6 +1212,7 @@ function insertSpace2Item(item,{collectionIds}={}){
         src,
         filePath,
         cloudPath,
+        signedUrlExpiresAt,
         title:item.title||(filePath?filePath.split('/').pop():'Untitled'),
         description:item.description||'',
         collectionIds:normalizedCollectionIds,
@@ -1153,6 +1311,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
         let src='';
         let filePath='';
         let cloudPath='';
+        let signedUrlExpiresAt=0;
         if(f.path){
             filePath=f.path;
             src=toFileUrl(f.path);
@@ -1172,12 +1331,13 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
                     cloudPath=uploaded.path;
                     if(uploaded.url) src=uploaded.url;
                 }
+                if(uploaded&&uploaded.expiresAt) signedUrlExpiresAt=uploaded.expiresAt;
             }catch(err){
                 console.warn('space2 upload sync failed',err);
             }
         }
         if(!src) continue;
-        items.push({src,filePath,title:f.name||'Upload',cloudPath,analysisBlob:f});
+        items.push({src,filePath,title:f.name||'Upload',cloudPath,signedUrlExpiresAt,analysisBlob:f});
     }
     upsertSpace2Items(items,{openEditor});
 }
@@ -1264,36 +1424,37 @@ function initSpace2SidebarSizing(){
     });
 }
 
-function restoreSpace2DesktopSlot(el){
+function restoreSpace2MobileLayoutSlot(el){
     if(!el) return;
-    const slot=space2DesktopSlots.get(el);
+    const slot=space2MobileLayoutSlots.get(el);
     if(!slot||!slot.parent) return;
     if(slot.next&&slot.next.parentElement===slot.parent) slot.parent.insertBefore(el,slot.next);
     else slot.parent.appendChild(el);
 }
 
 function applySpace2MobileHeaderLayout(){
-    const isMobile=window.innerWidth<=760;
+    const isMobile=window.innerWidth<=980;
+    const inSpace2=currentSpace==='space2';
+    const showDock=inSpace2&&isMobile;
 
-    if(isMobile){
-        if(space2HeaderRow&&space2ViewSwitch&&space2ViewSwitch.parentElement!==space2HeaderRow){
-            space2HeaderRow.insertBefore(space2ViewSwitch,space2SearchWrap||null);
+    if(isMobile&&inSpace2){
+        if(space2SidebarHead&&space2ViewSwitch&&space2ViewSwitch.parentElement!==space2SidebarHead){
+            space2SidebarHead.appendChild(space2ViewSwitch);
         }
-        if(space2MobileNotch){
-            [space2UploadBtn,space2CameraBtn,space2NewCollection,themeToggle].forEach(btn=>{
-                if(btn&&btn.parentElement!==space2MobileNotch) space2MobileNotch.appendChild(btn);
-            });
-            const showNotch=currentSpace==='space2'&&space2View==='grid';
-            space2MobileNotch.classList.toggle('hidden',!showNotch);
-            space2MobileNotch.setAttribute('aria-hidden',showNotch?'false':'true');
+        if(space2SidebarHead&&space2SearchWrap&&space2SearchWrap.parentElement!==space2SidebarHead){
+            space2SidebarHead.appendChild(space2SearchWrap);
         }
-        return;
+    }else{
+        [space2ViewSwitch,space2SearchWrap].forEach(restoreSpace2MobileLayoutSlot);
     }
 
-    [space2UploadBtn,space2NewCollection,space2CameraBtn,themeToggle,space2ViewSwitch].forEach(restoreSpace2DesktopSlot);
-    if(space2MobileNotch){
-        space2MobileNotch.classList.add('hidden');
-        space2MobileNotch.setAttribute('aria-hidden','true');
+    if(space2TopSearch){
+        space2TopSearch.classList.toggle('hidden',!inSpace2||isMobile);
+        space2TopSearch.setAttribute('aria-hidden',(!inSpace2||isMobile)?'true':'false');
+    }
+    if(space2ModeDock){
+        space2ModeDock.classList.toggle('hidden',!showDock);
+        space2ModeDock.setAttribute('aria-hidden',showDock?'false':'true');
     }
 }
 
@@ -3372,8 +3533,10 @@ function updateSpaceSlider(){
     if(!spaceSwitcher||!spaceSlider) return;
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
+    const w=active.offsetWidth;
+    if(w===0){requestAnimationFrame(updateSpaceSlider);return;}
     spaceSlider.style.left=active.offsetLeft+'px';
-    spaceSlider.style.width=active.offsetWidth+'px';
+    spaceSlider.style.width=w+'px';
 }
 
 function setSpace(space){

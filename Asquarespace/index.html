@@ -3,12 +3,15 @@
 <head>
     <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
     <title>Asquarespace</title>
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon.png">
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20260427-3">
+    <link rel="stylesheet" href="css/style.css?v=20260427-14">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -209,18 +212,6 @@
       </div>
     </div>
 
-    <div id="space2-view-switch" class="space2-view-switch hidden" aria-label="Discover and Grid switch">
-      <button id="space2-view-toggle" class="space2-view-toggle" aria-label="Toggle Discover and Grid view" aria-pressed="false" title="Switch to Grid">
-        <span class="space2-view-icon space2-view-icon-discover" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 2l7.5 3v6c0 5.25-3.36 10.15-7.5 11-4.14-.85-7.5-5.75-7.5-11V5L12 2zm0 3.2L7 7v4c0 3.84 2.34 7.52 5 8.26 2.66-.74 5-4.42 5-8.26V7l-5-1.8z"/></svg>
-        </span>
-        <span class="space2-view-icon space2-view-icon-grid" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
-        </span>
-        <span class="space2-view-thumb" aria-hidden="true"></span>
-      </button>
-    </div>
-
     <div id="board-dock" class="board-dock">
       <button id="board-menu-trigger" class="board-menu-trigger" title="Board and Media">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3H3V5zm0 6h8v10H5a2 2 0 0 1-2-2V11zm10 0h8v8a2 2 0 0 1-2 2h-6V11z"/></svg>
@@ -246,32 +237,22 @@
   </div>
 
   <div id="space2-panel" class="space2-panel hidden">
-    <div id="space2-mode-dock" class="space2-mode-dock hidden" aria-label="Space 2 dock">
-      <button id="space2-upload-btn" class="space2-mode-btn" title="Upload images" aria-label="Upload images">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l5 5h-3v7h-4V9H7l5-5zm-7 14h14v2H5v-2z"/></svg>
-        <span>Upload</span>
-      </button>
-      <button id="space2-camera-btn" class="space2-mode-btn space2-mode-btn-camera" title="Capture from camera" aria-label="Capture from camera">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l1.4-2h3.2L15 5h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4zm3 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0-2.2a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z"/></svg>
-        <span>Camera</span>
-      </button>
-      <button id="space2-new-collection" class="space2-mode-btn" title="New collection" aria-label="New collection">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z"/></svg>
-        <span>Collection</span>
-      </button>
-    </div>
     <input type="file" id="space2-camera-input" hidden accept="image/*" capture="environment">
     <input type="file" id="space2-file-input" hidden multiple accept="image/*">
-    <div id="space2-mobile-notch" class="space2-mobile-notch hidden" aria-hidden="true"></div>
     <div class="space2-body">
       <aside id="space2-sidebar" class="space2-sidebar">
+        <div id="space2-view-switch" class="space2-view-switch hidden" aria-label="Discover and Grid switch">
+          <button id="space2-view-toggle" class="space2-view-toggle" aria-label="Toggle Discover and Grid view" aria-pressed="false" title="Switch to Grid">
+            <span class="space2-view-icon space2-view-icon-discover" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 2l7.5 3v6c0 5.25-3.36 10.15-7.5 11-4.14-.85-7.5-5.75-7.5-11V5L12 2zm0 3.2L7 7v4c0 3.84 2.34 7.52 5 8.26 2.66-.74 5-4.42 5-8.26V7l-5-1.8z"/></svg>
+            </span>
+            <span class="space2-view-icon space2-view-icon-grid" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+            </span>
+            <span class="space2-view-thumb" aria-hidden="true"></span>
+          </button>
+        </div>
         <div class="space2-head space2-sidebar-head">
-          <div class="space2-head-row">
-          </div>
-          <div class="space2-search-wrap">
-            <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-            <input id="space2-search" type="text" placeholder="Search title or description...">
-          </div>
         </div>
         <div id="space2-discover-controls" class="space2-discover-controls">
           <div class="discover-tabs">
@@ -344,6 +325,21 @@
         <div id="space2-capture-box" class="space2-capture-box"></div>
       </div>
     </div>
+  </div>
+
+  <div id="space2-mode-dock" class="space2-mode-dock" aria-label="Space 2 dock">
+    <button id="space2-upload-btn" class="space2-mode-btn" title="Upload images" aria-label="Upload images">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l5 5h-3v7h-4V9H7l5-5zm-7 14h14v2H5v-2z"/></svg>
+      <span>Upload</span>
+    </button>
+    <button id="space2-camera-btn" class="space2-mode-btn space2-mode-btn-camera" title="Capture from camera" aria-label="Capture from camera">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l1.4-2h3.2L15 5h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4zm3 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0-2.2a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z"/></svg>
+      <span>Camera</span>
+    </button>
+    <button id="space2-new-collection" class="space2-mode-btn" title="New collection" aria-label="New collection">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z"/></svg>
+      <span>Collection</span>
+    </button>
   </div>
 
   <div id="space2-item-modal" class="settings-modal hidden">
@@ -617,6 +613,6 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/CSInterface.js"></script>
-<script src="js/main.js?v=20260427-3"></script>
+<script src="js/main.js?v=20260427-14"></script>
 </body>
 </html>
