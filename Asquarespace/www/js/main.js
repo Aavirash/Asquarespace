@@ -634,17 +634,43 @@ async function syncSpace2StateToSupabase({force=false}={}){
     const cloudItemCount=Array.isArray(space2Sync.payload&&space2Sync.payload.space2_state&&space2Sync.payload.space2_state.items)
         ? space2Sync.payload.space2_state.items.length
         : 0;
+    let effectiveSignature=space2Sync.signature;
     // Do not let an empty local state overwrite cloud rows while restore is in flight.
     if(pendingSpace2CloudLoad&&localItemCount===0){
         return true;
     }
     if(localItemCount>0&&cloudItemCount===0){
-        const msg='Sync blocked: Space 2 items have no restorable media source.';
-        console.warn(msg);
-        setSpace2AutoMetaStatus('⚠️ '+msg,true);
-        return false;
+        // Keep cloud media entries, but still sync collection metadata changes.
+        const existing=await client
+            .from(SUPABASE_STATE_TABLE)
+            .select('space2_state')
+            .eq('user_id',currentSupabaseUser.id)
+            .eq('board_key',getCloudSpace2Key())
+            .maybeSingle();
+        if(existing&&existing.error){
+            const msg='Sync failed: '+(existing.error.message||JSON.stringify(existing.error));
+            console.error(msg);
+            setSpace2AutoMetaStatus('⚠️ '+msg,true);
+            return false;
+        }
+        const cloudItems=Array.isArray(existing&&existing.data&&existing.data.space2_state&&existing.data.space2_state.items)
+            ? existing.data.space2_state.items.filter(hasCloudRenderableSpace2Source)
+            : [];
+        if(cloudItems.length){
+            space2Sync.payload.space2_state.items=cloudItems;
+            space2Sync.payload.space2_state.savedAt=Date.now();
+        }
+        setSpace2AutoMetaStatus('ℹ️ Synced collections; local-only images are pending cloud upload.');
+        effectiveSignature=JSON.stringify({
+            user_id:space2Sync.payload.user_id,
+            board_key:space2Sync.payload.board_key,
+            project_key:space2Sync.payload.project_key,
+            board_id:space2Sync.payload.board_id,
+            canvas_state:null,
+            space2_state:space2Sync.payload.space2_state||null
+        });
     }
-    if(!force&&space2Sync.signature===lastSpace2CloudSyncSignature) return true;
+    if(!force&&effectiveSignature===lastSpace2CloudSyncSignature) return true;
     const {error}=await client.from(SUPABASE_STATE_TABLE).upsert(space2Sync.payload,{onConflict:'user_id,board_key'});
     if(error){
         const msg='Sync failed: '+(error.message||JSON.stringify(error));
@@ -657,7 +683,7 @@ async function syncSpace2StateToSupabase({force=false}={}){
         return false;
     }
     space2SyncAlertShown=false;
-    lastSpace2CloudSyncSignature=space2Sync.signature;
+    lastSpace2CloudSyncSignature=effectiveSignature;
 
     // Keep Space 2 mirrored in the active board row for compatibility and
     // recovery when one of the two row paths (board/global) is stale or missing.
