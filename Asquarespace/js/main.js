@@ -1214,8 +1214,11 @@ function openCollectionMenu(anchor,{itemId='',discoverItem=null,allowGrid=false,
     const menuWidth=Math.max(180,menu.offsetWidth||180);
     const menuHeight=Math.max(44,menu.offsetHeight||44);
     const edge=10;
-    const mobileNudge=window.innerWidth<=760?18:0;
-    const leftBase=rect.left-mobileNudge;
+    const isMobile=window.innerWidth<=760;
+    // On mobile, open the menu to the left of the trigger so it never clips off-screen.
+    const leftBase=isMobile
+        ? (rect.left-menuWidth+(rect.width||0))
+        : rect.left;
     const left=Math.max(edge,Math.min(leftBase,window.innerWidth-menuWidth-edge));
     const topBase=rect.bottom+8;
     const top=Math.max(edge,Math.min(topBase,window.innerHeight-menuHeight-edge));
