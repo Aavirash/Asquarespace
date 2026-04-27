@@ -260,6 +260,7 @@ let discoverLoading = false;
 let space2CollectionModalMode='create';
 let space2CollectionEditingId='';
 let activeCollectionMenu=null;
+let activeCollectionMenuAnchor=null;
 let supabaseClient=null;
 let currentSupabaseUser=null;
 let currentAuthEmail='';
@@ -1156,9 +1157,14 @@ function closeCollectionMenu(){
         activeCollectionMenu.remove();
         activeCollectionMenu=null;
     }
+    activeCollectionMenuAnchor=null;
 }
 
 function openCollectionMenu(anchor,{itemId='',discoverItem=null,allowGrid=false,allowDismiss=false,onDismiss=null}={}){
+    if(activeCollectionMenu&&activeCollectionMenuAnchor===anchor){
+        closeCollectionMenu();
+        return;
+    }
     closeCollectionMenu();
     const menu=document.createElement('div');
     menu.className='collection-dropdown-menu';
@@ -1214,17 +1220,15 @@ function openCollectionMenu(anchor,{itemId='',discoverItem=null,allowGrid=false,
     const menuWidth=Math.max(180,menu.offsetWidth||180);
     const menuHeight=Math.max(44,menu.offsetHeight||44);
     const edge=10;
-    const isMobile=window.innerWidth<=760;
-    // On mobile, open the menu to the left of the trigger so it never clips off-screen.
-    const leftBase=isMobile
-        ? (rect.left-menuWidth+(rect.width||0))
-        : rect.left;
+    // Prefer left-edge alignment with the trigger button; clamp to viewport to avoid clipping.
+    const leftBase=rect.left;
     const left=Math.max(edge,Math.min(leftBase,window.innerWidth-menuWidth-edge));
     const topBase=rect.bottom+8;
     const top=Math.max(edge,Math.min(topBase,window.innerHeight-menuHeight-edge));
     menu.style.left=`${left}px`;
     menu.style.top=`${top}px`;
     activeCollectionMenu=menu;
+    activeCollectionMenuAnchor=anchor;
 }
 
 async function toggleItemCollection(itemId,colId){
@@ -1236,8 +1240,16 @@ async function toggleItemCollection(itemId,colId){
     item.collectionIds=[...ids];
     item.updatedAt=Date.now();
     saveSpace2State(undefined,undefined,{skipCloudSync:true});
+    const shouldRepaintGrid=space2ActiveCollection!=='all';
+    const previousScrollTop=space2Grid?space2Grid.scrollTop:0;
     renderSpace2Collections();
-    renderSpace2Grid();
+    if(shouldRepaintGrid){
+        renderSpace2Grid();
+        if(space2Grid){
+            space2Grid.scrollTop=previousScrollTop;
+            requestAnimationFrame(()=>{if(space2Grid) space2Grid.scrollTop=previousScrollTop;});
+        }
+    }
     await syncSpace2StateToSupabase({force:true});
 }
 
