@@ -129,6 +129,7 @@ const space2GridAdd = document.getElementById('space2-grid-add');
 const space2DiscoverPanel = document.getElementById('space2-discover');
 const space2DiscoverControls = document.getElementById('space2-discover-controls');
 const space2ViewSwitch = document.getElementById('space2-view-switch');
+const space2SearchWrap = document.querySelector('#space2-sidebar .space2-search-wrap');
 const space2Sash = document.getElementById('space2-sash');
 const space2Sidebar = document.getElementById('space2-sidebar');
 const space2SettingsBtn = document.getElementById('space2-settings-btn');
@@ -232,7 +233,7 @@ let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='
 let space2AutoMetaRunning=false;
 const space2SidebarHead=document.querySelector('#space2-sidebar .space2-sidebar-head');
 const space2MobileLayoutSlots=new Map();
-[space2ViewSwitch,themeToggle].forEach(el=>{
+[space2ViewSwitch,space2SearchWrap,themeToggle].forEach(el=>{
     if(el&&el.parentElement) space2MobileLayoutSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
 });
 let space2AiModels=[];
@@ -1432,15 +1433,18 @@ function restoreSpace2MobileLayoutSlot(el){
 }
 
 function applySpace2MobileHeaderLayout(){
-    const isMobile=window.innerWidth<=980;
+    const isMobile=window.innerWidth<=760;
     const inSpace2=currentSpace==='space2';
 
     if(isMobile&&inSpace2){
         if(space2SidebarHead&&space2ViewSwitch&&space2ViewSwitch.parentElement!==space2SidebarHead){
             space2SidebarHead.appendChild(space2ViewSwitch);
         }
+        if(space2SidebarHead&&space2SearchWrap&&space2SearchWrap.parentElement!==space2SidebarHead){
+            space2SidebarHead.appendChild(space2SearchWrap);
+        }
     }else{
-        [space2ViewSwitch].forEach(restoreSpace2MobileLayoutSlot);
+        [space2ViewSwitch,space2SearchWrap].forEach(restoreSpace2MobileLayoutSlot);
     }
 
     if(space2TopCorner){
@@ -3524,6 +3528,7 @@ function updateSpaceSlider(){
     if(!spaceSwitcher||!spaceSlider) return;
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
+    if(spaceSwitcher.offsetParent===null){requestAnimationFrame(updateSpaceSlider);return;}
     const w=active.offsetWidth;
     if(w===0){requestAnimationFrame(updateSpaceSlider);return;}
     spaceSlider.style.left=active.offsetLeft+'px';

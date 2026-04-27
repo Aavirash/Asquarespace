@@ -25,6 +25,16 @@ This repository mixes multiple experiments, but the active shipped Space 2 runti
 - Avoid staging gitignored mirror files under `Asquarespace/` when the runtime change is intended for the deployed app.
 - Validate the exact touched slice after edits: DOM/CSS/JS errors first, then push only the tracked runtime files.
 
+### Why phone changes may appear to "not show"
+
+- This repo currently has **two tracked runtime trees** (`Asquarespace/` and `Asquarespace/www/`) with overlapping HTML/CSS/JS (`index.html`, `css/style.css`, `js/main.js`).
+- Depending on how the phone wrapper/web URL is configured at that moment, the app may render one tree while fixes were made in the other.
+- Symptom: many reloads show no UI change even though commits succeeded.
+- Required verification before/after UI fixes:
+  - Confirm which runtime path the phone build is serving right now.
+  - Keep cache-bust versions in the served `index.html` in sync with edited CSS/JS.
+  - If unsure, mirror critical mobile fixes into both trees intentionally and then prune later.
+
 ## Supabase / Media Rules
 
 - Avoid regenerating signed URLs on every restore or reload; reuse them until near expiry.
