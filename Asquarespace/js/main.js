@@ -197,7 +197,7 @@ let lastNoteTap = { node: null, time: 0, pointerType: '' };
 let interactionDirty=false;
 let genW=1024, genH=1024;
 let currentModel='flux';
-let isDark=false;
+let isDark=(localStorage.getItem('asq.theme')||'0')==='1';
 let appMode='ai';
 let placeColumn=0, placeRow=0;
 const PLACE_COLS=3, PLACE_GAP=24;
@@ -266,6 +266,7 @@ let cloudSyncTimer=null;
 let lastBoardCloudSyncSignature='';
 let lastSpace2CloudSyncSignature='';
 let boardSyncAlertShown=false;
+let space2SyncAlertShown=false;
 let appBootstrapped=false;
 let pendingSpace2CloudLoad=false;
 const DISCOVER_PAGE_SIZE = 18;
@@ -559,8 +560,13 @@ async function syncSpace2StateToSupabase({force=false}={}){
         const msg='Sync failed: '+(error.message||JSON.stringify(error));
         console.error(msg);
         setSpace2AutoMetaStatus('⚠️ '+msg,true);
+        if(!space2SyncAlertShown){
+            space2SyncAlertShown=true;
+            setTimeout(()=>alert('⚠️ Supabase Space 2 sync FAILED.\nYour latest uploads may not persist yet.\nUse Settings → Log Out, sign back in, and retry.'),120);
+        }
         return false;
     }
+    space2SyncAlertShown=false;
     lastSpace2CloudSyncSignature=space2Sync.signature;
     return true;
 }
@@ -808,7 +814,7 @@ function saveSpace2State(projectKey=currentProjectKey,boardId=currentBoardId,{sk
     const payload=buildSpace2StatePayload();
     writeSpace2StateToLocal(projectKey,boardId,payload);
     if(skipCloudSync) return;
-    if(immediateCloudSync) flushCloudSync({force:true});
+    if(immediateCloudSync||IS_MOBILE_SHELL) flushCloudSync({force:true});
     else scheduleCloudSync(760);
 }
 
@@ -2570,7 +2576,8 @@ function saveProjectState(){
         localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(payload));
         saveBoards(currentProjectKey);
         renderBoardList();
-        scheduleCloudSync(760);
+        if(IS_MOBILE_SHELL) flushCloudSync({force:true});
+        else scheduleCloudSync(760);
     }catch(err){
         console.warn('persist save failed',err);
     }
@@ -2892,10 +2899,11 @@ async function initAuthGate(){
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────
-function applyTheme(dark){isDark=dark;html.setAttribute('data-theme',dark?'dark':'light');iconSun.style.display=dark?'none':'';iconMoon.style.display=dark?'':'none';schedulePersist(250);}
+function applyTheme(dark){isDark=dark;html.setAttribute('data-theme',dark?'dark':'light');iconSun.style.display=dark?'none':'';iconMoon.style.display=dark?'':'none';try{localStorage.setItem('asq.theme',dark?'1':'0');}catch{}schedulePersist(250);}
 themeToggle.addEventListener('click',()=>applyTheme(!isDark));
 document.getElementById('extra-toggle-theme').addEventListener('click',()=>{closeAllDD();applyTheme(!isDark);});
 document.getElementById('extra-reset-view').addEventListener('click',()=>{closeAllDD();const r=viewport.getBoundingClientRect();setT(r.width/2,r.height/2,1);});
+applyTheme(isDark);
 
 // ── Transform ─────────────────────────────────────────────────────────────
 function setT(x,y,s){
