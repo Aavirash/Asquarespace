@@ -658,21 +658,17 @@ async function restoreStateFromSupabase(){
     }else if(space2Data){
         lastSpace2CloudSyncSignature='';
     }
-    const remoteSpace2UpdatedAt=Date.parse(space2Data&&space2Data.updated_at||'')||0;
-    let localSpace2SavedAt=0;
-    try{
-        const localRaw=localStorage.getItem(getSpace2Key(currentProjectKey));
-        const localParsed=localRaw?JSON.parse(localRaw):null;
-        localSpace2SavedAt=parseInt(localParsed&&localParsed.savedAt,10)||0;
-    }catch{}
     if(boardData&&boardData.canvas_state){
         try{ localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(boardData.canvas_state)); }catch{}
     }
-    if(space2Data&&space2Data.space2_state&&remoteSpace2UpdatedAt>=localSpace2SavedAt){
+    // Always trust the remote Space 2 row when it exists — local savedAt is reset on every
+    // boot by syncPendingSpace2LocalItems, so timestamp comparison always makes local appear
+    // newer than remote and the cloud data gets silently skipped.
+    if(space2Data&&space2Data.space2_state){
         try{ localStorage.setItem(getSpace2Key(currentProjectKey),JSON.stringify(space2Data.space2_state)); }catch{}
     }
     if(boardData&&boardData.canvas_state&&Array.isArray(boardData.canvas_state.nodes)) loadBoardState(currentProjectKey,currentBoardId);
-    if(space2Data&&space2Data.space2_state&&remoteSpace2UpdatedAt>=localSpace2SavedAt){
+    if(space2Data&&space2Data.space2_state){
         loadSpace2State(currentProjectKey,currentBoardId);
         await refreshSpace2SignedUrls();
         renderSpace2Grid();
@@ -702,10 +698,16 @@ function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     }
     if(!space2State.collections.some(c=>c.id===space2ActiveCollection)) space2ActiveCollection='all';
     if(currentSupabaseUser){
-        syncPendingSpace2LocalItems().then(()=>{
-            saveSpace2State(projectKey,boardId,{skipCloudSync:false});
-            renderSpace2Grid();
-        }).catch(err=>console.warn('space2 pending local upload retry failed',err));
+        // Only save+sync if there are actually local-only blobs to retry uploading.
+        // Calling saveSpace2State unconditionally resets savedAt to "now", which makes
+        // restoreStateFromSupabase think local is newer than the cloud row.
+        const hasPending=space2State.items.some(item=>!item.cloudPath&&parseSpace2LocalBlobRef(item.src||''));
+        if(hasPending){
+            syncPendingSpace2LocalItems().then(()=>{
+                saveSpace2State(projectKey,boardId,{skipCloudSync:false});
+                renderSpace2Grid();
+            }).catch(err=>console.warn('space2 pending local upload retry failed',err));
+        }
     }
     if(currentSupabaseUser&&space2State.items.some(shouldRefreshSpace2SignedUrl)){
         refreshSpace2SignedUrls().then(()=>{
