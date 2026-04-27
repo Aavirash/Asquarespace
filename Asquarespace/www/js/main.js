@@ -325,6 +325,22 @@ function getSpace2Key(projectKey){
     return `asq.space2.v1.${normalizeProjectKey(projectKey||'default')}`;
 }
 
+function clearTransientSearchInputs(){
+    space2SearchText='';
+    const ids=['space2-search','mb-search'];
+    ids.forEach(id=>{
+        const input=document.getElementById(id);
+        if(!input) return;
+        input.setAttribute('autocomplete','off');
+        input.value='';
+        input.defaultValue='';
+        input.setAttribute('value','');
+    });
+    if(typeof renderMBGrid==='function'){
+        try{ renderMBGrid(); }catch{}
+    }
+}
+
 function defaultSpace2State(){
     return {items:[],collections:[]};
 }
@@ -2908,12 +2924,10 @@ async function initPersistence(){
     currentBoardId=meta.currentBoardId;
     renderBoardList();
     if(!loadBoardState(currentProjectKey,currentBoardId)) setSpace('space2',{animateToggle:false});
-    // Browser form-state restore can repopulate this field on hard reload.
-    space2SearchText='';
-    if(space2Search){
-        space2Search.autocomplete='off';
-        space2Search.value='';
-    }
+    // Browser form-state restore can repopulate search fields on hard reload.
+    clearTransientSearchInputs();
+    setTimeout(clearTransientSearchInputs,0);
+    setTimeout(clearTransientSearchInputs,220);
     loadSpace2State(currentProjectKey,currentBoardId);
     recoverCanvasIfEmpty(currentProjectKey);
     persistenceReady=true;
@@ -2932,6 +2946,7 @@ async function initPersistence(){
     document.addEventListener('visibilitychange',()=>{
         if(document.visibilityState==='hidden') flushWorkspaceSync();
     });
+    window.addEventListener('pageshow',()=>setTimeout(clearTransientSearchInputs,0));
 
     // Any canvas/content mutation schedules a debounced save.
     const observer=new MutationObserver(()=>{schedulePersist(350);scheduleHistoryCapture(350);renderFavoritesStrip();});
