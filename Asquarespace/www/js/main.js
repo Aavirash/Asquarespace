@@ -392,19 +392,21 @@ function _compressImageBlob(blob, {maxPx=IMG_COMPRESS_MAX_PX, quality=IMG_COMPRE
 async function uploadBlobToSupabase(blob,{folder='uploads',nameHint='image'}={}){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser||!blob) return null;
-    // compress before upload — reduces Supabase storage + all future egress
     blob=await _compressImageBlob(blob).catch(()=>blob);
     const ext=extFromMime(blob.type||'image/png');
     const cleanHint=(nameHint||'image').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28)||'image';
     const path=`${currentSupabaseUser.id}/${folder}/${Date.now()}_${Math.floor(Math.random()*100000)}_${cleanHint}.${ext}`;
     const upload=await client.storage.from(SUPABASE_MEDIA_BUCKET).upload(path,blob,{upsert:false,contentType:blob.type||'image/png',cacheControl:'31536000'});
     if(upload.error){
-        console.warn('supabase storage upload failed',upload.error.message||upload.error);
+        const msg='Storage upload failed: '+(upload.error.message||JSON.stringify(upload.error));
+        console.error(msg);
+        setSpace2AutoMetaStatus('⚠️ '+msg,true);
         return null;
     }
     const signed=await client.storage.from(SUPABASE_MEDIA_BUCKET).createSignedUrl(path,SPACE2_SIGNED_URL_TTL_SEC);
     if(signed.error){
-        console.warn('supabase signed url failed',signed.error.message||signed.error);
+        const msg='Signed URL failed: '+(signed.error.message||JSON.stringify(signed.error));
+        console.error(msg);
         return {path,url:'',expiresAt:0};
     }
     return {path,url:signed.data?.signedUrl||'',expiresAt:nowEpochSec()+SPACE2_SIGNED_URL_TTL_SEC};
@@ -530,7 +532,9 @@ async function syncSpace2StateToSupabase({force=false}={}){
     if(!force&&space2Sync.signature===lastSpace2CloudSyncSignature) return true;
     const {error}=await client.from(SUPABASE_STATE_TABLE).upsert(space2Sync.payload,{onConflict:'user_id,board_key'});
     if(error){
-        console.warn('supabase space2 state upsert failed',error.message||error);
+        const msg='Sync failed: '+(error.message||JSON.stringify(error));
+        console.error(msg);
+        setSpace2AutoMetaStatus('⚠️ '+msg,true);
         return false;
     }
     lastSpace2CloudSyncSignature=space2Sync.signature;
@@ -618,11 +622,15 @@ async function restoreStateFromSupabase(){
             .maybeSingle()
     ]);
     if(boardRes.error){
-        console.warn('supabase board state fetch failed',boardRes.error.message||boardRes.error);
+        const msg='Cloud restore failed: '+(boardRes.error.message||JSON.stringify(boardRes.error));
+        console.error(msg);
+        setSpace2AutoMetaStatus('⚠️ '+msg,true);
         return;
     }
     if(space2Res.error){
-        console.warn('supabase space2 state fetch failed',space2Res.error.message||space2Res.error);
+        const msg='Space 2 cloud fetch failed: '+(space2Res.error.message||JSON.stringify(space2Res.error));
+        console.error(msg);
+        setSpace2AutoMetaStatus('⚠️ '+msg,true);
         return;
     }
     const boardData=boardRes.data||null;
@@ -661,11 +669,20 @@ async function restoreStateFromSupabase(){
     if(boardData&&boardData.canvas_state){
         try{ localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(boardData.canvas_state)); }catch{}
     }
-    // Always trust the remote Space 2 row when it exists — local savedAt is reset on every
-    // boot by syncPendingSpace2LocalItems, so timestamp comparison always makes local appear
-    // newer than remote and the cloud data gets silently skipped.
+    // Trust remote Space 2 state only if it has items, OR local has none.
+    // This prevents an early/empty remote row from wiping items that were saved locally
+    // but not yet cloud-synced (e.g. user uploaded and reloaded very fast).
     if(space2Data&&space2Data.space2_state){
-        try{ localStorage.setItem(getSpace2Key(currentProjectKey),JSON.stringify(space2Data.space2_state)); }catch{}
+        const remoteItems=(space2Data.space2_state.items||[]).length;
+        let localItems=0;
+        try{
+            const localRaw=localStorage.getItem(getSpace2Key(currentProjectKey));
+            const localParsed=localRaw?JSON.parse(localRaw):null;
+            localItems=Array.isArray(localParsed&&localParsed.items)?localParsed.items.length:0;
+        }catch{}
+        if(remoteItems>0||localItems===0){
+            try{ localStorage.setItem(getSpace2Key(currentProjectKey),JSON.stringify(space2Data.space2_state)); }catch{}
+        }
     }
     if(boardData&&boardData.canvas_state&&Array.isArray(boardData.canvas_state.nodes)) loadBoardState(currentProjectKey,currentBoardId);
     if(space2Data&&space2Data.space2_state){
@@ -1654,7 +1671,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
         items.push({src,filePath,title:f.name||'Upload',cloudPath,browserBlobKey,signedUrlExpiresAt,analysisBlob:f});
     }
     const added=upsertSpace2Items(items,{openEditor});
-    if(added.length){
+    if(added){
         await syncSpace2StateToSupabase({force:true});
     }
     if(hadLocalFallback){
