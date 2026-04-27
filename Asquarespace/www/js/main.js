@@ -1433,7 +1433,7 @@ function restoreSpace2MobileLayoutSlot(el){
 }
 
 function applySpace2MobileHeaderLayout(){
-    const isMobile=window.innerWidth<=760;
+    const isMobile=window.innerWidth<=980;
     const inSpace2=currentSpace==='space2';
     const showDock=inSpace2&&isMobile;
 
