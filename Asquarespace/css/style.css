@@ -171,11 +171,11 @@ body.auth-locked #ui-container{display:none;}
 .space2-ai-bar-wrap{width:100%;pointer-events:auto;}
 .space2-ai-bar{width:100%;min-height:54px;border-radius:var(--r-md);padding:6px 8px;display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-lg);}
 .space2-ai-eye,.space2-ai-send{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--text-mid);cursor:pointer;flex-shrink:0;}
-.space2-ai-eye svg,.space2-ai-send svg{width:16px;height:16px;fill:currentColor;}
+.space2-ai-eye svg{width:16px;height:16px;fill:currentColor;}
+.space2-ai-send-glyph{display:block;font-size:16px;line-height:1;transform:translateX(1px);}
 .space2-ai-eye.active{border-color:color-mix(in srgb,var(--accent) 48%,var(--border));color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--surface));}
 .space2-ai-eye:hover,.space2-ai-send:hover{color:var(--text);border-color:color-mix(in srgb,var(--accent) 35%,var(--border));}
 .space2-ai-send{background:#111;border-color:#111;color:#fff;}
-.space2-ai-send svg{width:14px;height:14px;}
 #space2-ai-input{flex:1;min-width:0;height:34px;border:none;outline:none;background:transparent;color:var(--text);font-size:14px;line-height:34px;font-family:inherit;resize:none;max-height:100px;min-height:34px;padding:0 4px;align-self:center;}
 #space2-ai-input::placeholder{color:var(--text-dim);}
 .space2-ai-model-wrap{position:relative;flex-shrink:0;}
@@ -353,7 +353,7 @@ body.space-2 #space2-mode-dock{display:none!important;}
 .bar-menu-btn svg{width:16px;height:16px;fill:currentColor;}
 .prompt-magic-btn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:#111;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-top:1px;}
 [data-theme="dark"] .prompt-magic-btn{color:#fff;}
-.magic-wand-icon{width:15px;height:15px;display:block;background-color:currentColor;mask:url('../icons/magic-wand.svg') center/contain no-repeat;-webkit-mask:url('../icons/magic-wand.svg') center/contain no-repeat;}
+.prompt-magic-glyph{display:block;font-size:14px;line-height:1;transform:translateY(-.5px);}
 .prompt-magic-btn:hover{border-color:var(--accent);color:var(--accent);}
 .bar-controls{padding:4px 10px 10px;display:flex;align-items:center;gap:7px;flex-wrap:nowrap;}
 .bar-ctrl-btn{display:flex;align-items:center;gap:5px;padding:5px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;color:var(--text-mid);cursor:pointer;font-family:inherit;white-space:nowrap;transition:border-color .15s,color .15s;}
@@ -1094,7 +1094,7 @@ body.space-2 #space2-mode-dock{display:none!important;}
     .mode-sw-btn svg,.mode-sw-btn .mode-icon-img,.mode-sw-btn .mode-icon-svg{width:16px;height:16px;}
     .bar-prompt-area{padding:8px 10px 4px;gap:6px;}
     .prompt-magic-btn{width:28px;height:28px;border-radius:8px;}
-    .magic-wand-icon{width:14px;height:14px;}
+    .prompt-magic-glyph{font-size:13px;}
     .bar-controls{padding:4px 8px 8px;gap:6px;overflow:visible;}
     #bar-note-btn,#bar-upload-btn,#size-btn{width:34px;height:32px;padding:0;font-size:0;gap:0;justify-content:center;flex-shrink:0;}
     #bar-note-btn svg,#bar-upload-btn svg{width:15px;height:15px;}
@@ -1114,7 +1114,7 @@ body.is-mobile-shell .mode-sw-btn .mode-icon-svg{width:16px;height:16px;}
 @media (max-width:390px){
     #toolbar-hub{width:calc(100% - 10px);}
     .space2-ai-hub{width:calc(100% - 10px);}
-    .space2-panel{inset:56px 8px calc(108px + env(safe-area-inset-bottom)) 8px;}
+    .space2-panel{inset:56px 8px 8px 8px;}
 }
 
 @media (max-width:1280px){
@@ -1135,6 +1135,7 @@ body.is-mobile-shell .mode-sw-btn .mode-icon-svg{width:16px;height:16px;}
     .space2-ai-eye,.space2-ai-send{width:32px;height:32px;border-radius:8px;}
     .space2-ai-model-btn{height:32px;max-width:132px;padding:0 8px;}
     #space2-ai-input{font-size:14px;}
+    .space2-panel{inset:58px 10px 8px 10px;}
     .space2-item-card{height:calc(100vh - 12px);width:calc(100vw - 12px);padding:8px;}
     .space2-item-layout{grid-template-columns:1fr;grid-template-rows:minmax(40vh,52vh) minmax(0,1fr);gap:8px;}
     .space2-item-preview{height:100%;min-height:0;}
