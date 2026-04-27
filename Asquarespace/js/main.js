@@ -523,6 +523,20 @@ function buildSpace2CloudSyncPayload(){
     return {payload,signature};
 }
 
+async function syncSpace2StateToSupabase({force=false}={}){
+    const client=initSupabaseClient();
+    if(!client||!currentSupabaseUser) return false;
+    const space2Sync=buildSpace2CloudSyncPayload();
+    if(!force&&space2Sync.signature===lastSpace2CloudSyncSignature) return true;
+    const {error}=await client.from(SUPABASE_STATE_TABLE).upsert(space2Sync.payload,{onConflict:'user_id,board_key'});
+    if(error){
+        console.warn('supabase space2 state upsert failed',error.message||error);
+        return false;
+    }
+    lastSpace2CloudSyncSignature=space2Sync.signature;
+    return true;
+}
+
 function writeSpace2StateToLocal(projectKey=currentProjectKey,boardId=currentBoardId,payload=buildSpace2StatePayload()){
     localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(payload));
 }
@@ -569,7 +583,6 @@ async function syncStateToSupabase(){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return;
     const boardSync=buildBoardCloudSyncPayload();
-    const space2Sync=buildSpace2CloudSyncPayload();
     const writes=[];
     if(boardSync.signature!==lastBoardCloudSyncSignature){
         writes.push(
@@ -580,14 +593,8 @@ async function syncStateToSupabase(){
                 })
         );
     }
-    if(space2Sync.signature!==lastSpace2CloudSyncSignature){
-        writes.push(
-            client.from(SUPABASE_STATE_TABLE).upsert(space2Sync.payload,{onConflict:'user_id,board_key'})
-                .then(({error})=>{
-                    if(error) console.warn('supabase space2 state upsert failed',error.message||error);
-                    else lastSpace2CloudSyncSignature=space2Sync.signature;
-                })
-        );
+    if(buildSpace2CloudSyncPayload().signature!==lastSpace2CloudSyncSignature){
+        writes.push(syncSpace2StateToSupabase());
     }
     if(!writes.length) return;
     await Promise.all(writes);
@@ -975,7 +982,7 @@ function openCollectionMenu(anchor,{itemId='',discoverItem=null,allowGrid=false,
     activeCollectionMenu=menu;
 }
 
-function toggleItemCollection(itemId,colId){
+async function toggleItemCollection(itemId,colId){
     const item=space2State.items.find(i=>i.id===itemId);
     if(!item) return;
     const ids=new Set(item.collectionIds||[]);
@@ -983,23 +990,25 @@ function toggleItemCollection(itemId,colId){
     else ids.add(colId);
     item.collectionIds=[...ids];
     item.updatedAt=Date.now();
-    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
+    await syncSpace2StateToSupabase({force:true});
 }
 
-function removeSpace2Collection(colId){
+async function removeSpace2Collection(colId){
     space2State.collections=space2State.collections.filter(c=>c.id!==colId);
     space2State.items.forEach(item=>{
         item.collectionIds=(item.collectionIds||[]).filter(id=>id!==colId);
     });
     if(space2ActiveCollection===colId) space2ActiveCollection='all';
-    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
+    await syncSpace2StateToSupabase({force:true});
 }
 
-function removeItemFromSpace2View(itemId){
+async function removeItemFromSpace2View(itemId){
     if(!itemId) return;
     if(space2ActiveCollection==='all'){
         space2State.items=space2State.items.filter(i=>i.id!==itemId);
@@ -1009,9 +1018,10 @@ function removeItemFromSpace2View(itemId){
         item.collectionIds=(item.collectionIds||[]).filter(id=>id!==space2ActiveCollection);
         item.updatedAt=Date.now();
     }
-    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
+    await syncSpace2StateToSupabase({force:true});
 }
 
 function openCollectionModal(mode='create',collectionId='',discoverItem=null){
@@ -1039,7 +1049,7 @@ function closeCollectionModal(){
     if(space2CollectionNameInput) space2CollectionNameInput.dataset.discoverPayload='';
 }
 
-function saveCollectionModal(){
+async function saveCollectionModal(){
     const name=(space2CollectionNameInput?.value||'').trim();
     if(!name) return;
     if(space2CollectionModalMode==='rename'){
@@ -1062,10 +1072,11 @@ function saveCollectionModal(){
             }catch{}
         }
     }
-    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
     closeCollectionModal();
+    await syncSpace2StateToSupabase({force:true});
 }
 
 function renderSpace2Collections(){
@@ -1426,7 +1437,7 @@ function closeSpace2Item(){
     if(space2ItemModal) space2ItemModal.classList.add('hidden');
 }
 
-function saveSpace2Item(){
+async function saveSpace2Item(){
     const item=space2State.items.find(i=>i.id===space2ActiveItemId);
     if(!item) return;
     item.title=(space2ItemTitle&&space2ItemTitle.value||'').trim()||'Untitled';
@@ -1436,19 +1447,21 @@ function saveSpace2Item(){
         : [];
     item.collectionIds=selectedCols;
     item.updatedAt=Date.now();
-    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
     closeSpace2Item();
+    await syncSpace2StateToSupabase({force:true});
 }
 
-function deleteSpace2Item(){
+async function deleteSpace2Item(){
     if(!space2ActiveItemId) return;
     space2State.items=space2State.items.filter(i=>i.id!==space2ActiveItemId);
-    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
     closeSpace2Item();
+    await syncSpace2StateToSupabase({force:true});
 }
 
 async function downloadSpace2ActiveItem(){
@@ -1525,7 +1538,7 @@ function upsertSpace2Items(items,{openEditor=false}={}){
         if(inserted.changed) changed=true;
     });
     if(!changed) return 0;
-    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
     if(autoMetaQueue.length){
@@ -1539,6 +1552,7 @@ function upsertSpace2Items(items,{openEditor=false}={}){
         });
     }
     if(openEditor&&firstAddedItemId) openSpace2Item(firstAddedItemId);
+    syncSpace2StateToSupabase({force:true}).catch(err=>console.warn('space2 immediate sync failed',err));
     return added;
 }
 
@@ -1553,18 +1567,20 @@ function sendDiscoverItem(item,target,collectionId=''){
     if(target==='grid'){
         const inserted=insertSpace2Item(payload,{collectionIds:[]});
         if(!inserted.changed) return 'grid';
-        saveSpace2State(undefined,undefined,{immediateCloudSync:true});
+        saveSpace2State(undefined,undefined,{skipCloudSync:true});
         renderSpace2Collections();
         renderSpace2Grid();
+        syncSpace2StateToSupabase({force:true}).catch(err=>console.warn('space2 immediate sync failed',err));
         return 'grid';
     }
     const activeCollectionIds=collectionId
         ? [collectionId]
         : (space2ActiveCollection!=='all'?[space2ActiveCollection]:[]);
     const inserted=insertSpace2Item(payload,{collectionIds:activeCollectionIds});
-    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
+    syncSpace2StateToSupabase({force:true}).catch(err=>console.warn('space2 immediate sync failed',err));
     if(activeCollectionIds.length) return inserted.added?'collection':'collection';
     if(inserted.item) openSpace2Item(inserted.item.id);
     return 'collections';
@@ -1636,6 +1652,9 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
         items.push({src,filePath,title:f.name||'Upload',cloudPath,browserBlobKey,signedUrlExpiresAt,analysisBlob:f});
     }
     const added=upsertSpace2Items(items,{openEditor});
+    if(added.length){
+        await syncSpace2StateToSupabase({force:true});
+    }
     if(hadLocalFallback){
         setSpace2AutoMetaStatus('Some uploads were kept locally and will retry cloud sync automatically.');
     }
