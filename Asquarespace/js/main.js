@@ -3894,8 +3894,8 @@ if(geminiToggleBtn) geminiToggleBtn.addEventListener('click',e=>{
 });
 settingsModal.addEventListener('click',e=>{if(e.target===settingsModal) closeSettings();});
 
-if(spaceBtn1) spaceBtn1.addEventListener('click',e=>{e.stopPropagation();setSpace('space1');});
-if(spaceBtn2) spaceBtn2.addEventListener('click',e=>{e.stopPropagation();setSpace('space2');});
+if(spaceBtn1) spaceBtn1.addEventListener('click',e=>{e.stopPropagation();setSpace('space1');requestAnimationFrame(updateSpaceSlider);setTimeout(updateSpaceSlider,80);});
+if(spaceBtn2) spaceBtn2.addEventListener('click',e=>{e.stopPropagation();setSpace('space2');requestAnimationFrame(updateSpaceSlider);setTimeout(updateSpaceSlider,80);});
 if(space2Search) space2Search.addEventListener('input',()=>{
     space2SearchText=space2Search.value||'';
     if(space2View==='discover') filterDiscoverFeedBySearch();
@@ -4579,6 +4579,10 @@ setTimeout(updateSlider,800);
 (()=>{const sw=document.getElementById('mode-switcher');if(sw&&typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>requestAnimationFrame(updateSlider)).observe(sw);}})();
 window.addEventListener('load',()=>requestAnimationFrame(updateSpaceSlider));
 window.addEventListener('resize',()=>{requestAnimationFrame(updateSpaceSlider);updateBottomBarCompactUi();});
+window.addEventListener('orientationchange',()=>{requestAnimationFrame(updateSpaceSlider);setTimeout(updateSpaceSlider,120);});
+if(window.visualViewport){
+    window.visualViewport.addEventListener('resize',()=>requestAnimationFrame(updateSpaceSlider));
+}
 setTimeout(updateSpaceSlider,200);
 setTimeout(updateBottomBarCompactUi,220);
 (()=>{const sw=document.getElementById('space-switcher');if(sw&&typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>requestAnimationFrame(updateSpaceSlider)).observe(sw);}})();
