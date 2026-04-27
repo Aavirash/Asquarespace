@@ -972,7 +972,8 @@ function renderSpace2Grid(){
         }
         space2Grid.appendChild(card);
     });
-    layoutSpace2Grid();
+    layoutSpace2Grid();         // sync pass: cards at correct positions from frame 0
+    scheduleSpace2GridLayout(); // RAF pass: re-measures after browser layout pass
 }
 
 function getSpace2GridColumnCount(){
@@ -3548,15 +3549,18 @@ function setSpace(space){
         document.body.classList.add('space-2');
         const forcedCollapsed=window.innerWidth<=760;
         if(forcedCollapsed&&space2Panel) space2Panel.classList.add('sidebar-collapsed');
+        // Set view BEFORE unhiding panel so discover is already display:none on first paint.
+        // This ensures layoutSpace2Grid() always measures full clientWidth, not 50%.
+        showSpace2View(space2View);
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
-            // Show the correct view BEFORE loading state so layoutSpace2Grid() measures
-            // the full grid width (discover is hidden) instead of 50% (both flex:1 visible).
-            showSpace2View(space2View);
-            if(window.innerWidth<=980) setSpace2CollectionsOpen(false,{skipPersist:true});
-            else setSpace2CollectionsOpen(space2CollectionsOpen);
-            loadSpace2State();
-        if(forcedCollapsed){scheduleSpace2GridLayout();setTimeout(scheduleSpace2GridLayout,120);}
+        if(window.innerWidth<=980) setSpace2CollectionsOpen(false,{skipPersist:true});
+        else setSpace2CollectionsOpen(space2CollectionsOpen);
+        loadSpace2State();
+        // Safety re-layouts for async image loads and Supabase-restored state
+        scheduleSpace2GridLayout();
+        setTimeout(scheduleSpace2GridLayout,100);
+        setTimeout(scheduleSpace2GridLayout,300);
     }else{
         document.body.classList.remove('space-2');
         if(space2Panel) space2Panel.classList.add('hidden');
