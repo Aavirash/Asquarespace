@@ -3538,25 +3538,22 @@ function updateSpaceSlider(){
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
     const isGrid=active===spaceBtn2||currentSpace==='space2';
-    // Read position BEFORE class toggle — after toggle the CSS computed value changes.
-    const startLeft  = getComputedStyle(spaceSlider).left;
-    const startWidth = getComputedStyle(spaceSlider).width;
+    // Read from position BEFORE class change (class change alters CSS computed value).
+    const fromLeft  = parseFloat(getComputedStyle(spaceSlider).left)  || 3;
+    const fromWidth = parseFloat(getComputedStyle(spaceSlider).width) || 104;
     spaceSwitcher.classList.toggle('is-grid',isGrid);
-    // Freeze: inline style overrides the class-driven CSS change, no jump.
-    spaceSlider.style.transition = 'none';
-    spaceSlider.style.left  = startLeft;
-    spaceSlider.style.width = startWidth;
-    // Double-rAF: frame 1 lets the browser paint the frozen state to the compositor,
-    // frame 2 starts the animation from that committed state.
-    const endLeft  = active.offsetLeft  + 'px';
-    const endWidth = active.offsetWidth + 'px';
-    requestAnimationFrame(function(){
-        requestAnimationFrame(function(){
-            spaceSlider.style.transition = 'left .22s cubic-bezier(.4,0,.2,1),width .22s cubic-bezier(.4,0,.2,1)';
-            spaceSlider.style.left  = endLeft;
-            spaceSlider.style.width = endWidth;
-        });
-    });
+    const toLeft  = active.offsetLeft;
+    const toWidth = active.offsetWidth;
+    // Set final position as inline style immediately (always kept in sync).
+    spaceSlider.style.left  = toLeft  + 'px';
+    spaceSlider.style.width = toWidth + 'px';
+    // Web Animations API: runs on the compositor thread, no CSS-transition tricks needed.
+    if(fromLeft!==toLeft||fromWidth!==toWidth){
+        spaceSlider.animate(
+            [{left:fromLeft+'px',width:fromWidth+'px'},{left:toLeft+'px',width:toWidth+'px'}],
+            {duration:220,easing:'cubic-bezier(0.4,0,0.2,1)'}
+        );
+    }
 }
 
 function setSpace(space){
@@ -4035,28 +4032,30 @@ function showSpace2View(view) {
     space2View=isGrid?'grid':'discover';
     if(space2ViewToggle){
         const thumb = space2ViewToggle.querySelector('.space2-view-thumb');
-        // Snapshot BEFORE class toggle so we have the true start position.
         if(thumb){
-            const startLeft = getComputedStyle(thumb).left;
+            const mobile = window.innerWidth <= 760;
+            const fromLeft = parseFloat(getComputedStyle(thumb).left) || 2;
+            const toLeft   = isGrid ? (mobile ? 34 : 42) : 2;
             space2ViewToggle.classList.toggle('is-grid', isGrid);
             space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
             space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
-            // Freeze at start position, class-driven CSS change can't snap it.
-            thumb.style.transition = 'none';
-            thumb.style.left = startLeft;
-            const mobile = window.innerWidth <= 760;
-            const endLeft = isGrid ? (mobile ? '34px' : '42px') : '2px';
-            // Double-rAF so compositor commits the frozen frame before animating.
-            requestAnimationFrame(function(){
-                requestAnimationFrame(function(){
-                    thumb.style.transition = 'left .2s cubic-bezier(.4,0,.2,1)';
-                    thumb.style.left = endLeft;
-                });
-            });
+            // Set final position immediately.
+            thumb.style.left = toLeft + 'px';
+            // Web Animations API for the slide.
+            if(fromLeft !== toLeft){
+                thumb.animate(
+                    [{left:fromLeft+'px'},{left:toLeft+'px'}],
+                    {duration:200,easing:'cubic-bezier(0.4,0,0.2,1)'}
+                );
+            }
         } else {
             space2ViewToggle.classList.toggle('is-grid', isGrid);
             space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
             space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
+        }
+        // Desktop only: float the view-switch to top-left of the app in grid mode.
+        if(space2ViewSwitch){
+            space2ViewSwitch.classList.toggle('grid-float', isGrid && window.innerWidth > 760);
         }
     }
     if(space2DiscoverControls) space2DiscoverControls.classList.toggle('hidden', isGrid);
