@@ -110,13 +110,12 @@ const moveBoardModal= document.getElementById('move-board-modal');
 const moveBoardList = document.getElementById('move-board-list');
 const moveBoardCancel = document.getElementById('move-board-cancel');
 const extraMediaBrowserBtn = document.getElementById('extra-media-browser');
+const space2TopCorner = document.getElementById('space2-top-corner');
 
 const spaceSwitcher = document.getElementById('space-switcher');
 const spaceSlider = document.getElementById('space-slider');
 const spaceBtn1 = document.getElementById('space-btn-1');
 const spaceBtn2 = document.getElementById('space-btn-2');
-const space2TopSearch = document.getElementById('space2-top-search');
-const space2SearchWrap = space2TopSearch ? space2TopSearch.querySelector('.space2-search-wrap') : null;
 const space2Panel = document.getElementById('space2-panel');
 const space2ModeDock = document.getElementById('space2-mode-dock');
 const space2Search = document.getElementById('space2-search');
@@ -233,7 +232,7 @@ let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='
 let space2AutoMetaRunning=false;
 const space2SidebarHead=document.querySelector('#space2-sidebar .space2-sidebar-head');
 const space2MobileLayoutSlots=new Map();
-[space2ViewSwitch,space2SearchWrap,themeToggle].forEach(el=>{
+[space2ViewSwitch,themeToggle].forEach(el=>{
     if(el&&el.parentElement) space2MobileLayoutSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
 });
 let space2AiModels=[];
@@ -1435,26 +1434,18 @@ function restoreSpace2MobileLayoutSlot(el){
 function applySpace2MobileHeaderLayout(){
     const isMobile=window.innerWidth<=980;
     const inSpace2=currentSpace==='space2';
-    const showDock=inSpace2&&isMobile;
 
     if(isMobile&&inSpace2){
         if(space2SidebarHead&&space2ViewSwitch&&space2ViewSwitch.parentElement!==space2SidebarHead){
             space2SidebarHead.appendChild(space2ViewSwitch);
         }
-        if(space2SidebarHead&&space2SearchWrap&&space2SearchWrap.parentElement!==space2SidebarHead){
-            space2SidebarHead.appendChild(space2SearchWrap);
-        }
     }else{
-        [space2ViewSwitch,space2SearchWrap].forEach(restoreSpace2MobileLayoutSlot);
+        [space2ViewSwitch].forEach(restoreSpace2MobileLayoutSlot);
     }
 
-    if(space2TopSearch){
-        space2TopSearch.classList.toggle('hidden',!inSpace2||isMobile);
-        space2TopSearch.setAttribute('aria-hidden',(!inSpace2||isMobile)?'true':'false');
-    }
-    if(space2ModeDock){
-        space2ModeDock.classList.toggle('hidden',!showDock);
-        space2ModeDock.setAttribute('aria-hidden',showDock?'false':'true');
+    if(space2TopCorner){
+        space2TopCorner.classList.toggle('hidden',!inSpace2);
+        space2TopCorner.setAttribute('aria-hidden',!inSpace2?'true':'false');
     }
 }
 
