@@ -2893,15 +2893,25 @@ function bindAuthUi(){
             return;
         }
         currentAuthEmail=email;
-        setAuthStatus('Sending login email...');
+        setAuthStatus('Sending login code...');
         const {error}=await client.auth.signInWithOtp({
             email,
             options:{
-                shouldCreateUser:true
+                // Do not auto-create users here.
+                // Auto-create can trigger confirmation-link email flows that look like magic links.
+                shouldCreateUser:false
             }
         });
         if(error){
-            setAuthStatus(error.message||'Unable to send login email.',true);
+            const projectRef=((SUPABASE_URL.match(/https:\/\/([^.]+)\.supabase\.co/i)||[])[1]||'unknown');
+            const rawMsg=String(error.message||'Unable to send login code.');
+            if(/not\s*found|user.*not\s*exist|signup/i.test(rawMsg)){
+                setAuthStatus(`This email is not in this Supabase project (${projectRef}). Use the account that already exists in this project.`,true);
+            }else if(/confirm|not\s*confirmed|verification/i.test(rawMsg)){
+                setAuthStatus(`Email exists but is not confirmed in project ${projectRef}. Confirm once, then request code again.`,true);
+            }else{
+                setAuthStatus(rawMsg,true);
+            }
             return;
         }
         showAuthStep('otp');
