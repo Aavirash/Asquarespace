@@ -220,6 +220,8 @@ body.space-2 #context-toolbar,
 body.space-2 #multi-toolbar,
 body.space-2 #note-toolbar,
 body.space-2 #favorites-panel{display:none!important;}
+body.space-2 #board-dock{display:none!important;}
+body.space-2 #space2-view-switch{display:flex!important;}
 body.space-2 #space2-ai-hub{display:flex!important;}
 body:not(.space-2) #space2-ai-hub{display:none!important;}
 /* Dock: hidden by default everywhere, shown only in Space 2 on mobile/tablet */
@@ -1113,7 +1115,7 @@ body.space-2 #space2-mode-dock{display:none!important;}
     .space2-grid{padding:24px 10px 10px;--space2-grid-gap:10px;touch-action:pan-y;-webkit-overflow-scrolling:touch;}
     .discover-feed{padding:24px 10px 10px;columns:1;column-gap:0;}
     .discover-card{margin-bottom:16px;}
-    .space2-ai-hub{width:calc(100% - 14px);bottom:8px;}
+    .space2-ai-hub{width:calc(100% - 14px);bottom:calc(env(safe-area-inset-bottom));gap:0;}
     .space2-ai-bar{min-height:50px;border-radius:var(--r-md);padding:5px 6px;gap:6px;}
     .space2-ai-eye,.space2-ai-send{width:32px;height:32px;border-radius:8px;}
     .space2-ai-model-btn{height:32px;max-width:132px;padding:0 8px;}
