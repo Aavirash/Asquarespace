@@ -425,7 +425,11 @@ async function syncStateToSupabase(){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return;
     const boardPayload=buildBoardPayload();
-    const spacePayload=JSON.parse(JSON.stringify(space2State||defaultSpace2State()));
+    const spacePayload={
+        items:JSON.parse(JSON.stringify((space2State&&space2State.items)||[])),
+        collections:JSON.parse(JSON.stringify((space2State&&space2State.collections)||[])),
+        savedAt:Date.now()
+    };
     const payload={
         user_id:currentSupabaseUser.id,
         board_key:getCloudBoardKey(),
@@ -444,7 +448,7 @@ async function restoreStateFromSupabase(){
     if(!client||!currentSupabaseUser) return;
     const {data,error}=await client
         .from(SUPABASE_STATE_TABLE)
-        .select('canvas_state,space2_state')
+        .select('canvas_state,space2_state,updated_at')
         .eq('user_id',currentSupabaseUser.id)
         .eq('board_key',getCloudBoardKey())
         .maybeSingle();
@@ -453,14 +457,21 @@ async function restoreStateFromSupabase(){
         return;
     }
     if(!data) return;
+    const remoteUpdatedAt=Date.parse(data.updated_at||'')||0;
+    let localSpace2SavedAt=0;
+    try{
+        const localRaw=localStorage.getItem(getSpace2Key(currentProjectKey,currentBoardId));
+        const localParsed=localRaw?JSON.parse(localRaw):null;
+        localSpace2SavedAt=parseInt(localParsed&&localParsed.savedAt,10)||0;
+    }catch{}
     if(data.canvas_state){
         try{ localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(data.canvas_state)); }catch{}
     }
-    if(data.space2_state){
+    if(data.space2_state&&remoteUpdatedAt>=localSpace2SavedAt){
         try{ localStorage.setItem(getSpace2Key(currentProjectKey,currentBoardId),JSON.stringify(data.space2_state)); }catch{}
     }
     if(data.canvas_state&&Array.isArray(data.canvas_state.nodes)) loadBoardState(currentProjectKey,currentBoardId);
-    if(data.space2_state){
+    if(data.space2_state&&remoteUpdatedAt>=localSpace2SavedAt){
         loadSpace2State(currentProjectKey,currentBoardId);
         await refreshSpace2SignedUrls();
         renderSpace2Grid();
@@ -489,7 +500,12 @@ function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
 }
 
 function saveSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
-    localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(space2State));
+    const payload={
+        items:JSON.parse(JSON.stringify((space2State&&space2State.items)||[])),
+        collections:JSON.parse(JSON.stringify((space2State&&space2State.collections)||[])),
+        savedAt:Date.now()
+    };
+    localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(payload));
     scheduleCloudSync(760);
 }
 
@@ -1339,7 +1355,11 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
                 filePath=persisted;
                 src=toFileUrl(persisted);
             }else{
-                src=URL.createObjectURL(f);
+                try{
+                    src=await blobToDataUrl(f);
+                }catch{
+                    src=URL.createObjectURL(f);
+                }
             }
         }
         if(currentSupabaseUser){
