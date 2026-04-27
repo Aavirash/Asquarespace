@@ -3531,7 +3531,10 @@ function updateSpaceSlider(){
     if(spaceSwitcher.offsetParent===null){requestAnimationFrame(updateSpaceSlider);return;}
     const w=active.offsetWidth;
     if(w===0){requestAnimationFrame(updateSpaceSlider);return;}
-    spaceSlider.style.left=active.offsetLeft+'px';
+    const activeRect=active.getBoundingClientRect();
+    const switchRect=spaceSwitcher.getBoundingClientRect();
+    const left=activeRect.left-switchRect.left;
+    spaceSlider.style.left=left+'px';
     spaceSlider.style.width=w+'px';
 }
 
