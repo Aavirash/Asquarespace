@@ -3539,11 +3539,11 @@ function updateSpaceSlider(){
     if(!active) return;
     const isGrid=active===spaceBtn2||currentSpace==='space2';
     spaceSwitcher.classList.toggle('is-grid',isGrid);
-    if(spaceSlider.style.left||spaceSlider.style.width||spaceSlider.style.transition){
-        spaceSlider.style.left='';
-        spaceSlider.style.width='';
-        spaceSlider.style.transition='';
-    }
+    // Force a layout flush so the browser records the slider's current position
+    // BEFORE we change it — required for iOS WebKit to fire the CSS transition.
+    void spaceSlider.getBoundingClientRect();
+    spaceSlider.style.left  = active.offsetLeft + 'px';
+    spaceSlider.style.width = active.offsetWidth + 'px';
 }
 
 function setSpace(space){
@@ -4024,6 +4024,14 @@ function showSpace2View(view) {
         space2ViewToggle.classList.toggle('is-grid', isGrid);
         space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
         space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
+        // Force a layout flush before setting the new left — guarantees iOS WebKit
+        // transitions from the current position rather than jumping.
+        const thumb = space2ViewToggle.querySelector('.space2-view-thumb');
+        if(thumb){
+            void thumb.getBoundingClientRect();
+            const mobile = window.innerWidth <= 760;
+            thumb.style.left = isGrid ? (mobile ? '34px' : '42px') : '2px';
+        }
     }
     if(space2DiscoverControls) space2DiscoverControls.classList.toggle('hidden', isGrid);
     if(space2Search) space2Search.placeholder = isGrid ? 'Search...' : 'Search in discover...';

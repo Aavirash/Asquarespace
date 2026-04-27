@@ -61,7 +61,7 @@ body.auth-locked #ui-container{display:none;}
 .space2-top-import span{display:block;}
 .space-btn{position:relative;z-index:1;min-width:104px;height:30px;border:none;border-radius:8px;background:transparent;color:var(--text-mid);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;transition:color .16s ease;}
 .space-btn.active{color:var(--text);}
-.space-slider{position:absolute;left:3px;top:3px;width:104px;height:30px;border-radius:8px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06);transition:left .22s cubic-bezier(.4,0,.2,1);z-index:0;will-change:left;}
+.space-slider{position:absolute;left:3px;top:3px;width:104px;height:30px;border-radius:8px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06);transition:left .22s cubic-bezier(.4,0,.2,1),width .22s cubic-bezier(.4,0,.2,1);z-index:0;}
 .space-switcher.is-grid .space-slider{left:109px;}
 
 .space2-panel{position:absolute;inset:52px 16px 18px;z-index:170;border:none;border-radius:0;background:transparent;backdrop-filter:none;box-shadow:none;display:flex;flex-direction:column;overflow:visible;--space2-sidebar-width:238px;}
@@ -82,13 +82,13 @@ body.auth-locked #ui-container{display:none;}
 
 .space2-view-switch{display:inline-flex;align-items:center;gap:3px;flex:0 0 auto;width:max-content;max-width:max-content;height:38px;padding:3px;border-radius:11px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(10px);box-shadow:var(--shadow);}
 .space2-view-switch.hidden{display:none;}
-.space2-view-toggle{position:relative;width:82px;height:30px;border:none;border-radius:8px;background:transparent;padding:0;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--text-mid);--space2-view-thumb-x:0px;}
+.space2-view-toggle{position:relative;width:82px;height:30px;border:none;border-radius:8px;background:transparent;padding:0;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--text-mid);}
 .space2-view-icon{position:absolute;top:0;z-index:2;width:41px;height:30px;display:flex;align-items:center;justify-content:center;opacity:.88;transition:color .14s ease,opacity .14s ease;}
 .space2-view-icon-discover{left:0;}
 .space2-view-icon-grid{right:0;}
 .space2-view-icon svg{width:14px;height:14px;fill:currentColor;}
-.space2-view-thumb{position:absolute;top:2px;left:2px;width:38px;height:26px;border-radius:7px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.14);transform:translateX(var(--space2-view-thumb-x));transition:transform .2s cubic-bezier(.4,0,.2,1);z-index:1;will-change:transform;}
-.space2-view-toggle.is-grid{--space2-view-thumb-x:40px;}
+.space2-view-thumb{position:absolute;top:2px;left:2px;width:38px;height:26px;border-radius:7px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.14);transition:left .2s cubic-bezier(.4,0,.2,1);z-index:1;}
+.space2-view-toggle.is-grid .space2-view-thumb{left:42px;}
 .space2-view-toggle:not(.is-grid) .space2-view-icon-discover{color:var(--text);opacity:1;}
 .space2-view-toggle.is-grid .space2-view-icon-grid{color:var(--text);opacity:1;}
 .space2-sidebar .space2-view-switch{align-self:flex-start;}
@@ -1080,9 +1080,8 @@ body.space-2 #space2-mode-dock{display:none!important;}
     .space2-view-icon{top:0;width:32px;height:28px;}
     .space2-view-icon-discover{left:0;}
     .space2-view-icon-grid{left:34px;right:auto;}
-    .space2-view-toggle{--space2-view-thumb-x:0px;}
-    .space2-view-thumb{top:2px;left:2px;width:30px;height:24px;border-radius:7px;transform:translateX(var(--space2-view-thumb-x));transition:transform .2s cubic-bezier(.4,0,.2,1);}
-    .space2-view-toggle.is-grid{--space2-view-thumb-x:32px;}
+    .space2-view-thumb{top:2px;left:2px;width:30px;height:24px;border-radius:7px;transition:left .2s cubic-bezier(.4,0,.2,1);}
+    .space2-view-toggle.is-grid .space2-view-thumb{left:34px;}
     body.space-2 #space2-mode-dock{display:flex!important;}
     .space2-mode-dock{padding:4px 5px 5px;border-radius:12px 12px 0 0;}
     .space2-mode-btn{min-width:44px;width:44px;padding:8px 0;font-size:0;gap:0;}
