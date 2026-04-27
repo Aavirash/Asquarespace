@@ -1418,7 +1418,7 @@ function updateControlCornerState(){
 function initSpace2SidebarSizing(){
     if(!space2Sash||!space2Panel) return;
     setSpace2SidebarWidth(space2SidebarWidth,{persist:false});
-    const restoreOpen=window.innerWidth>980&&((localStorage.getItem('asq.space2.sidebar.open')||'0')==='1');
+    const restoreOpen=window.innerWidth>760&&((localStorage.getItem('asq.space2.sidebar.open')||'0')==='1');
     setSpace2CollectionsOpen(restoreOpen,{skipPersist:true});
     space2Sash.addEventListener('click',(e)=>{
         e.preventDefault();
@@ -1435,7 +1435,7 @@ function restoreSpace2MobileLayoutSlot(el){
 }
 
 function applySpace2MobileHeaderLayout(){
-    const isMobile=window.innerWidth<=980;
+    const isMobile=window.innerWidth<=760;
     const inSpace2=currentSpace==='space2';
 
     if(isMobile&&inSpace2){
@@ -3547,7 +3547,7 @@ function setSpace(space){
         document.body.classList.add('space-2');
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
-        const forcedCollapsed=window.innerWidth<=980;
+        const forcedCollapsed=window.innerWidth<=760;
         if(forcedCollapsed&&space2Panel) space2Panel.classList.add('sidebar-collapsed');
         loadSpace2State();
         if(forcedCollapsed) setSpace2CollectionsOpen(false,{skipPersist:true});
