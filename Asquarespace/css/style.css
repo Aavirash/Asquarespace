@@ -220,6 +220,8 @@ body.space-2 #context-toolbar,
 body.space-2 #multi-toolbar,
 body.space-2 #note-toolbar,
 body.space-2 #favorites-panel{display:none!important;}
+body.space-2 #space2-ai-hub{display:flex!important;}
+body:not(.space-2) #space2-ai-hub{display:none!important;}
 /* Dock: hidden by default everywhere, shown only in Space 2 on mobile/tablet */
 #space2-mode-dock{display:none!important;}
 body.space-2 #space2-mode-dock{display:none!important;}
