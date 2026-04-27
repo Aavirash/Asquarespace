@@ -3534,43 +3534,23 @@ function openBoardPanel(){
     boardPanel.classList.remove('hidden');
 }
 
-function getSpaceToggleTargetButton(){
-    return currentSpace==='space2' ? spaceToggleGridBtn : spaceToggleSpaceBtn;
-}
-
 function updateSpaceSlider({animate=true}={}){
     if(!spaceToggle||!spaceToggleThumb||!spaceToggleSpaceBtn||!spaceToggleGridBtn) return;
     const isGrid=currentSpace==='space2';
-    spaceToggle.classList.toggle('is-grid',isGrid);
     spaceToggle.setAttribute('aria-activedescendant',isGrid?'space-toggle-grid':'space-toggle-space');
     spaceToggleSpaceBtn.setAttribute('aria-selected',isGrid?'false':'true');
     spaceToggleGridBtn.setAttribute('aria-selected',isGrid?'true':'false');
-
-    const targetBtn=getSpaceToggleTargetButton();
-    const fromLeft=parseFloat(getComputedStyle(spaceToggleThumb).left) || spaceToggleSpaceBtn.offsetLeft || 0;
-    const fromWidth=parseFloat(getComputedStyle(spaceToggleThumb).width) || targetBtn.offsetWidth || 0;
-    const toLeft=targetBtn.offsetLeft || 0;
-    const toWidth=targetBtn.offsetWidth || 0;
-
-    if(typeof spaceToggleThumb.getAnimations==='function'){
-        spaceToggleThumb.getAnimations().forEach(animation=>animation.cancel());
-    }
-
-    spaceToggleThumb.style.left=`${toLeft}px`;
-    spaceToggleThumb.style.width=`${toWidth}px`;
-
-    if(!animate||typeof spaceToggleThumb.animate!=='function'||(Math.abs(fromLeft-toLeft)<0.5&&Math.abs(fromWidth-toWidth)<0.5)){
+    spaceToggleThumb.style.left='';
+    spaceToggleThumb.style.width='';
+    if(!animate){
+        spaceToggle.classList.add('no-animate');
+        spaceToggle.classList.toggle('is-grid',isGrid);
+        void spaceToggleThumb.offsetWidth;
+        requestAnimationFrame(()=>spaceToggle.classList.remove('no-animate'));
         return;
     }
-
-    spaceToggleThumb.animate(
-        [
-            {left:`${fromLeft}px`,width:`${fromWidth}px`},
-            {left:`${toLeft}px`,width:`${toWidth}px`}
-        ],
-        {duration:220,easing:'cubic-bezier(0.4,0,0.2,1)'}
-    );
-    spaceToggle.dataset.ready='1';
+    spaceToggle.classList.remove('no-animate');
+    spaceToggle.classList.toggle('is-grid',isGrid);
 }
 
 function setSpace(space,{animateToggle=true}={}){
