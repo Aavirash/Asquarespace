@@ -909,7 +909,7 @@ function renderSpace2Grid(){
             <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id||thumbSrc)}" alt="" loading="lazy" decoding="async">
             <div class="space2-card-action-left">
                 <button class="space2-card-action" data-action="meta" title="Regenerate metadata" aria-label="Regenerate metadata">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6V3L8 7l4 4V8c2.21 0 4 1.79 4 4a4 4 0 0 1-6.87 2.83l-1.42 1.42A6 6 0 1 0 12 6zm-4 4a4 4 0 0 1 6.87-2.83l1.42-1.42A6 6 0 1 0 12 18v3l4-4-4-4v3a4 4 0 0 1-4-4z"/></svg>
+                    <span class="space2-card-action-glyph" aria-hidden="true">AI</span>
                 </button>
             </div>
             <div class="space2-card-actions">
@@ -1414,6 +1414,12 @@ function updateControlCornerState(){
     if(space2ViewSwitch){
         space2ViewSwitch.classList.toggle('hidden',currentSpace!=='space2');
     }
+}
+
+function updateSpace2TopCornerVisibility(){
+    if(!space2TopCorner) return;
+    const show=currentSpace==='space2'&&space2View==='grid';
+    space2TopCorner.classList.toggle('hidden',!show);
 }
 
 function initSpace2SidebarSizing(){
@@ -3528,19 +3534,26 @@ function updateSpaceSlider(){
     if(!spaceSwitcher||!spaceSlider) return;
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
-    const w=active.offsetWidth;
-    if(w===0){requestAnimationFrame(updateSpaceSlider);return;}
-    // Use getBoundingClientRect for reliable positioning on phone where offsetLeft
-    // may return 0 inside a fixed/transformed parent context.
-    const parentRect=spaceSwitcher.getBoundingClientRect();
-    const activeRect=active.getBoundingClientRect();
-    const left=activeRect.left-parentRect.left;
-    const newLeft=Math.max(0,left)+'px';
-    const newWidth=w+'px';
-    // Only update if values changed to trigger transition
-    if(spaceSlider.style.left!==newLeft||spaceSlider.style.width!==newWidth){
-        spaceSlider.style.left=newLeft;
-        spaceSlider.style.width=newWidth;
+    const newWidth=active.offsetWidth;
+    const newLeft=active.offsetLeft;
+    if(newWidth===0){requestAnimationFrame(updateSpaceSlider);return;}
+
+    // Prime once without animation so first interaction has a stable baseline.
+    if(!spaceSlider.dataset.ready){
+        spaceSlider.style.transition='none';
+        spaceSlider.style.left=`${newLeft}px`;
+        spaceSlider.style.width=`${newWidth}px`;
+        void spaceSlider.offsetWidth;
+        spaceSlider.style.transition='';
+        spaceSlider.dataset.ready='1';
+        return;
+    }
+
+    const nextLeft=`${newLeft}px`;
+    const nextWidth=`${newWidth}px`;
+    if(spaceSlider.style.left!==nextLeft||spaceSlider.style.width!==nextWidth){
+        spaceSlider.style.left=nextLeft;
+        spaceSlider.style.width=nextWidth;
     }
 }
 
@@ -3574,8 +3587,10 @@ function setSpace(space){
     }
     syncSpace2AIHubVisibility();
     updateControlCornerState();
+    updateSpace2TopCornerVisibility();
     applySpace2MobileHeaderLayout();
     requestAnimationFrame(updateSpaceSlider);
+    setTimeout(updateSpaceSlider,120);
     schedulePersist(120);
 }
 
@@ -4033,6 +4048,7 @@ function showSpace2View(view) {
     if(isGrid) scheduleSpace2GridLayout();
     syncSpace2AIHubVisibility();
     updateControlCornerState();
+    updateSpace2TopCornerVisibility();
 }
 
 function syncSpace2AIHubVisibility(){
