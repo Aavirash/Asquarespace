@@ -77,3 +77,57 @@ on storage.objects
 for delete
 to authenticated
 using (bucket_id = 'asq-media' and owner = auth.uid());
+
+-- Optional reset helpers (safe to re-run)
+-- 1) Per-user reset by email (does not fail if email is missing)
+-- Replace YOUR_SIGNIN_EMAIL before running.
+--
+-- do $$
+-- declare v_user uuid;
+-- begin
+--   select id into v_user
+--   from auth.users
+--   where lower(email) = lower('YOUR_SIGNIN_EMAIL')
+--   limit 1;
+--
+--   if v_user is null then
+--     raise notice 'No auth user found for that email in this Supabase project. Sign in once, then retry.';
+--   else
+--     delete from storage.objects
+--     where bucket_id = 'asq-media'
+--       and owner = v_user;
+--
+--     delete from public.user_workspace_state
+--     where user_id = v_user;
+--
+--     raise notice 'Reset complete for user %', v_user;
+--   end if;
+-- end $$;
+--
+-- 2) Full project wipe (all users) for this app's data only
+-- delete from storage.objects where bucket_id = 'asq-media';
+-- delete from public.user_workspace_state;
+--
+-- 3) Per-user reset without email (uses most recently active auth user)
+--
+-- do $$
+-- declare v_user uuid;
+-- begin
+--   select id into v_user
+--   from auth.users
+--   order by last_sign_in_at desc nulls last, created_at desc
+--   limit 1;
+--
+--   if v_user is null then
+--     raise notice 'No auth users found in this Supabase project.';
+--   else
+--     delete from storage.objects
+--     where bucket_id = 'asq-media'
+--       and owner = v_user;
+--
+--     delete from public.user_workspace_state
+--     where user_id = v_user;
+--
+--     raise notice 'Reset complete for most recent user %', v_user;
+--   end if;
+-- end $$;
