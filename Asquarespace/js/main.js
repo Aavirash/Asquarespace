@@ -18,6 +18,7 @@ const electronShell = electron&&electron.shell?electron.shell:null;
 const electronSystemPreferences = electron&&electron.systemPreferences?electron.systemPreferences:null;
 const APP_QUERY = new URLSearchParams(window.location.search);
 const IS_MAC_APP = APP_QUERY.get('app') === 'mac';
+const IS_MOBILE_SHELL = !IS_MAC_APP && /iphone|ipad|ipod|android/i.test(navigator.userAgent||'');
 
 const API_KEY  = 'sk_CpXbaZAa5rqnfaDUxTtFrw4rVsOjtc7m';
 const API_BASE = 'https://gen.pollinations.ai';
@@ -111,6 +112,8 @@ const moveBoardList = document.getElementById('move-board-list');
 const moveBoardCancel = document.getElementById('move-board-cancel');
 const extraMediaBrowserBtn = document.getElementById('extra-media-browser');
 const space2TopCorner = document.getElementById('space2-top-corner');
+
+if(document.body) document.body.classList.toggle('is-mobile-shell',IS_MOBILE_SHELL);
 
 const spaceSwitcher = document.getElementById('space-switcher');
 const spaceSlider = document.getElementById('space-slider');
@@ -3534,25 +3537,12 @@ function updateSpaceSlider(){
     if(!spaceSwitcher||!spaceSlider) return;
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
-    const newWidth=active.offsetWidth;
-    const newLeft=active.offsetLeft+3;
-    if(newWidth===0){requestAnimationFrame(updateSpaceSlider);return;}
-
-    const nextLeft=`${newLeft}px`;
-    const nextWidth=`${newWidth}px`;
-    if(!spaceSlider.dataset.ready){
-        spaceSlider.style.transition='none';
-        spaceSlider.style.left=nextLeft;
-        spaceSlider.style.width=nextWidth;
-        void spaceSlider.offsetWidth;
+    const isGrid=active===spaceBtn2||currentSpace==='space2';
+    spaceSwitcher.classList.toggle('is-grid',isGrid);
+    if(spaceSlider.style.left||spaceSlider.style.width||spaceSlider.style.transition){
+        spaceSlider.style.left='';
+        spaceSlider.style.width='';
         spaceSlider.style.transition='';
-        spaceSlider.dataset.ready='1';
-        return;
-    }
-
-    if(spaceSlider.style.left!==nextLeft||spaceSlider.style.width!==nextWidth){
-        spaceSlider.style.left=nextLeft;
-        spaceSlider.style.width=nextWidth;
     }
 }
 

@@ -61,7 +61,8 @@ body.auth-locked #ui-container{display:none;}
 .space2-top-import span{display:block;}
 .space-btn{position:relative;z-index:1;min-width:104px;height:30px;border:none;border-radius:8px;background:transparent;color:var(--text-mid);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;transition:color .16s ease;}
 .space-btn.active{color:var(--text);}
-.space-slider{position:absolute;left:3px;top:3px;height:30px;border-radius:8px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06);transition:left .22s cubic-bezier(.4,0,.2,1),width .22s cubic-bezier(.4,0,.2,1);z-index:0;will-change:left,width;}
+.space-slider{position:absolute;left:3px;top:3px;width:104px;height:30px;border-radius:8px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06);transition:left .22s cubic-bezier(.4,0,.2,1);z-index:0;will-change:left;}
+.space-switcher.is-grid .space-slider{left:109px;}
 
 .space2-panel{position:absolute;inset:52px 16px 18px;z-index:170;border:none;border-radius:0;background:transparent;backdrop-filter:none;box-shadow:none;display:flex;flex-direction:column;overflow:visible;--space2-sidebar-width:238px;}
 .space2-panel.hidden{display:none;}
@@ -1061,6 +1062,8 @@ body.space-2 #space2-mode-dock{display:none!important;}
     #viewport{width:100vw;height:100dvh;overflow:hidden;overscroll-behavior:none;}
     .space-switcher{top:10px;}
     .space-btn{min-width:96px;font-size:12px;height:30px;}
+    .space-slider{width:96px;}
+    .space-switcher.is-grid .space-slider{left:101px;}
     .space2-panel{inset:58px 10px calc(112px + env(safe-area-inset-bottom)) 10px;}
     .space2-panel{--space2-sidebar-width:198px;}4px;padding:2px 0 2px;min-width:0;}
     .space2-head-row{justify-content:flex-start;align-items:center;gap:6px;}
@@ -1102,6 +1105,11 @@ body.space-2 #space2-mode-dock{display:none!important;}
     #model-wrapper{min-width:0;max-width:none;flex:1 1 auto;}
     #bar-gen-btn{height:32px;padding:0 12px;min-width:88px;white-space:nowrap;flex-shrink:0;}
 }
+
+body.is-mobile-shell .mode-sw-btn{min-width:44px;width:44px;padding:8px 0;font-size:0;gap:0;}
+body.is-mobile-shell .mode-sw-btn svg,
+body.is-mobile-shell .mode-sw-btn .mode-icon-img,
+body.is-mobile-shell .mode-sw-btn .mode-icon-svg{width:16px;height:16px;}
 
 @media (max-width:390px){
     #toolbar-hub{width:calc(100% - 10px);}
