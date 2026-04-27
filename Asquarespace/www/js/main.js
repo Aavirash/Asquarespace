@@ -30,6 +30,7 @@ const SUPABASE_MEDIA_BUCKET = 'asq-media';
 const SUPABASE_STATE_TABLE = 'user_workspace_state';
 const SPACE2_SIGNED_URL_TTL_SEC = 60 * 60 * 24 * 14;
 const SPACE2_SIGNED_URL_REFRESH_GRACE_SEC = 60 * 60 * 6;
+const SPACE2_LAZY_ROOT_MARGIN_PX = 220;
 
 // ── Rotation cursor SVGs (curved arrow, rotated for each corner) ────────────
 // The SVG is a curved rotate arrow (Asquarespace branded in #ef4027).
@@ -259,6 +260,7 @@ let supabaseClient=null;
 let currentSupabaseUser=null;
 let currentAuthEmail='';
 let cloudSyncTimer=null;
+let lastCloudSyncSignature='';
 let appBootstrapped=false;
 let pendingSpace2CloudLoad=false;
 const DISCOVER_PAGE_SIZE = 18;
@@ -416,6 +418,65 @@ async function refreshSpace2SignedUrls(){
     }));
 }
 
+function sanitizeSpace2ItemForCloud(item){
+    if(!item||typeof item!=='object') return item;
+    const clean={...item};
+    delete clean.signedUrlExpiresAt;
+    if(clean.cloudPath){
+        delete clean.src;
+    }else{
+        const src=String(clean.src||'').trim();
+        if(/^blob:/i.test(src)) delete clean.src;
+    }
+    return clean;
+}
+
+function buildSpace2StatePayload({forCloud=false}={}){
+    const items=JSON.parse(JSON.stringify((space2State&&space2State.items)||[]));
+    const collections=JSON.parse(JSON.stringify((space2State&&space2State.collections)||[]));
+    return {
+        items:forCloud?items.map(sanitizeSpace2ItemForCloud):items,
+        collections,
+        savedAt:Date.now()
+    };
+}
+
+function sanitizeNodeForCloud(node){
+    if(!node||typeof node!=='object') return node;
+    const clean={...node};
+    const src=String(clean.src||'').trim();
+    if(clean.filePath&&/^file:\/\//i.test(src)) delete clean.src;
+    else if(/^blob:/i.test(src)) delete clean.src;
+    return clean;
+}
+
+function buildCloudSyncPayload(){
+    const canvas_state=buildBoardPayload({forCloud:true});
+    const space2_state=buildSpace2StatePayload({forCloud:true});
+    const payload={
+        user_id:currentSupabaseUser.id,
+        board_key:getCloudBoardKey(),
+        project_key:currentProjectKey||'local-default',
+        board_id:currentBoardId||'board-1',
+        canvas_state,
+        space2_state,
+        updated_at:new Date().toISOString()
+    };
+    const signature=JSON.stringify({
+        user_id:payload.user_id,
+        board_key:payload.board_key,
+        project_key:payload.project_key,
+        board_id:payload.board_id,
+        canvas_state,
+        space2_state
+    });
+    return {payload,signature};
+}
+
+function writeSpace2StateToLocal(projectKey=currentProjectKey,boardId=currentBoardId,payload=buildSpace2StatePayload()){
+    localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(payload));
+}
+
 function scheduleCloudSync(delay=700){
     if(!currentSupabaseUser) return;
     if(cloudSyncTimer) clearTimeout(cloudSyncTimer);
@@ -425,23 +486,11 @@ function scheduleCloudSync(delay=700){
 async function syncStateToSupabase(){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return;
-    const boardPayload=buildBoardPayload();
-    const spacePayload={
-        items:JSON.parse(JSON.stringify((space2State&&space2State.items)||[])),
-        collections:JSON.parse(JSON.stringify((space2State&&space2State.collections)||[])),
-        savedAt:Date.now()
-    };
-    const payload={
-        user_id:currentSupabaseUser.id,
-        board_key:getCloudBoardKey(),
-        project_key:currentProjectKey||'local-default',
-        board_id:currentBoardId||'board-1',
-        canvas_state:boardPayload,
-        space2_state:spacePayload,
-        updated_at:new Date().toISOString()
-    };
+    const {payload,signature}=buildCloudSyncPayload();
+    if(signature===lastCloudSyncSignature) return;
     const {error}=await client.from(SUPABASE_STATE_TABLE).upsert(payload,{onConflict:'user_id,board_key'});
     if(error) console.warn('supabase state upsert failed',error.message||error);
+    else lastCloudSyncSignature=signature;
 }
 
 async function restoreStateFromSupabase(){
@@ -459,6 +508,14 @@ async function restoreStateFromSupabase(){
     }
     if(!data) return;
     const remoteUpdatedAt=Date.parse(data.updated_at||'')||0;
+    lastCloudSyncSignature=JSON.stringify({
+        user_id:currentSupabaseUser.id,
+        board_key:getCloudBoardKey(),
+        project_key:currentProjectKey||'local-default',
+        board_id:currentBoardId||'board-1',
+        canvas_state:data.canvas_state||null,
+        space2_state:data.space2_state||null
+    });
     let localSpace2SavedAt=0;
     try{
         const localRaw=localStorage.getItem(getSpace2Key(currentProjectKey,currentBoardId));
@@ -492,7 +549,7 @@ function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     if(!space2State.collections.some(c=>c.id===space2ActiveCollection)) space2ActiveCollection='all';
     if(currentSupabaseUser&&space2State.items.some(shouldRefreshSpace2SignedUrl)){
         refreshSpace2SignedUrls().then(()=>{
-            saveSpace2State(projectKey,boardId);
+            saveSpace2State(projectKey,boardId,{skipCloudSync:true});
             renderSpace2Grid();
         }).catch(err=>console.warn('space2 signed url refresh failed',err));
     }
@@ -500,14 +557,10 @@ function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     renderSpace2Grid();
 }
 
-function saveSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
-    const payload={
-        items:JSON.parse(JSON.stringify((space2State&&space2State.items)||[])),
-        collections:JSON.parse(JSON.stringify((space2State&&space2State.collections)||[])),
-        savedAt:Date.now()
-    };
-    localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(payload));
-    scheduleCloudSync(760);
+function saveSpace2State(projectKey=currentProjectKey,boardId=currentBoardId,{skipCloudSync=false}={}){
+    const payload=buildSpace2StatePayload();
+    writeSpace2StateToLocal(projectKey,boardId,payload);
+    if(!skipCloudSync) scheduleCloudSync(760);
 }
 
 function getFilteredSpace2Items(){
@@ -928,7 +981,10 @@ function renderSpace2Grid(){
         card.type='button';
         card.className='space2-item img-pending';
         card.innerHTML=`
-            <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id||thumbSrc)}" alt="" loading="lazy" decoding="async">
+            <div class="space2-thumb-shell">
+                <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id||thumbSrc)}" alt="" loading="lazy" decoding="async">
+                <div class="space2-thumb-skeleton" aria-hidden="true"></div>
+            </div>
             <div class="space2-card-action-left">
                 <button class="space2-card-action" data-action="meta" title="Regenerate metadata" aria-label="Regenerate metadata">
                     <span class="space2-card-action-glyph" aria-hidden="true">AI</span>
@@ -1128,7 +1184,7 @@ function ensureSpace2LazyImageObserver(){
         });
     },{
         root:space2Grid||null,
-        rootMargin:'460px 0px',
+        rootMargin:`${SPACE2_LAZY_ROOT_MARGIN_PX}px 0px`,
         threshold:0.01
     });
 }
@@ -2168,8 +2224,11 @@ function serializeNode(n){
     };
 }
 
-function buildBoardPayload(){
-    const nodes=allNodes.map(serializeNode).filter(Boolean);
+function buildBoardPayload({forCloud=false}={}){
+    const nodes=allNodes
+        .map(serializeNode)
+        .filter(Boolean)
+        .map(node=>forCloud?sanitizeNodeForCloud(node):node);
     return {
         version:2,
         projectKey:currentProjectKey,
