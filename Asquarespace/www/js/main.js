@@ -3535,20 +3535,13 @@ function openBoardPanel(){
 
 function updateSpaceSlider(){
     if(!spaceSwitcher||!spaceSlider) return;
-    const isGrid = currentSpace === 'space2';
-    const mobile = window.innerWidth <= 980;
-    // Hardcoded positions matching CSS exactly — no offsetLeft dependency.
-    const toLeft = isGrid ? (mobile ? 101 : 109) : 3;
-    const fromLeft = parseFloat(getComputedStyle(spaceSlider).left) || (isGrid ? 3 : 109);
-    spaceSwitcher.classList.toggle('is-grid', isGrid);
-    // Set final state as inline style so it holds after animation (same pattern as showSpace2View).
-    spaceSlider.style.left = toLeft + 'px';
-    if(Math.abs(fromLeft - toLeft) > 1){
-        spaceSlider.animate(
-            [{left:fromLeft+'px'},{left:toLeft+'px'}],
-            {duration:220,easing:'cubic-bezier(0.4,0,0.2,1)'}
-        );
-    }
+    // Clear any inline style overrides so the CSS transition owns the animation.
+    // CSS already has: .space-slider{transition:left .22s...} and
+    // .space-switcher.is-grid .space-slider{left:109px} / @media left:101px.
+    // Toggling the class is all that's needed — identical to how .space2-view-thumb works.
+    spaceSlider.style.left = '';
+    spaceSlider.style.width = '';
+    spaceSwitcher.classList.toggle('is-grid', currentSpace === 'space2');
 }
 
 function setSpace(space){
@@ -3583,7 +3576,7 @@ function setSpace(space){
     updateControlCornerState();
     updateSpace2TopCornerVisibility();
     applySpace2MobileHeaderLayout();
-    requestAnimationFrame(updateSpaceSlider);
+    updateSpaceSlider();
     schedulePersist(120);
 }
 
@@ -4047,13 +4040,7 @@ function showSpace2View(view) {
             space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
             space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
         }
-        // Desktop only: float the view-switch to top-left of the app in grid mode.
-        if(space2ViewSwitch){
-            space2ViewSwitch.classList.toggle('grid-float', isGrid && window.innerWidth > 760);
-        }
-        if(space2SearchWrap){
-            space2SearchWrap.classList.toggle('search-float', isGrid && window.innerWidth > 760);
-        }
+        // View-switch and search bar stay embedded inside the sidebar header (no floating).
     }
     if(space2DiscoverControls) space2DiscoverControls.classList.toggle('hidden', isGrid);
     if(space2Search) space2Search.placeholder = isGrid ? 'Search...' : 'Search in discover...';
