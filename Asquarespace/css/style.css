@@ -239,7 +239,7 @@ body.space-2 #space2-ai-hub{display:flex!important;}
 body:not(.space-2) #space2-ai-hub{display:none!important;}
 /* Dock: hidden by default everywhere, shown only in Space 2 on mobile/tablet */
 #space2-mode-dock{display:none!important;}
-body.space-2 #space2-mode-dock{display:none!important;}
+body.space-2 #space2-mode-dock{display:flex!important;}
 
 /* Workflow Dock + Canvas Nodes (mac app only) */
 .workflow-dock{position:relative;z-index:320;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}

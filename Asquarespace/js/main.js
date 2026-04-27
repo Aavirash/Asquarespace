@@ -31,6 +31,7 @@ const SUPABASE_STATE_TABLE = 'user_workspace_state';
 const SPACE2_SIGNED_URL_TTL_SEC = 60 * 60 * 24 * 14;
 const SPACE2_SIGNED_URL_REFRESH_GRACE_SEC = 60 * 60 * 6;
 const SPACE2_LAZY_ROOT_MARGIN_PX = 220;
+const SPACE2_LOCAL_BLOB_PREFIX = 'idb://space2/';
 
 // ── Rotation cursor SVGs (curved arrow, rotated for each corner) ────────────
 // The SVG is a curved rotate arrow (Asquarespace branded in #ef4027).
@@ -423,6 +424,29 @@ async function refreshSpace2SignedUrls(){
     }));
 }
 
+async function syncPendingSpace2LocalItems(){
+    if(!currentSupabaseUser||!space2State||!Array.isArray(space2State.items)) return;
+    const pending=space2State.items.filter(item=>!item.cloudPath&&parseSpace2LocalBlobRef(item.src||''));
+    if(!pending.length) return;
+    for(const item of pending){
+        const blobKey=parseSpace2LocalBlobRef(item.src||'');
+        if(!blobKey) continue;
+        const blob=await _getCachedImgBlob(blobKey);
+        if(!blob) continue;
+        try{
+            const uploaded=await uploadBlobToSupabase(blob,{folder:'space2',nameHint:item.title||'upload'});
+            if(uploaded&&uploaded.path){
+                item.cloudPath=uploaded.path;
+                if(uploaded.url) item.src=uploaded.url;
+                if(uploaded.expiresAt) item.signedUrlExpiresAt=uploaded.expiresAt;
+                item.updatedAt=Date.now();
+            }
+        }catch(err){
+            console.warn('space2 pending local sync failed',err);
+        }
+    }
+}
+
 function sanitizeSpace2ItemForCloud(item){
     if(!item||typeof item!=='object') return item;
     const clean={...item};
@@ -654,16 +678,28 @@ function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
         const primaryRaw=localStorage.getItem(primaryKey);
         const raw=primaryRaw||findLegacySpace2State(projectKey);
         const parsed=raw?JSON.parse(raw):null;
-        const items=Array.isArray(parsed&&parsed.items)?parsed.items.filter(i=>i&&i.id&&(i.src||i.cloudPath)):[];
+        const items=Array.isArray(parsed&&parsed.items)?parsed.items.filter(i=>i&&i.id&&(i.src||i.cloudPath||i.browserBlobKey||parseSpace2LocalBlobRef(i.src||''))):[];
         const collections=Array.isArray(parsed&&parsed.collections)?parsed.collections.filter(c=>c&&c.id&&c.name):[];
         if(!primaryRaw&&raw){
             try{ localStorage.setItem(primaryKey,raw); }catch{}
         }
+        items.forEach(item=>{
+            if(!item.browserBlobKey){
+                const blobKey=parseSpace2LocalBlobRef(item.src||'');
+                if(blobKey) item.browserBlobKey=blobKey;
+            }
+        });
         space2State={items,collections};
     }catch{
         space2State=defaultSpace2State();
     }
     if(!space2State.collections.some(c=>c.id===space2ActiveCollection)) space2ActiveCollection='all';
+    if(currentSupabaseUser){
+        syncPendingSpace2LocalItems().then(()=>{
+            saveSpace2State(projectKey,boardId,{skipCloudSync:false});
+            renderSpace2Grid();
+        }).catch(err=>console.warn('space2 pending local upload retry failed',err));
+    }
     if(currentSupabaseUser&&space2State.items.some(shouldRefreshSpace2SignedUrl)){
         refreshSpace2SignedUrls().then(()=>{
             saveSpace2State(projectKey,boardId,{skipCloudSync:true});
@@ -1267,8 +1303,36 @@ async function _setCachedImgBlob(key,blob){
         });
     }catch{}
 }
+function buildSpace2LocalBlobRef(blobKey=''){
+    return blobKey?`${SPACE2_LOCAL_BLOB_PREFIX}${blobKey}`:'';
+}
+function parseSpace2LocalBlobRef(ref=''){
+    const src=String(ref||'').trim();
+    return src.startsWith(SPACE2_LOCAL_BLOB_PREFIX)?src.slice(SPACE2_LOCAL_BLOB_PREFIX.length):'';
+}
+async function persistSpace2BrowserBlob(blob,nameHint='upload'){
+    if(!blob) return '';
+    const cleanHint=String(nameHint||'upload').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28)||'upload';
+    const blobKey=`space2:${Date.now()}_${Math.floor(Math.random()*100000)}_${cleanHint}`;
+    await _setCachedImgBlob(blobKey,blob);
+    return blobKey;
+}
+async function resolveSpace2LocalBlobUrl(blobKey=''){
+    if(!blobKey) return '';
+    const blob=await _getCachedImgBlob(blobKey);
+    return blob?URL.createObjectURL(blob):'';
+}
 async function _loadImgWithBlobCache(img,url,cacheKey){
     if(!url) return;
+    const localBlobKey=parseSpace2LocalBlobRef(url);
+    if(localBlobKey){
+        const localUrl=await resolveSpace2LocalBlobUrl(localBlobKey);
+        if(localUrl){
+            img.src=localUrl;
+            return;
+        }
+        return;
+    }
     const cached=await _getCachedImgBlob(cacheKey);
     if(cached){
         img.src=URL.createObjectURL(cached);
@@ -1322,11 +1386,22 @@ function observeSpace2LazyImage(img){
     if(space2LazyImageObserver) space2LazyImageObserver.observe(img);
 }
 
-function openSpace2Item(itemId){
+async function resolveSpace2ItemDisplaySource(item){
+    if(!item) return '';
+    const localBlobKey=item.browserBlobKey||parseSpace2LocalBlobRef(item.src||'');
+    if(localBlobKey){
+        const localUrl=await resolveSpace2LocalBlobUrl(localBlobKey);
+        if(localUrl) return localUrl;
+    }
+    return item.src||'';
+}
+
+async function openSpace2Item(itemId){
     const item=space2State.items.find(i=>i.id===itemId);
     if(!item) return;
     space2ActiveItemId=itemId;
-    if(space2ItemPreview) space2ItemPreview.innerHTML=`<img src="${item.src}" alt="">`;
+    const previewSrc=await resolveSpace2ItemDisplaySource(item);
+    if(space2ItemPreview) space2ItemPreview.innerHTML=`<img src="${previewSrc}" alt="">`;
     if(space2ItemTitle) space2ItemTitle.value=item.title||'';
     if(space2ItemDesc) space2ItemDesc.value=item.description||'';
     if(space2AssignList){
@@ -1379,7 +1454,7 @@ function deleteSpace2Item(){
 async function downloadSpace2ActiveItem(){
     const item=space2State.items.find(i=>i.id===space2ActiveItemId);
     if(!item) return;
-    await downloadImageAsset(item.src,item.title||'space-image');
+    await downloadImageAsset(item.src,item.title||'space-image',item.browserBlobKey||'');
 }
 
 function createSpace2Collection(){
@@ -1391,8 +1466,9 @@ function insertSpace2Item(item,{collectionIds}={}){
     if(!src) return {item:null,added:false,changed:false};
     const filePath=item.filePath||'';
     const cloudPath=item.cloudPath||'';
+    const browserBlobKey=item.browserBlobKey||'';
     const signedUrlExpiresAt=parseInt(item.signedUrlExpiresAt||0,10)||0;
-    const existing=space2State.items.find(i=>(filePath&&i.filePath===filePath)||i.src===src);
+    const existing=space2State.items.find(i=>(filePath&&i.filePath===filePath)||(browserBlobKey&&i.browserBlobKey===browserBlobKey)||i.src===src);
     const normalizedCollectionIds=Array.isArray(collectionIds)
         ? [...new Set(collectionIds.filter(Boolean))]
         : (space2ActiveCollection==='all'?[]:[space2ActiveCollection]);
@@ -1416,6 +1492,7 @@ function insertSpace2Item(item,{collectionIds}={}){
         src,
         filePath,
         cloudPath,
+        browserBlobKey,
         signedUrlExpiresAt,
         title:item.title||(filePath?filePath.split('/').pop():'Untitled'),
         description:item.description||'',
@@ -1511,27 +1588,13 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
     const list=[...(files||[])].filter(f=>f&&f.type&&f.type.startsWith('image/'));
     if(!list.length) return;
     const items=[];
+    let hadLocalFallback=false;
     for(const f of list){
         let src='';
         let filePath='';
         let cloudPath='';
+        let browserBlobKey='';
         let signedUrlExpiresAt=0;
-        if(f.path){
-            filePath=f.path;
-            src=toFileUrl(f.path);
-        }else{
-            const persisted=await persistGeneratedBlob(f,'grid_upload').catch(()=> '');
-            if(persisted){
-                filePath=persisted;
-                src=toFileUrl(persisted);
-            }else{
-                try{
-                    src=await blobToDataUrl(f);
-                }catch{
-                    src=URL.createObjectURL(f);
-                }
-            }
-        }
         if(currentSupabaseUser){
             try{
                 const uploaded=await uploadBlobToSupabase(f,{folder:'space2',nameHint:f.name||'capture'});
@@ -1544,10 +1607,39 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
                 console.warn('space2 upload sync failed',err);
             }
         }
+        if(f.path){
+            filePath=f.path;
+            if(!src) src=toFileUrl(f.path);
+        }else if(!src){
+            browserBlobKey=await persistSpace2BrowserBlob(f,f.name||'upload').catch(()=> '');
+            if(browserBlobKey){
+                src=buildSpace2LocalBlobRef(browserBlobKey);
+                hadLocalFallback=true;
+            }else{
+                try{
+                    src=await blobToDataUrl(f);
+                    hadLocalFallback=true;
+                }catch{
+                    src=URL.createObjectURL(f);
+                    hadLocalFallback=true;
+                }
+            }
+        }
+        if(!src&&f.path){
+            const persisted=await persistGeneratedBlob(f,'grid_upload').catch(()=> '');
+            if(persisted){
+                filePath=persisted;
+                src=toFileUrl(persisted);
+            }
+        }
         if(!src) continue;
-        items.push({src,filePath,title:f.name||'Upload',cloudPath,signedUrlExpiresAt,analysisBlob:f});
+        items.push({src,filePath,title:f.name||'Upload',cloudPath,browserBlobKey,signedUrlExpiresAt,analysisBlob:f});
     }
-    upsertSpace2Items(items,{openEditor});
+    const added=upsertSpace2Items(items,{openEditor});
+    if(hadLocalFallback){
+        setSpace2AutoMetaStatus('Some uploads were kept locally and will retry cloud sync automatically.');
+    }
+    return added;
 }
 
 function initSpace2GridDropzone(){
@@ -2100,14 +2192,20 @@ function sanitizeDownloadBaseName(name='image'){
     return cleaned || 'image';
 }
 
-async function downloadImageAsset(source,fileNameBase='image'){
-    const src=normalizePreviewSource(source);
-    if(!src) return;
-    const fallbackExt=extFromSrcPath(src)||mediaExtFromSource(src)||'jpg';
+async function downloadImageAsset(source,fileNameBase='image',browserBlobKey=''){
+    const localBlobKey=browserBlobKey||parseSpace2LocalBlobRef(source);
+    const src=localBlobKey?'':normalizePreviewSource(source);
+    if(!src&&!localBlobKey) return;
+    const fallbackExt=src?(extFromSrcPath(src)||mediaExtFromSource(src)||'jpg'):'jpg';
     let blob=null;
     let ext=fallbackExt;
     try{
-        if(/^file:\/\//i.test(src)&&nodeFs){
+        if(localBlobKey){
+            blob=await _getCachedImgBlob(localBlobKey);
+            if(!blob) throw new Error('Missing local blob');
+            const byType=extFromMime(blob.type);
+            if(byType!=='bin') ext=byType;
+        }else if(/^file:\/\//i.test(src)&&nodeFs){
             const fp=filePathFromFileUrl(src);
             const mime=mimeFromExt(ext);
             blob=new Blob([nodeFs.readFileSync(fp)],{type:mime});
