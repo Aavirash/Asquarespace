@@ -3538,20 +3538,25 @@ function updateSpaceSlider(){
     const active=spaceSwitcher.querySelector('.space-btn.active');
     if(!active) return;
     const isGrid=active===spaceBtn2||currentSpace==='space2';
-    // Snapshot current position BEFORE the class change.
-    const frozenLeft  = getComputedStyle(spaceSlider).left;
-    const frozenWidth = getComputedStyle(spaceSlider).width;
+    // Read position BEFORE class toggle — after toggle the CSS computed value changes.
+    const startLeft  = getComputedStyle(spaceSlider).left;
+    const startWidth = getComputedStyle(spaceSlider).width;
     spaceSwitcher.classList.toggle('is-grid',isGrid);
-    // Freeze so the class-driven CSS change can't snap the slider.
+    // Freeze: inline style overrides the class-driven CSS change, no jump.
     spaceSlider.style.transition = 'none';
-    spaceSlider.style.left  = frozenLeft;
-    spaceSlider.style.width = frozenWidth;
-    // Flush: commit frozen position as the animation start frame.
-    void spaceSlider.offsetHeight;
-    // Animate to the active button's position.
-    spaceSlider.style.transition = 'left .22s cubic-bezier(.4,0,.2,1),width .22s cubic-bezier(.4,0,.2,1)';
-    spaceSlider.style.left  = active.offsetLeft  + 'px';
-    spaceSlider.style.width = active.offsetWidth + 'px';
+    spaceSlider.style.left  = startLeft;
+    spaceSlider.style.width = startWidth;
+    // Double-rAF: frame 1 lets the browser paint the frozen state to the compositor,
+    // frame 2 starts the animation from that committed state.
+    const endLeft  = active.offsetLeft  + 'px';
+    const endWidth = active.offsetWidth + 'px';
+    requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+            spaceSlider.style.transition = 'left .22s cubic-bezier(.4,0,.2,1),width .22s cubic-bezier(.4,0,.2,1)';
+            spaceSlider.style.left  = endLeft;
+            spaceSlider.style.width = endWidth;
+        });
+    });
 }
 
 function setSpace(space){
@@ -4030,23 +4035,24 @@ function showSpace2View(view) {
     space2View=isGrid?'grid':'discover';
     if(space2ViewToggle){
         const thumb = space2ViewToggle.querySelector('.space2-view-thumb');
-        // Snapshot current position BEFORE the class change so we always have
-        // a valid start point regardless of whether style.left is set yet.
+        // Snapshot BEFORE class toggle so we have the true start position.
         if(thumb){
-            const frozenLeft = getComputedStyle(thumb).left;
+            const startLeft = getComputedStyle(thumb).left;
             space2ViewToggle.classList.toggle('is-grid', isGrid);
             space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
             space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
-            // Lock the frozen position as inline style with no transition so the
-            // class change can't cause a jump.
+            // Freeze at start position, class-driven CSS change can't snap it.
             thumb.style.transition = 'none';
-            thumb.style.left = frozenLeft;
-            // Flush: forces the browser to commit frozenLeft as the start frame.
-            void thumb.offsetHeight;
-            // Animate to the target.
+            thumb.style.left = startLeft;
             const mobile = window.innerWidth <= 760;
-            thumb.style.transition = 'left .2s cubic-bezier(.4,0,.2,1)';
-            thumb.style.left = isGrid ? (mobile ? '34px' : '42px') : '2px';
+            const endLeft = isGrid ? (mobile ? '34px' : '42px') : '2px';
+            // Double-rAF so compositor commits the frozen frame before animating.
+            requestAnimationFrame(function(){
+                requestAnimationFrame(function(){
+                    thumb.style.transition = 'left .2s cubic-bezier(.4,0,.2,1)';
+                    thumb.style.left = endLeft;
+                });
+            });
         } else {
             space2ViewToggle.classList.toggle('is-grid', isGrid);
             space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
