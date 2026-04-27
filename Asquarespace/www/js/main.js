@@ -141,6 +141,7 @@ const space2Sidebar = document.getElementById('space2-sidebar');
 const space2SettingsBtn = document.getElementById('space2-settings-btn');
 const space2SettingsModal = document.getElementById('space2-settings-modal');
 const space2SettingsClose = document.getElementById('space2-settings-close');
+const space2SettingsSignOut = document.getElementById('space2-settings-signout');
 const space2CapturePermissionBtn = document.getElementById('space2-capture-permission-btn');
 const space2CaptureStatus = document.getElementById('space2-capture-status');
 const space2LayoutGridBtn = document.getElementById('space2-layout-grid-btn');
@@ -724,13 +725,18 @@ async function restoreStateFromSupabase(){
     if(space2Data&&space2Data.space2_state){
         const remoteItems=(space2Data.space2_state.items||[]).length;
         const remoteRenderableItems=(space2Data.space2_state.items||[]).filter(hasRenderableSpace2Source).length;
+        const remoteSavedAt=parseInt(space2Data.space2_state&&space2Data.space2_state.savedAt,10)||0;
         let localItems=0;
+        let localSavedAt=0;
         try{
             const localRaw=localStorage.getItem(getSpace2Key(currentProjectKey));
             const localParsed=localRaw?JSON.parse(localRaw):null;
             localItems=Array.isArray(localParsed&&localParsed.items)?localParsed.items.length:0;
+            localSavedAt=parseInt(localParsed&&localParsed.savedAt,10)||0;
         }catch{}
-        if(remoteItems>0&&remoteRenderableItems===0&&localItems>0){
+        if(localSavedAt>0&&remoteSavedAt>0&&localSavedAt>remoteSavedAt&&localItems>0){
+            setSpace2AutoMetaStatus('ℹ️ Kept newer local Space 2 state (cloud row appears older).');
+        }else if(remoteItems>0&&remoteRenderableItems===0&&localItems>0){
             const msg='Cloud Space 2 row had media entries without valid sources; kept local state.';
             console.warn(msg);
             setSpace2AutoMetaStatus('⚠️ '+msg,true);
@@ -4722,6 +4728,12 @@ if(space2CollectionNameInput) space2CollectionNameInput.addEventListener('keydow
 if(space2CollectionModal) space2CollectionModal.addEventListener('click',e=>{if(e.target===space2CollectionModal) closeCollectionModal();});
 if(space2SettingsBtn) space2SettingsBtn.addEventListener('click',openSpace2SettingsModal);
 if(space2SettingsClose) space2SettingsClose.addEventListener('click',closeSpace2SettingsModal);
+if(space2SettingsSignOut) space2SettingsSignOut.addEventListener('click',async e=>{
+    e.stopPropagation();
+    if(!window.confirm('Log out of this device and return to sign-in?')) return;
+    closeSpace2SettingsModal();
+    await signOutCurrentUser();
+});
 if(space2CapturePermissionBtn) space2CapturePermissionBtn.addEventListener('click',()=>requestSpace2CapturePermission({silent:false}));
 if(space2LayoutGridBtn) space2LayoutGridBtn.addEventListener('click',()=>{
     space2LayoutMode='grid';
