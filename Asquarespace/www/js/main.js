@@ -1444,11 +1444,8 @@ function applySpace2MobileHeaderLayout(){
         if(space2SidebarHead&&space2SearchWrap&&space2SearchWrap.parentElement!==space2SidebarHead){
             space2SidebarHead.appendChild(space2SearchWrap);
         }
-        if(space2ModeDock&&themeToggle&&themeToggle.parentElement!==space2ModeDock){
-            space2ModeDock.appendChild(themeToggle);
-        }
     }else{
-        [space2ViewSwitch,space2SearchWrap,themeToggle].forEach(restoreSpace2MobileLayoutSlot);
+        [space2ViewSwitch,space2SearchWrap].forEach(restoreSpace2MobileLayoutSlot);
     }
 
     if(space2TopSearch){
