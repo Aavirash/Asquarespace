@@ -4581,6 +4581,7 @@ window.addEventListener('load',()=>requestAnimationFrame(updateSpaceSlider));
 window.addEventListener('resize',()=>{requestAnimationFrame(updateSpaceSlider);updateBottomBarCompactUi();});
 setTimeout(updateSpaceSlider,200);
 setTimeout(updateBottomBarCompactUi,220);
+(()=>{const sw=document.getElementById('space-switcher');if(sw&&typeof ResizeObserver!=='undefined'){new ResizeObserver(()=>requestAnimationFrame(updateSpaceSlider)).observe(sw);}})();
 
 // ── Models ─────────────────────────────────────────────────────────────────
 function jsonReq(url,extra={}){
