@@ -3555,10 +3555,12 @@ function setSpace(space){
         if(forcedCollapsed&&space2Panel) space2Panel.classList.add('sidebar-collapsed');
         if(space2Panel) space2Panel.classList.remove('hidden');
         if(space2TopSearch) space2TopSearch.classList.remove('hidden');
-        loadSpace2State();
-        if(forcedCollapsed) setSpace2CollectionsOpen(false,{skipPersist:true});
-        else setSpace2CollectionsOpen(space2CollectionsOpen);
-        showSpace2View(space2View);
+            // Show the correct view BEFORE loading state so layoutSpace2Grid() measures
+            // the full grid width (discover is hidden) instead of 50% (both flex:1 visible).
+            showSpace2View(space2View);
+            if(forcedCollapsed) setSpace2CollectionsOpen(false,{skipPersist:true});
+            else setSpace2CollectionsOpen(space2CollectionsOpen);
+            loadSpace2State();
         if(forcedCollapsed){scheduleSpace2GridLayout();setTimeout(scheduleSpace2GridLayout,120);}
     }else{
         document.body.classList.remove('space-2');
