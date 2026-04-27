@@ -116,6 +116,7 @@ const space2TopCorner = document.getElementById('space2-top-corner');
 if(document.body) document.body.classList.toggle('is-mobile-shell',IS_MOBILE_SHELL);
 
 const spaceToggle = document.getElementById('space-toggle');
+const spaceToggleThumb = document.getElementById('space-toggle-thumb');
 const space2Panel = document.getElementById('space2-panel');
 const space2ModeDock = document.getElementById('space2-mode-dock');
 const space2Search = document.getElementById('space2-search');
@@ -2194,8 +2195,8 @@ function loadBoardState(projectKey,boardId){
         }
         if(ui.currentModel){currentModel=ui.currentModel;modelLabel.textContent=ui.currentModel;}
         if(ui.appMode) setMode(ui.appMode);
-        if(ui.currentSpace) setSpace(ui.currentSpace);
-        else setSpace('space2');
+        if(ui.currentSpace) setSpace(ui.currentSpace,{animateToggle:false});
+        else setSpace('space2',{animateToggle:false});
         renderFavoritesStrip();
         return true;
     }catch(err){
@@ -2239,7 +2240,7 @@ async function initPersistence(){
     boards=meta.boards;
     currentBoardId=meta.currentBoardId;
     renderBoardList();
-    if(!loadBoardState(currentProjectKey,currentBoardId)) setSpace('space2');
+    if(!loadBoardState(currentProjectKey,currentBoardId)) setSpace('space2',{animateToggle:false});
     loadSpace2State(currentProjectKey,currentBoardId);
     recoverCanvasIfEmpty(currentProjectKey);
     persistenceReady=true;
@@ -3531,30 +3532,49 @@ function openBoardPanel(){
     boardPanel.classList.remove('hidden');
 }
 
-function updateSpaceSlider(){
-    if(!spaceToggle) return;
-    const thumb=spaceToggle.querySelector('.space-toggle-thumb');
-    const isGrid=currentSpace==='space2';
-    if(thumb){
-        const mobile=window.innerWidth<=760;
-        const fromLeft=parseFloat(getComputedStyle(thumb).left)||0;
-        const toLeft=isGrid?(mobile?98:106):0;
-        spaceToggle.classList.toggle('is-grid',isGrid);
-        spaceToggle.setAttribute('aria-pressed',isGrid?'true':'false');
-        thumb.style.left=toLeft+'px';
-        if(Math.abs(fromLeft-toLeft)>0.5){
-            thumb.animate(
-                [{left:fromLeft+'px'},{left:toLeft+'px'}],
-                {duration:220,easing:'cubic-bezier(0.4,0,0.2,1)'}
-            );
-        }
-        return;
-    }
-    spaceToggle.classList.toggle('is-grid',isGrid);
-    spaceToggle.setAttribute('aria-pressed',isGrid?'true':'false');
+function getSpaceToggleTargetX(){
+    if(!spaceToggle||!spaceToggleThumb) return 0;
+    if(currentSpace!=='space2') return 0;
+    const trackWidth=spaceToggle.clientWidth||0;
+    const thumbWidth=spaceToggleThumb.offsetWidth||0;
+    return Math.max(0,trackWidth-thumbWidth);
 }
 
-function setSpace(space){
+function updateSpaceSlider({animate=true}={}){
+    if(!spaceToggle) return;
+    const isGrid=currentSpace==='space2';
+    spaceToggle.classList.toggle('is-grid',isGrid);
+    spaceToggle.setAttribute('aria-pressed',isGrid?'true':'false');
+    if(!spaceToggleThumb) return;
+
+    const toX=getSpaceToggleTargetX();
+    const ready=spaceToggle.dataset.ready==='1';
+    const fromX=Number(spaceToggle.dataset.thumbX ?? toX);
+
+    if(typeof spaceToggleThumb.getAnimations==='function'){
+        spaceToggleThumb.getAnimations().forEach(animation=>animation.cancel());
+    }
+
+    if(!animate||!ready||Math.abs(fromX-toX)<0.5||typeof spaceToggleThumb.animate!=='function'){
+        spaceToggleThumb.style.transform=`translateX(${toX}px)`;
+        spaceToggle.dataset.thumbX=String(toX);
+        spaceToggle.dataset.ready='1';
+        return;
+    }
+
+    spaceToggleThumb.style.transform=`translateX(${toX}px)`;
+    spaceToggleThumb.animate(
+        [
+            {transform:`translateX(${fromX}px)`},
+            {transform:`translateX(${toX}px)`}
+        ],
+        {duration:220,easing:'cubic-bezier(0.4,0,0.2,1)'}
+    );
+    spaceToggle.dataset.thumbX=String(toX);
+    spaceToggle.dataset.ready='1';
+}
+
+function setSpace(space,{animateToggle=true}={}){
     currentSpace=space==='space2'?'space2':'space1';
     if(currentSpace==='space2'){
         document.body.classList.add('space-2');
@@ -3584,7 +3604,7 @@ function setSpace(space){
     updateControlCornerState();
     updateSpace2TopCornerVisibility();
     applySpace2MobileHeaderLayout();
-    updateSpaceSlider();
+    updateSpaceSlider({animate:animateToggle});
     schedulePersist(120);
 }
 
@@ -3932,6 +3952,7 @@ settingsModal.addEventListener('click',e=>{if(e.target===settingsModal) closeSet
 if(spaceToggle){
     spaceToggle.addEventListener('click',e=>{
         e.stopPropagation();
+        if(e.detail===0) return;
         const rect=spaceToggle.getBoundingClientRect();
         const clickX=typeof e.clientX==='number'?e.clientX-rect.left:rect.width;
         setSpace(clickX>=rect.width/2?'space2':'space1');
@@ -3943,6 +3964,8 @@ if(spaceToggle){
         }
     });
 }
+window.addEventListener('resize',()=>updateSpaceSlider({animate:false}));
+window.addEventListener('orientationchange',()=>updateSpaceSlider({animate:false}));
 if(space2Search) space2Search.addEventListener('input',()=>{
     space2SearchText=space2Search.value||'';
     if(space2View==='discover') filterDiscoverFeedBySearch();
