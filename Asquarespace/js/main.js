@@ -669,10 +669,12 @@ function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     renderSpace2Grid();
 }
 
-function saveSpace2State(projectKey=currentProjectKey,boardId=currentBoardId,{skipCloudSync=false}={}){
+function saveSpace2State(projectKey=currentProjectKey,boardId=currentBoardId,{skipCloudSync=false,immediateCloudSync=false}={}){
     const payload=buildSpace2StatePayload();
     writeSpace2StateToLocal(projectKey,boardId,payload);
-    if(!skipCloudSync) scheduleCloudSync(760);
+    if(skipCloudSync) return;
+    if(immediateCloudSync) flushCloudSync({force:true});
+    else scheduleCloudSync(760);
 }
 
 function getFilteredSpace2Items(){
@@ -940,7 +942,7 @@ function toggleItemCollection(itemId,colId){
     else ids.add(colId);
     item.collectionIds=[...ids];
     item.updatedAt=Date.now();
-    saveSpace2State();
+    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
 }
@@ -951,7 +953,7 @@ function removeSpace2Collection(colId){
         item.collectionIds=(item.collectionIds||[]).filter(id=>id!==colId);
     });
     if(space2ActiveCollection===colId) space2ActiveCollection='all';
-    saveSpace2State();
+    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
 }
@@ -966,7 +968,7 @@ function removeItemFromSpace2View(itemId){
         item.collectionIds=(item.collectionIds||[]).filter(id=>id!==space2ActiveCollection);
         item.updatedAt=Date.now();
     }
-    saveSpace2State();
+    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
 }
@@ -1019,7 +1021,7 @@ function saveCollectionModal(){
             }catch{}
         }
     }
-    saveSpace2State();
+    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
     closeCollectionModal();
@@ -1354,7 +1356,7 @@ function saveSpace2Item(){
         : [];
     item.collectionIds=selectedCols;
     item.updatedAt=Date.now();
-    saveSpace2State();
+    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
     closeSpace2Item();
@@ -1363,7 +1365,7 @@ function saveSpace2Item(){
 function deleteSpace2Item(){
     if(!space2ActiveItemId) return;
     space2State.items=space2State.items.filter(i=>i.id!==space2ActiveItemId);
-    saveSpace2State();
+    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
     closeSpace2Item();
@@ -1441,7 +1443,7 @@ function upsertSpace2Items(items,{openEditor=false}={}){
         if(inserted.changed) changed=true;
     });
     if(!changed) return 0;
-    saveSpace2State();
+    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
     if(autoMetaQueue.length){
@@ -1469,7 +1471,7 @@ function sendDiscoverItem(item,target,collectionId=''){
     if(target==='grid'){
         const inserted=insertSpace2Item(payload,{collectionIds:[]});
         if(!inserted.changed) return 'grid';
-        saveSpace2State();
+        saveSpace2State(undefined,undefined,{immediateCloudSync:true});
         renderSpace2Collections();
         renderSpace2Grid();
         return 'grid';
@@ -1478,7 +1480,7 @@ function sendDiscoverItem(item,target,collectionId=''){
         ? [collectionId]
         : (space2ActiveCollection!=='all'?[space2ActiveCollection]:[]);
     const inserted=insertSpace2Item(payload,{collectionIds:activeCollectionIds});
-    saveSpace2State();
+    saveSpace2State(undefined,undefined,{immediateCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
     if(activeCollectionIds.length) return inserted.added?'collection':'collection';
