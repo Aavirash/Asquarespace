@@ -445,13 +445,45 @@ async function refreshSpace2SignedUrls(){
 
 async function syncPendingSpace2LocalItems(){
     if(!currentSupabaseUser||!space2State||!Array.isArray(space2State.items)) return;
-    const pending=space2State.items.filter(item=>!item.cloudPath&&parseSpace2LocalBlobRef(item.src||''));
+    const pending=space2State.items.filter(item=>{
+        if(!item||item.cloudPath) return false;
+        const src=String(item.src||'').trim();
+        if(parseSpace2LocalBlobRef(src)) return true;
+        if(/^data:image\//i.test(src)) return true;
+        if(/^file:\/\//i.test(src)) return true;
+        if(item.filePath) return true;
+        return false;
+    });
     if(!pending.length) return;
+    let migrated=0;
+    let failed=0;
     for(const item of pending){
-        const blobKey=parseSpace2LocalBlobRef(item.src||'');
-        if(!blobKey) continue;
-        const blob=await _getCachedImgBlob(blobKey);
-        if(!blob) continue;
+        const src=String(item.src||'').trim();
+        const blobKey=parseSpace2LocalBlobRef(src);
+        let blob=null;
+        if(blobKey) blob=await _getCachedImgBlob(blobKey);
+        if(!blob&&/^data:image\//i.test(src)){
+            try{
+                const res=await fetch(src);
+                if(res.ok) blob=await res.blob();
+            }catch{}
+        }
+        if(!blob&&/^file:\/\//i.test(src)){
+            try{
+                const res=await fetch(src);
+                if(res.ok) blob=await res.blob();
+            }catch{}
+        }
+        if(!blob&&item.filePath){
+            try{
+                const res=await fetch(toFileUrl(item.filePath));
+                if(res.ok) blob=await res.blob();
+            }catch{}
+        }
+        if(!blob){
+            failed++;
+            continue;
+        }
         try{
             const uploaded=await uploadBlobToSupabase(blob,{folder:'space2',nameHint:item.title||'upload'});
             if(uploaded&&uploaded.path){
@@ -459,10 +491,20 @@ async function syncPendingSpace2LocalItems(){
                 if(uploaded.url) item.src=uploaded.url;
                 if(uploaded.expiresAt) item.signedUrlExpiresAt=uploaded.expiresAt;
                 item.updatedAt=Date.now();
+                migrated++;
+            }else{
+                failed++;
             }
         }catch(err){
             console.warn('space2 pending local sync failed',err);
+            failed++;
         }
+    }
+    if(migrated>0){
+        setSpace2AutoMetaStatus(`✅ Synced ${migrated} local image${migrated>1?'s':''} to cloud.`);
+    }
+    if(failed>0){
+        setSpace2AutoMetaStatus(`⚠️ ${failed} image${failed>1?'s':''} still local-only; cloud persistence pending.`,true);
     }
 }
 
@@ -470,11 +512,13 @@ function sanitizeSpace2ItemForCloud(item){
     if(!item||typeof item!=='object') return item;
     const clean={...item};
     delete clean.signedUrlExpiresAt;
+    delete clean.browserBlobKey;
+    delete clean.analysisBlob;
     if(clean.cloudPath){
         delete clean.src;
     }else{
         const src=String(clean.src||'').trim();
-        if(/^blob:/i.test(src)) delete clean.src;
+        if(!/^https?:\/\//i.test(src)) delete clean.src;
     }
     return clean;
 }
@@ -487,11 +531,18 @@ function hasRenderableSpace2Source(item){
     return !!src;
 }
 
+function hasCloudRenderableSpace2Source(item){
+    if(!item||typeof item!=='object') return false;
+    if(item.cloudPath) return true;
+    const src=String(item.src||'').trim();
+    return /^https?:\/\//i.test(src);
+}
+
 function buildSpace2StatePayload({forCloud=false}={}){
     const items=JSON.parse(JSON.stringify((space2State&&space2State.items)||[]));
     const collections=JSON.parse(JSON.stringify((space2State&&space2State.collections)||[]));
     const preparedItems=forCloud
-        ? items.map(sanitizeSpace2ItemForCloud).filter(item=>item&&item.id&&hasRenderableSpace2Source(item))
+        ? items.map(sanitizeSpace2ItemForCloud).filter(item=>item&&item.id&&hasCloudRenderableSpace2Source(item))
         : items;
     return {
         items:preparedItems,
@@ -1757,6 +1808,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
     if(!list.length) return;
     const items=[];
     let hadLocalFallback=false;
+    let failedCloudUploads=0;
     for(const f of list){
         let src='';
         let filePath='';
@@ -1774,11 +1826,15 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
             }catch(err){
                 console.warn('space2 upload sync failed',err);
             }
+            if(!cloudPath){
+                failedCloudUploads++;
+                continue;
+            }
         }
-        if(f.path){
+        if(!currentSupabaseUser&&f.path){
             filePath=f.path;
             if(!src) src=toFileUrl(f.path);
-        }else if(!src){
+        }else if(!currentSupabaseUser&&!src){
             browserBlobKey=await persistSpace2BrowserBlob(f,f.name||'upload').catch(()=> '');
             if(browserBlobKey){
                 src=buildSpace2LocalBlobRef(browserBlobKey);
@@ -1793,7 +1849,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
                 }
             }
         }
-        if(!src&&f.path){
+        if(!currentSupabaseUser&&!src&&f.path){
             const persisted=await persistGeneratedBlob(f,'grid_upload').catch(()=> '');
             if(persisted){
                 filePath=persisted;
@@ -1806,6 +1862,13 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
     const added=upsertSpace2Items(items,{openEditor});
     if(added){
         await syncSpace2StateToSupabase({force:true});
+    }
+    if(currentSupabaseUser&&failedCloudUploads){
+        const msg=`${failedCloudUploads} upload${failedCloudUploads>1?'s':''} failed cloud save and were not added.`;
+        setSpace2AutoMetaStatus('⚠️ '+msg,true);
+        if(failedCloudUploads===list.length){
+            setTimeout(()=>alert('⚠️ Cloud upload failed for all selected images.\nImages were not added to avoid data loss on reopen.\nCheck Supabase Storage policies and auth session.'),120);
+        }
     }
     if(hadLocalFallback){
         setSpace2AutoMetaStatus('Some uploads were kept locally and will retry cloud sync automatically.');
