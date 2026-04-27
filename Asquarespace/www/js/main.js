@@ -925,6 +925,11 @@ function renderSpace2Grid(){
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3 3v8h2v-8H9zm4 0v8h2v-8h-2zM9 3h6l1 2h4v2H4V5h4l1-2z"/></svg>
                 </button>
             </div>
+            <div class="space2-card-action-bottom-right">
+                <button class="space2-card-action" data-action="download" title="Download image" aria-label="Download image">
+                    <span class="space2-card-action-glyph" aria-hidden="true">↓</span>
+                </button>
+            </div>
             <div class="space2-meta">
                 <div class="space2-name${isGenerating?' is-generating':''}">${isGenerating?'Generating...':(item.title||'Untitled').replace(/</g,'&lt;')}</div>
                 <div class="space2-desc${isGenerating?' is-generating':''}">${isGenerating?'Generating description...':((item.description||'').replace(/</g,'&lt;')||'Image')}</div>
@@ -973,6 +978,13 @@ function renderSpace2Grid(){
             metaBtn.addEventListener('click',async e=>{
                 e.stopPropagation();
                 await autoGenerateSpace2Metadata(item,{force:true});
+            });
+        }
+        const downloadBtn=card.querySelector('[data-action="download"]');
+        if(downloadBtn){
+            downloadBtn.addEventListener('click',async e=>{
+                e.stopPropagation();
+                await downloadImageAsset(item.src,item.title||'space-image');
             });
         }
         space2Grid.appendChild(card);
@@ -1887,6 +1899,69 @@ function downloadUrlBuffer(url,maxRedirects=5){
             reject(err);
         }
     });
+}
+
+function sanitizeDownloadBaseName(name='image'){
+    const cleaned=String(name||'image')
+        .trim()
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g,' ')
+        .replace(/\s+/g,' ')
+        .trim();
+    return cleaned || 'image';
+}
+
+async function downloadImageAsset(source,fileNameBase='image'){
+    const src=normalizePreviewSource(source);
+    if(!src) return;
+    const fallbackExt=extFromSrcPath(src)||mediaExtFromSource(src)||'jpg';
+    let blob=null;
+    let ext=fallbackExt;
+    try{
+        if(/^file:\/\//i.test(src)&&nodeFs){
+            const fp=filePathFromFileUrl(src);
+            const mime=mimeFromExt(ext);
+            blob=new Blob([nodeFs.readFileSync(fp)],{type:mime});
+        }else{
+            const res=await fetch(src);
+            if(!res.ok) throw new Error(`HTTP ${res.status}`);
+            blob=await res.blob();
+            const byType=extFromMime(blob.type);
+            if(byType!=='bin') ext=byType;
+        }
+    }catch(err){
+        const link=document.createElement('a');
+        link.href=src;
+        link.download=`${sanitizeDownloadBaseName(fileNameBase)}.${ext}`;
+        link.rel='noopener';
+        link.target='_blank';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return;
+    }
+
+    const fileName=`${sanitizeDownloadBaseName(fileNameBase)}.${ext}`;
+    if((IS_MOBILE_SHELL||/iphone|ipad|ipod|android/i.test(navigator.userAgent||''))&&typeof File!=='undefined'&&navigator.canShare&&navigator.share){
+        const file=new File([blob],fileName,{type:blob.type||mimeFromExt(ext)});
+        if(navigator.canShare({files:[file]})){
+            try{
+                await navigator.share({files:[file],title:fileName});
+                return;
+            }catch(err){
+                if(err&&err.name==='AbortError') return;
+            }
+        }
+    }
+
+    const objectUrl=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=objectUrl;
+    link.download=fileName;
+    link.rel='noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
 }
 
 async function ensureNodeHasLocalFile(node,prefix='asset'){
@@ -4401,6 +4476,9 @@ function renderDiscoverCard(item) {
             <button class="discover-save-btn" data-target="collection" title="Add to collection" aria-label="Add to collection"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8a2 2 0 0 1 2 2v2H2V6a2 2 0 0 1 2-2h6zm12 8v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8h20zm-10 2v2H10v2h2v2h2v-2h2v-2h-2v-2h-2z"/></svg></button>
             <button class="discover-save-btn" data-target="dismiss" title="Dismiss" aria-label="Dismiss"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3 3v8h2v-8H9zm4 0v8h2v-8h-2zM9 3h6l1 2h4v2H4V5h4l1-2z"/></svg></button>
         </div>
+        <div class="discover-card-action-bottom-right">
+            <button class="discover-save-btn" data-target="download" title="Download image" aria-label="Download image">↓</button>
+        </div>
     `;
     const img=card.querySelector('img');
     const srcEl=card.querySelector('.discover-card-src');
@@ -4416,6 +4494,10 @@ function renderDiscoverCard(item) {
             e.stopPropagation();
             if(btn.dataset.target==='dismiss'){
                 card.remove();
+                return;
+            }
+            if(btn.dataset.target==='download'){
+                downloadImageAsset(item.image||item.url,item.title||'discover-image');
                 return;
             }
             if(btn.dataset.target==='collection'){
