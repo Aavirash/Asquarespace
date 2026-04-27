@@ -97,7 +97,7 @@ body.auth-locked #ui-container{display:none;}
 
 .space2-card-action-glyph{font-size:10px;line-height:1;font-weight:700;letter-spacing:.03em;}
 
-.space2-mode-dock{position:relative;background:rgba(255,255,255,0.96);border:1px solid #e6e6e8;border-bottom:none;border-radius:14px 14px 0 0;padding:5px 6px 6px 6px;display:flex!important;align-items:center;z-index:20;margin-bottom:-1px;pointer-events:auto;}
+.space2-mode-dock{position:relative;background:rgba(255,255,255,0.96);border:1px solid #e6e6e8;border-bottom:none;border-radius:14px 14px 0 0;padding:5px 6px 6px 6px;display:flex!important;align-items:center;z-index:20;margin-bottom:-4px;pointer-events:auto;}
 [data-theme="dark"] .space2-mode-dock{background:var(--surface);border-color:#40444d;}
 [data-theme="light"] .space2-mode-dock{background:rgba(255,255,255,0.96);border-color:#e6e6e8;}
 .space2-mode-dock.hidden{display:none;}
