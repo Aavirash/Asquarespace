@@ -116,7 +116,10 @@ const moveBoardCancel = document.getElementById('move-board-cancel');
 const extraMediaBrowserBtn = document.getElementById('extra-media-browser');
 const space2TopCorner = document.getElementById('space2-top-corner');
 
-if(document.body) document.body.classList.toggle('is-mobile-shell',IS_MOBILE_SHELL);
+if(document.body){
+    document.body.classList.toggle('is-mobile-shell',IS_MOBILE_SHELL);
+    document.body.classList.toggle('is-mac-app',IS_MAC_APP);
+}
 
 const spaceToggle = document.getElementById('space-toggle');
 const spaceToggleThumb = document.getElementById('space-toggle-thumb');
@@ -143,6 +146,7 @@ const space2SettingsBtn = document.getElementById('space2-settings-btn');
 const space2SettingsModal = document.getElementById('space2-settings-modal');
 const space2SettingsClose = document.getElementById('space2-settings-close');
 const space2SettingsSignOut = document.getElementById('space2-settings-signout');
+const space2SyncNowBtn = document.getElementById('space2-sync-now-btn');
 const space2CapturePermissionBtn = document.getElementById('space2-capture-permission-btn');
 const space2CaptureStatus = document.getElementById('space2-capture-status');
 const space2LayoutGridBtn = document.getElementById('space2-layout-grid-btn');
@@ -2078,6 +2082,30 @@ function openSpace2SettingsModal(){
 
 function closeSpace2SettingsModal(){
     if(space2SettingsModal) space2SettingsModal.classList.add('hidden');
+}
+
+async function runSpace2ManualSync(){
+    if(!space2SyncNowBtn||space2SyncNowBtn.disabled) return;
+    const originalLabel=space2SyncNowBtn.textContent||'Sync Now';
+    space2SyncNowBtn.disabled=true;
+    space2SyncNowBtn.textContent='Syncing...';
+    setSpace2AutoMetaStatus('Syncing latest Space 2 items...');
+    try{
+        await syncPendingSpace2LocalItems();
+        saveProjectState();
+        saveSpace2State(undefined,undefined,{skipCloudSync:true});
+        await syncStateToSupabase();
+        await restoreStateFromSupabase();
+        await refreshSpace2SignedUrls();
+        renderSpace2Grid();
+        setSpace2AutoMetaStatus('✅ Sync complete. Safe to close/restart.');
+    }catch(err){
+        console.warn('space2 manual sync failed',err);
+        setSpace2AutoMetaStatus(`⚠️ Sync failed: ${(err&&err.message)||'unknown error'}`,true);
+    }finally{
+        space2SyncNowBtn.disabled=false;
+        space2SyncNowBtn.textContent=originalLabel;
+    }
 }
 
 function updateSpace2LayoutSettingsUI(){
@@ -4979,6 +5007,7 @@ if(space2SettingsSignOut) space2SettingsSignOut.addEventListener('click',async e
     closeSpace2SettingsModal();
     await signOutCurrentUser();
 });
+if(space2SyncNowBtn) space2SyncNowBtn.addEventListener('click',()=>{runSpace2ManualSync();});
 if(space2CapturePermissionBtn) space2CapturePermissionBtn.addEventListener('click',()=>requestSpace2CapturePermission({silent:false}));
 if(space2LayoutGridBtn) space2LayoutGridBtn.addEventListener('click',()=>{
     space2LayoutMode='grid';
