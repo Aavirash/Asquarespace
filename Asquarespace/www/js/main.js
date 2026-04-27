@@ -260,7 +260,8 @@ let supabaseClient=null;
 let currentSupabaseUser=null;
 let currentAuthEmail='';
 let cloudSyncTimer=null;
-let lastCloudSyncSignature='';
+let lastBoardCloudSyncSignature='';
+let lastSpace2CloudSyncSignature='';
 let appBootstrapped=false;
 let pendingSpace2CloudLoad=false;
 const DISCOVER_PAGE_SIZE = 18;
@@ -301,8 +302,8 @@ function getStorageKey(projectKey,boardId){
     return `asq.canvas.v1.${projectKey||'local-default'}.${boardId||'board-1'}`;
 }
 
-function getSpace2Key(projectKey,boardId){
-    return `asq.space2.v1.${projectKey||'local-default'}.${boardId||'board-1'}`;
+function getSpace2Key(projectKey){
+    return `asq.space2.v1.${projectKey||'local-default'}`;
 }
 
 function defaultSpace2State(){
@@ -333,6 +334,10 @@ function showAuthStep(step){
 
 function getCloudBoardKey(projectKey=currentProjectKey,boardId=currentBoardId){
     return `${projectKey||'local-default'}::${boardId||'board-1'}`;
+}
+
+function getCloudSpace2Key(projectKey=currentProjectKey){
+    return `${projectKey||'local-default'}::space2-global`;
 }
 
 function nowEpochSec(){
@@ -450,16 +455,15 @@ function sanitizeNodeForCloud(node){
     return clean;
 }
 
-function buildCloudSyncPayload(){
+function buildBoardCloudSyncPayload(){
     const canvas_state=buildBoardPayload({forCloud:true});
-    const space2_state=buildSpace2StatePayload({forCloud:true});
     const payload={
         user_id:currentSupabaseUser.id,
         board_key:getCloudBoardKey(),
         project_key:currentProjectKey||'local-default',
         board_id:currentBoardId||'board-1',
         canvas_state,
-        space2_state,
+        space2_state:{items:[],collections:[],savedAt:0},
         updated_at:new Date().toISOString()
     };
     const signature=JSON.stringify({
@@ -468,6 +472,28 @@ function buildCloudSyncPayload(){
         project_key:payload.project_key,
         board_id:payload.board_id,
         canvas_state,
+        space2_state:null
+    });
+    return {payload,signature};
+}
+
+function buildSpace2CloudSyncPayload(){
+    const space2_state=buildSpace2StatePayload({forCloud:true});
+    const payload={
+        user_id:currentSupabaseUser.id,
+        board_key:getCloudSpace2Key(),
+        project_key:currentProjectKey||'local-default',
+        board_id:'space2-global',
+        canvas_state:{},
+        space2_state,
+        updated_at:new Date().toISOString()
+    };
+    const signature=JSON.stringify({
+        user_id:payload.user_id,
+        board_key:payload.board_key,
+        project_key:payload.project_key,
+        board_id:payload.board_id,
+        canvas_state:null,
         space2_state
     });
     return {payload,signature};
@@ -475,6 +501,27 @@ function buildCloudSyncPayload(){
 
 function writeSpace2StateToLocal(projectKey=currentProjectKey,boardId=currentBoardId,payload=buildSpace2StatePayload()){
     localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(payload));
+}
+
+function findLegacySpace2State(projectKey=currentProjectKey){
+    const prefix=`asq.space2.v1.${projectKey||'local-default'}.`;
+    let bestRaw='';
+    let bestSavedAt=0;
+    for(let i=0;i<localStorage.length;i++){
+        const key=localStorage.key(i)||'';
+        if(!key.startsWith(prefix)) continue;
+        const raw=localStorage.getItem(key)||'';
+        if(!raw) continue;
+        try{
+            const parsed=JSON.parse(raw);
+            const savedAt=parseInt(parsed&&parsed.savedAt,10)||0;
+            if(!bestRaw||savedAt>=bestSavedAt){
+                bestRaw=raw;
+                bestSavedAt=savedAt;
+            }
+        }catch{}
+    }
+    return bestRaw;
 }
 
 function flushCloudSync({force=false}={}){
@@ -497,50 +544,99 @@ function scheduleCloudSync(delay=700){
 async function syncStateToSupabase(){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return;
-    const {payload,signature}=buildCloudSyncPayload();
-    if(signature===lastCloudSyncSignature) return;
-    const {error}=await client.from(SUPABASE_STATE_TABLE).upsert(payload,{onConflict:'user_id,board_key'});
-    if(error) console.warn('supabase state upsert failed',error.message||error);
-    else lastCloudSyncSignature=signature;
+    const boardSync=buildBoardCloudSyncPayload();
+    const space2Sync=buildSpace2CloudSyncPayload();
+    const writes=[];
+    if(boardSync.signature!==lastBoardCloudSyncSignature){
+        writes.push(
+            client.from(SUPABASE_STATE_TABLE).upsert(boardSync.payload,{onConflict:'user_id,board_key'})
+                .then(({error})=>{
+                    if(error) console.warn('supabase board state upsert failed',error.message||error);
+                    else lastBoardCloudSyncSignature=boardSync.signature;
+                })
+        );
+    }
+    if(space2Sync.signature!==lastSpace2CloudSyncSignature){
+        writes.push(
+            client.from(SUPABASE_STATE_TABLE).upsert(space2Sync.payload,{onConflict:'user_id,board_key'})
+                .then(({error})=>{
+                    if(error) console.warn('supabase space2 state upsert failed',error.message||error);
+                    else lastSpace2CloudSyncSignature=space2Sync.signature;
+                })
+        );
+    }
+    if(!writes.length) return;
+    await Promise.all(writes);
 }
 
 async function restoreStateFromSupabase(){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return;
-    const {data,error}=await client
-        .from(SUPABASE_STATE_TABLE)
-        .select('canvas_state,space2_state,updated_at')
-        .eq('user_id',currentSupabaseUser.id)
-        .eq('board_key',getCloudBoardKey())
-        .maybeSingle();
-    if(error){
-        console.warn('supabase state fetch failed',error.message||error);
+    const [boardRes,space2Res]=await Promise.all([
+        client
+            .from(SUPABASE_STATE_TABLE)
+            .select('canvas_state,space2_state,updated_at')
+            .eq('user_id',currentSupabaseUser.id)
+            .eq('board_key',getCloudBoardKey())
+            .maybeSingle(),
+        client
+            .from(SUPABASE_STATE_TABLE)
+            .select('space2_state,updated_at')
+            .eq('user_id',currentSupabaseUser.id)
+            .eq('board_key',getCloudSpace2Key())
+            .maybeSingle()
+    ]);
+    if(boardRes.error){
+        console.warn('supabase board state fetch failed',boardRes.error.message||boardRes.error);
         return;
     }
-    if(!data) return;
-    const remoteUpdatedAt=Date.parse(data.updated_at||'')||0;
-    lastCloudSyncSignature=JSON.stringify({
-        user_id:currentSupabaseUser.id,
-        board_key:getCloudBoardKey(),
-        project_key:currentProjectKey||'local-default',
-        board_id:currentBoardId||'board-1',
-        canvas_state:data.canvas_state||null,
-        space2_state:data.space2_state||null
-    });
+    if(space2Res.error){
+        console.warn('supabase space2 state fetch failed',space2Res.error.message||space2Res.error);
+        return;
+    }
+    const boardData=boardRes.data||null;
+    const hasGlobalSpace2=!!(space2Res.data&&space2Res.data.space2_state&&Array.isArray(space2Res.data.space2_state.items));
+    const space2Data=hasGlobalSpace2
+        ? space2Res.data
+        : (boardData&&boardData.space2_state&&Array.isArray(boardData.space2_state.items)?{space2_state:boardData.space2_state,updated_at:boardData.updated_at}:null);
+    if(!boardData&&!space2Data) return;
+    if(boardData){
+        lastBoardCloudSyncSignature=JSON.stringify({
+            user_id:currentSupabaseUser.id,
+            board_key:getCloudBoardKey(),
+            project_key:currentProjectKey||'local-default',
+            board_id:currentBoardId||'board-1',
+            canvas_state:boardData.canvas_state||null,
+            space2_state:null
+        });
+    }
+    if(space2Data&&hasGlobalSpace2){
+        lastSpace2CloudSyncSignature=JSON.stringify({
+            user_id:currentSupabaseUser.id,
+            board_key:getCloudSpace2Key(),
+            project_key:currentProjectKey||'local-default',
+            board_id:'space2-global',
+            canvas_state:null,
+            space2_state:space2Data.space2_state||null
+        });
+    }else if(space2Data){
+        lastSpace2CloudSyncSignature='';
+    }
+    const remoteSpace2UpdatedAt=Date.parse(space2Data&&space2Data.updated_at||'')||0;
     let localSpace2SavedAt=0;
     try{
-        const localRaw=localStorage.getItem(getSpace2Key(currentProjectKey,currentBoardId));
+        const localRaw=localStorage.getItem(getSpace2Key(currentProjectKey));
         const localParsed=localRaw?JSON.parse(localRaw):null;
         localSpace2SavedAt=parseInt(localParsed&&localParsed.savedAt,10)||0;
     }catch{}
-    if(data.canvas_state){
-        try{ localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(data.canvas_state)); }catch{}
+    if(boardData&&boardData.canvas_state){
+        try{ localStorage.setItem(getStorageKey(currentProjectKey,currentBoardId),JSON.stringify(boardData.canvas_state)); }catch{}
     }
-    if(data.space2_state&&remoteUpdatedAt>=localSpace2SavedAt){
-        try{ localStorage.setItem(getSpace2Key(currentProjectKey,currentBoardId),JSON.stringify(data.space2_state)); }catch{}
+    if(space2Data&&space2Data.space2_state&&remoteSpace2UpdatedAt>=localSpace2SavedAt){
+        try{ localStorage.setItem(getSpace2Key(currentProjectKey),JSON.stringify(space2Data.space2_state)); }catch{}
     }
-    if(data.canvas_state&&Array.isArray(data.canvas_state.nodes)) loadBoardState(currentProjectKey,currentBoardId);
-    if(data.space2_state&&remoteUpdatedAt>=localSpace2SavedAt){
+    if(boardData&&boardData.canvas_state&&Array.isArray(boardData.canvas_state.nodes)) loadBoardState(currentProjectKey,currentBoardId);
+    if(space2Data&&space2Data.space2_state&&remoteSpace2UpdatedAt>=localSpace2SavedAt){
         loadSpace2State(currentProjectKey,currentBoardId);
         await refreshSpace2SignedUrls();
         renderSpace2Grid();
@@ -549,10 +645,15 @@ async function restoreStateFromSupabase(){
 
 function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     try{
-        const raw=localStorage.getItem(getSpace2Key(projectKey,boardId));
+        const primaryKey=getSpace2Key(projectKey);
+        const primaryRaw=localStorage.getItem(primaryKey);
+        const raw=primaryRaw||findLegacySpace2State(projectKey);
         const parsed=raw?JSON.parse(raw):null;
         const items=Array.isArray(parsed&&parsed.items)?parsed.items.filter(i=>i&&i.id&&(i.src||i.cloudPath)):[];
         const collections=Array.isArray(parsed&&parsed.collections)?parsed.collections.filter(c=>c&&c.id&&c.name):[];
+        if(!primaryRaw&&raw){
+            try{ localStorage.setItem(primaryKey,raw); }catch{}
+        }
         space2State={items,collections};
     }catch{
         space2State=defaultSpace2State();
