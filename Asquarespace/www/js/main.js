@@ -154,6 +154,7 @@ const space2ItemTitle = document.getElementById('space2-item-title');
 const space2ItemDesc = document.getElementById('space2-item-desc');
 const space2AssignList = document.getElementById('space2-assign-list');
 const space2ItemDelete = document.getElementById('space2-item-delete');
+const space2ItemDownload = document.getElementById('space2-item-download');
 const space2ItemCancel = document.getElementById('space2-item-cancel');
 const space2ItemSave = document.getElementById('space2-item-save');
 const space2CollectionModal = document.getElementById('space2-collection-modal');
@@ -941,11 +942,6 @@ function renderSpace2Grid(){
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3 3v8h2v-8H9zm4 0v8h2v-8h-2zM9 3h6l1 2h4v2H4V5h4l1-2z"/></svg>
                 </button>
             </div>
-            <div class="space2-card-action-bottom-right">
-                <button class="space2-card-action" data-action="download" title="Download image" aria-label="Download image">
-                    <span class="space2-card-action-glyph" aria-hidden="true">↓</span>
-                </button>
-            </div>
             <div class="space2-meta">
                 <div class="space2-name${isGenerating?' is-generating':''}">${isGenerating?'Generating...':(item.title||'Untitled').replace(/</g,'&lt;')}</div>
                 <div class="space2-desc${isGenerating?' is-generating':''}">${isGenerating?'Generating description...':((item.description||'').replace(/</g,'&lt;')||'Image')}</div>
@@ -994,13 +990,6 @@ function renderSpace2Grid(){
             metaBtn.addEventListener('click',async e=>{
                 e.stopPropagation();
                 await autoGenerateSpace2Metadata(item,{force:true});
-            });
-        }
-        const downloadBtn=card.querySelector('[data-action="download"]');
-        if(downloadBtn){
-            downloadBtn.addEventListener('click',async e=>{
-                e.stopPropagation();
-                await downloadImageAsset(item.src,item.title||'space-image');
             });
         }
         space2Grid.appendChild(card);
@@ -1210,6 +1199,12 @@ function deleteSpace2Item(){
     renderSpace2Collections();
     renderSpace2Grid();
     closeSpace2Item();
+}
+
+async function downloadSpace2ActiveItem(){
+    const item=space2State.items.find(i=>i.id===space2ActiveItemId);
+    if(!item) return;
+    await downloadImageAsset(item.src,item.title||'space-image');
 }
 
 function createSpace2Collection(){
@@ -4294,6 +4289,7 @@ if(space2NewCollection) space2NewCollection.addEventListener('click',()=>createS
 if(space2ItemCancel) space2ItemCancel.addEventListener('click',closeSpace2Item);
 if(space2ItemSave) space2ItemSave.addEventListener('click',saveSpace2Item);
 if(space2ItemDelete) space2ItemDelete.addEventListener('click',deleteSpace2Item);
+if(space2ItemDownload) space2ItemDownload.addEventListener('click',()=>{downloadSpace2ActiveItem().catch(err=>console.warn('space2 download failed',err));});
 if(space2ItemModal) space2ItemModal.addEventListener('click',e=>{if(e.target===space2ItemModal) closeSpace2Item();});
 if(space2CollectionCancel) space2CollectionCancel.addEventListener('click',closeCollectionModal);
 if(space2CollectionSave) space2CollectionSave.addEventListener('click',saveCollectionModal);
@@ -4496,9 +4492,6 @@ function renderDiscoverCard(item) {
             <button class="discover-save-btn" data-target="collection" title="Add to collection" aria-label="Add to collection"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8a2 2 0 0 1 2 2v2H2V6a2 2 0 0 1 2-2h6zm12 8v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8h20zm-10 2v2H10v2h2v2h2v-2h2v-2h-2v-2h-2z"/></svg></button>
             <button class="discover-save-btn" data-target="dismiss" title="Dismiss" aria-label="Dismiss"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3 3v8h2v-8H9zm4 0v8h2v-8h-2zM9 3h6l1 2h4v2H4V5h4l1-2z"/></svg></button>
         </div>
-        <div class="discover-card-action-bottom-right">
-            <button class="discover-save-btn" data-target="download" title="Download image" aria-label="Download image">↓</button>
-        </div>
     `;
     const img=card.querySelector('img');
     const srcEl=card.querySelector('.discover-card-src');
@@ -4514,10 +4507,6 @@ function renderDiscoverCard(item) {
             e.stopPropagation();
             if(btn.dataset.target==='dismiss'){
                 card.remove();
-                return;
-            }
-            if(btn.dataset.target==='download'){
-                downloadImageAsset(item.image||item.url,item.title||'discover-image');
                 return;
             }
             if(btn.dataset.target==='collection'){
