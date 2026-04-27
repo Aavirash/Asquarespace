@@ -125,6 +125,7 @@ const spaceToggleGridBtn = document.getElementById('space-toggle-grid');
 const space2Panel = document.getElementById('space2-panel');
 const space2ModeDock = document.getElementById('space2-mode-dock');
 const space2Search = document.getElementById('space2-search');
+const space2TopSearch = null;
 const space2NewCollection = document.getElementById('space2-new-collection');
 const space2CameraBtn = document.getElementById('space2-camera-btn');
 const space2UploadBtn = document.getElementById('space2-upload-btn');
@@ -612,6 +613,10 @@ async function syncSpace2StateToSupabase({force=false}={}){
     const cloudItemCount=Array.isArray(space2Sync.payload&&space2Sync.payload.space2_state&&space2Sync.payload.space2_state.items)
         ? space2Sync.payload.space2_state.items.length
         : 0;
+    // Do not let an empty local state overwrite cloud rows while restore is in flight.
+    if(pendingSpace2CloudLoad&&localItemCount===0){
+        return true;
+    }
     if(localItemCount>0&&cloudItemCount===0){
         const msg='Sync blocked: Space 2 items have no restorable media source.';
         console.warn(msg);
@@ -653,7 +658,12 @@ async function syncSpace2StateToSupabase({force=false}={}){
 }
 
 function writeSpace2StateToLocal(projectKey=currentProjectKey,boardId=currentBoardId,payload=buildSpace2StatePayload()){
-    localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(payload));
+    try{
+        localStorage.setItem(getSpace2Key(projectKey,boardId),JSON.stringify(payload));
+    }catch(err){
+        console.warn('space2 local save failed',err);
+        setSpace2AutoMetaStatus('⚠️ Local save failed (storage quota or browser policy).',true);
+    }
 }
 
 function findLegacySpace2State(projectKey=currentProjectKey){
@@ -729,6 +739,8 @@ async function syncStateToSupabase(){
 async function restoreStateFromSupabase(){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return;
+    pendingSpace2CloudLoad=true;
+    try{
     const projectKeyCandidates=getProjectKeyAliases(currentProjectKey);
     const boardKeyCandidates=projectKeyCandidates.map(pk=>`${pk||'default'}::${currentBoardId||'board-1'}`);
     const space2KeyCandidates=projectKeyCandidates.map(pk=>`${pk||'default'}::space2-global`);
@@ -862,6 +874,9 @@ async function restoreStateFromSupabase(){
         : 0;
     setSpace2AutoMetaStatus(`✅ Cloud restore OK • board ${boardNodeCount} • space2 ${space2ItemCount}`);
     setTimeout(()=>setSpace2AutoMetaStatus(''),5000);
+    }finally{
+        pendingSpace2CloudLoad=false;
+    }
 }
 
 function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
@@ -1338,7 +1353,29 @@ function renderSpace2Grid(){
     space2Grid.classList.toggle('feed-mode',space2LayoutMode==='feed');
     const list=getFilteredSpace2Items();
     if(!list.length){
-        space2Grid.innerHTML='';
+        const q=(space2SearchText||'').trim();
+        const hasFilters=!!q||space2ActiveCollection!=='all';
+        const total=Array.isArray(space2State&&space2State.items)?space2State.items.length:0;
+        if(hasFilters&&total>0){
+            space2Grid.innerHTML=`
+                <div class="space2-empty-state" style="padding:18px 16px;color:#8f8f8f;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <span>No items match current filter.</span>
+                    <button type="button" data-action="clear-space2-filter" style="border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#f3f3f3;border-radius:10px;padding:6px 10px;cursor:pointer;">Clear Filters</button>
+                </div>`;
+            const clearBtn=space2Grid.querySelector('[data-action="clear-space2-filter"]');
+            if(clearBtn){
+                clearBtn.addEventListener('click',e=>{
+                    e.stopPropagation();
+                    space2SearchText='';
+                    space2ActiveCollection='all';
+                    if(space2Search) space2Search.value='';
+                    renderSpace2Collections();
+                    renderSpace2Grid();
+                });
+            }
+        }else{
+            space2Grid.innerHTML='';
+        }
         space2Grid.style.setProperty('--space2-grid-content-height','0px');
         return;
     }
@@ -2871,6 +2908,12 @@ async function initPersistence(){
     currentBoardId=meta.currentBoardId;
     renderBoardList();
     if(!loadBoardState(currentProjectKey,currentBoardId)) setSpace('space2',{animateToggle:false});
+    // Browser form-state restore can repopulate this field on hard reload.
+    space2SearchText='';
+    if(space2Search){
+        space2Search.autocomplete='off';
+        space2Search.value='';
+    }
     loadSpace2State(currentProjectKey,currentBoardId);
     recoverCanvasIfEmpty(currentProjectKey);
     persistenceReady=true;
