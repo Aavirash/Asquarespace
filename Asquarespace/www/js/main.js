@@ -212,7 +212,7 @@ let geminiCatalogLoadedAt=0;
 let geminiLastError='';
 let modelMetaByName={};
 let imageBatchSize=1;
-let currentProjectKey='local-default';
+let currentProjectKey='default';
 let currentBoardId='board-1';
 let boards=[];
 let persistenceReady=false;
@@ -272,14 +272,27 @@ let pendingSpace2CloudLoad=false;
 const DISCOVER_PAGE_SIZE = 18;
 
 // ── Persistence ────────────────────────────────────────────────────────────
+function normalizeProjectKey(key){
+    const raw=String(key||'').trim();
+    if(!raw) return 'default';
+    if(raw==='local-default') return 'default';
+    return raw;
+}
+
+function getProjectKeyAliases(projectKey){
+    const normalized=normalizeProjectKey(projectKey);
+    if(normalized==='default') return ['default','local-default'];
+    return [normalized];
+}
+
 function evalHost(script){
     return new Promise(resolve=>{
-        if(!window.__adobe_cep__){resolve('local-default');return;}
+        if(!window.__adobe_cep__){resolve('default');return;}
         try{
             const cs=new CSInterface();
             cs.evalScript(script,res=>resolve(res||''));
         }catch{
-            resolve('local-default');
+            resolve('default');
         }
     });
 }
@@ -289,9 +302,9 @@ async function deriveCurrentProjectId(){
     const raw=await evalHost('getAsquarespaceProjectKey()');
     const key=(typeof raw==='string'?raw:'').trim().replace(/^"|"$/g,'');
     if(!key||key==='undefined'||key==='null'||key==='EvalScript error.'||/^error:/i.test(key)){
-        return currentProjectKey||'local-default';
+        return normalizeProjectKey(currentProjectKey||'default');
     }
-    return key;
+    return normalizeProjectKey(key);
 }
 
 function getPersistenceDir(){
@@ -300,15 +313,15 @@ function getPersistenceDir(){
 }
 
 function getBoardMetaKey(projectKey){
-    return `asq.boards.v1.${projectKey||'local-default'}`;
+    return `asq.boards.v1.${normalizeProjectKey(projectKey||'default')}`;
 }
 
 function getStorageKey(projectKey,boardId){
-    return `asq.canvas.v1.${projectKey||'local-default'}.${boardId||'board-1'}`;
+    return `asq.canvas.v1.${normalizeProjectKey(projectKey||'default')}.${boardId||'board-1'}`;
 }
 
 function getSpace2Key(projectKey){
-    return `asq.space2.v1.${projectKey||'local-default'}`;
+    return `asq.space2.v1.${normalizeProjectKey(projectKey||'default')}`;
 }
 
 function defaultSpace2State(){
@@ -338,11 +351,11 @@ function showAuthStep(step){
 }
 
 function getCloudBoardKey(projectKey=currentProjectKey,boardId=currentBoardId){
-    return `${projectKey||'local-default'}::${boardId||'board-1'}`;
+    return `${normalizeProjectKey(projectKey)}::${boardId||'board-1'}`;
 }
 
 function getCloudSpace2Key(projectKey=currentProjectKey){
-    return `${projectKey||'local-default'}::space2-global`;
+    return `${normalizeProjectKey(projectKey)}::space2-global`;
 }
 
 function nowEpochSec(){
@@ -501,7 +514,7 @@ function buildBoardCloudSyncPayload(){
     const payload={
         user_id:currentSupabaseUser.id,
         board_key:getCloudBoardKey(),
-        project_key:currentProjectKey||'local-default',
+        project_key:normalizeProjectKey(currentProjectKey),
         board_id:currentBoardId||'board-1',
         canvas_state,
         space2_state:{items:[],collections:[],savedAt:0},
@@ -523,7 +536,7 @@ function buildSpace2CloudSyncPayload(){
     const payload={
         user_id:currentSupabaseUser.id,
         board_key:getCloudSpace2Key(),
-        project_key:currentProjectKey||'local-default',
+        project_key:normalizeProjectKey(currentProjectKey),
         board_id:'space2-global',
         canvas_state:{},
         space2_state,
@@ -648,19 +661,30 @@ async function syncStateToSupabase(){
 async function restoreStateFromSupabase(){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return;
+    const projectKeyCandidates=getProjectKeyAliases(currentProjectKey);
+    const boardKeyCandidates=projectKeyCandidates.map(pk=>`${pk||'default'}::${currentBoardId||'board-1'}`);
+    const space2KeyCandidates=projectKeyCandidates.map(pk=>`${pk||'default'}::space2-global`);
+
+    async function fetchFirstByBoardKeys(selectExpr,keys){
+        let firstRes={data:null,error:null};
+        for(let i=0;i<keys.length;i++){
+            const key=keys[i];
+            const res=await client
+                .from(SUPABASE_STATE_TABLE)
+                .select(selectExpr)
+                .eq('user_id',currentSupabaseUser.id)
+                .eq('board_key',key)
+                .maybeSingle();
+            if(i===0) firstRes=res;
+            if(res.error) return res;
+            if(res.data) return res;
+        }
+        return firstRes;
+    }
+
     const [boardRes,space2Res]=await Promise.all([
-        client
-            .from(SUPABASE_STATE_TABLE)
-            .select('canvas_state,space2_state,updated_at')
-            .eq('user_id',currentSupabaseUser.id)
-            .eq('board_key',getCloudBoardKey())
-            .maybeSingle(),
-        client
-            .from(SUPABASE_STATE_TABLE)
-            .select('space2_state,updated_at')
-            .eq('user_id',currentSupabaseUser.id)
-            .eq('board_key',getCloudSpace2Key())
-            .maybeSingle()
+        fetchFirstByBoardKeys('canvas_state,space2_state,updated_at',boardKeyCandidates),
+        fetchFirstByBoardKeys('space2_state,updated_at',space2KeyCandidates)
     ]);
     if(boardRes.error){
         const msg='Cloud restore failed: '+(boardRes.error.message||JSON.stringify(boardRes.error));
@@ -692,7 +716,7 @@ async function restoreStateFromSupabase(){
         lastBoardCloudSyncSignature=JSON.stringify({
             user_id:currentSupabaseUser.id,
             board_key:getCloudBoardKey(),
-            project_key:currentProjectKey||'local-default',
+            project_key:normalizeProjectKey(currentProjectKey),
             board_id:currentBoardId||'board-1',
             canvas_state:boardData.canvas_state||null,
             space2_state:null
@@ -702,7 +726,7 @@ async function restoreStateFromSupabase(){
         lastSpace2CloudSyncSignature=JSON.stringify({
             user_id:currentSupabaseUser.id,
             board_key:getCloudSpace2Key(),
-            project_key:currentProjectKey||'local-default',
+            project_key:normalizeProjectKey(currentProjectKey),
             board_id:'space2-global',
             canvas_state:null,
             space2_state:space2Data.space2_state||null
@@ -768,9 +792,21 @@ async function restoreStateFromSupabase(){
 
 function loadSpace2State(projectKey=currentProjectKey,boardId=currentBoardId){
     try{
-        const primaryKey=getSpace2Key(projectKey);
-        const primaryRaw=localStorage.getItem(primaryKey);
-        const raw=primaryRaw||findLegacySpace2State(projectKey);
+        const normalized=normalizeProjectKey(projectKey);
+        const primaryKey=getSpace2Key(normalized);
+        let primaryRaw=localStorage.getItem(primaryKey);
+        let raw=primaryRaw||findLegacySpace2State(normalized);
+        if(!raw){
+            for(const alias of getProjectKeyAliases(normalized)){
+                if(alias===normalized) continue;
+                const aliasKey=getSpace2Key(alias);
+                const aliasRaw=localStorage.getItem(aliasKey)||findLegacySpace2State(alias);
+                if(aliasRaw){
+                    raw=aliasRaw;
+                    break;
+                }
+            }
+        }
         const parsed=raw?JSON.parse(raw):null;
         const items=Array.isArray(parsed&&parsed.items)?parsed.items.filter(i=>i&&i.id&&(i.src||i.cloudPath||i.browserBlobKey||parseSpace2LocalBlobRef(i.src||''))):[];
         const collections=Array.isArray(parsed&&parsed.collections)?parsed.collections.filter(c=>c&&c.id&&c.name):[];
@@ -1955,7 +1991,7 @@ function maybeAutoRequestSpace2CapturePermission(){
 }
 
 function getActiveProjectKey(){
-    return deriveCurrentProjectId().then(key=>key||currentProjectKey||'local-default');
+    return deriveCurrentProjectId().then(key=>normalizeProjectKey(key||currentProjectKey||'default'));
 }
 
 function hasAnyCanvasForProject(projectKey){
@@ -2427,29 +2463,41 @@ async function persistGeneratedBlob(blob,prefix='asq'){
 }
 
 function readBoards(projectKey){
+    const normalized=normalizeProjectKey(projectKey);
     try{
-        const raw=localStorage.getItem(getBoardMetaKey(projectKey));
-        const parsed=raw?JSON.parse(raw):null;
-        if(parsed&&Array.isArray(parsed.boards)&&parsed.boards.length){
-            return {
-                boards:parsed.boards.map(b=>({id:b.id,name:b.name||'Board'})).filter(b=>b.id),
-                currentBoardId:parsed.currentBoardId||parsed.boards[0].id
-            };
+        const aliases=getProjectKeyAliases(normalized);
+        for(const alias of aliases){
+            const raw=localStorage.getItem(getBoardMetaKey(alias));
+            const parsed=raw?JSON.parse(raw):null;
+            if(parsed&&Array.isArray(parsed.boards)&&parsed.boards.length){
+                if(alias!==normalized){
+                    try{ localStorage.setItem(getBoardMetaKey(normalized),raw); }catch{}
+                }
+                return {
+                    boards:parsed.boards.map(b=>({id:b.id,name:b.name||'Board'})).filter(b=>b.id),
+                    currentBoardId:parsed.currentBoardId||parsed.boards[0].id
+                };
+            }
         }
     }catch(err){console.warn('read boards failed',err);}
     return {boards:[{id:'board-1',name:'Board 1'}],currentBoardId:'board-1'};
 }
 
 function saveBoards(projectKey){
-    localStorage.setItem(getBoardMetaKey(projectKey),JSON.stringify({boards,currentBoardId}));
+    localStorage.setItem(getBoardMetaKey(normalizeProjectKey(projectKey)),JSON.stringify({boards,currentBoardId}));
 }
 
 function getBoardNodeCount(boardId){
     try{
-        const raw=localStorage.getItem(getStorageKey(currentProjectKey,boardId));
-        if(!raw) return 0;
-        const data=JSON.parse(raw);
-        return Array.isArray(data.nodes)?data.nodes.length:0;
+        const aliases=getProjectKeyAliases(currentProjectKey);
+        for(const alias of aliases){
+            const raw=localStorage.getItem(getStorageKey(alias,boardId));
+            if(!raw) continue;
+            const data=JSON.parse(raw);
+            const count=Array.isArray(data.nodes)?data.nodes.length:0;
+            if(count>0) return count;
+        }
+        return 0;
     }catch{return 0;}
 }
 
@@ -2654,7 +2702,19 @@ function restoreNode(item){
 
 function loadBoardState(projectKey,boardId){
     try{
-        const raw=localStorage.getItem(getStorageKey(projectKey,boardId));
+        const normalized=normalizeProjectKey(projectKey);
+        let raw=localStorage.getItem(getStorageKey(normalized,boardId));
+        if(!raw){
+            for(const alias of getProjectKeyAliases(normalized)){
+                if(alias===normalized) continue;
+                const aliasRaw=localStorage.getItem(getStorageKey(alias,boardId));
+                if(aliasRaw){
+                    raw=aliasRaw;
+                    try{ localStorage.setItem(getStorageKey(normalized,boardId),aliasRaw); }catch{}
+                    break;
+                }
+            }
+        }
         if(!raw) return false;
         const data=JSON.parse(raw);
         if(!data||!Array.isArray(data.nodes)) return false;
