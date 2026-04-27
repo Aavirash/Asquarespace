@@ -115,10 +115,7 @@ const space2TopCorner = document.getElementById('space2-top-corner');
 
 if(document.body) document.body.classList.toggle('is-mobile-shell',IS_MOBILE_SHELL);
 
-const spaceSwitcher = document.getElementById('space-switcher');
-const spaceSlider = document.getElementById('space-slider');
-const spaceBtn1 = document.getElementById('space-btn-1');
-const spaceBtn2 = document.getElementById('space-btn-2');
+const spaceToggle = document.getElementById('space-toggle');
 const space2Panel = document.getElementById('space2-panel');
 const space2ModeDock = document.getElementById('space2-mode-dock');
 const space2Search = document.getElementById('space2-search');
@@ -3535,23 +3532,30 @@ function openBoardPanel(){
 }
 
 function updateSpaceSlider(){
-    if(!spaceSwitcher||!spaceSlider) return;
-    // Clear any legacy inline overrides (left, width, transform) so CSS rules own the position.
-    spaceSlider.style.left = '';
-    spaceSlider.style.width = '';
-    spaceSlider.style.transform = '';
-    // Force a synchronous style flush. Without this, toggling the class in the same JS tick
-    // can be batched with pending style changes, meaning the browser never sees a "from" state
-    // and the CSS transform transition doesn't fire.
-    void spaceSlider.getBoundingClientRect();
-    // Toggle class — CSS transition fires automatically (transform:translateX 0↔106px).
-    spaceSwitcher.classList.toggle('is-grid', currentSpace === 'space2');
+    if(!spaceToggle) return;
+    const thumb=spaceToggle.querySelector('.space-toggle-thumb');
+    const isGrid=currentSpace==='space2';
+    if(thumb){
+        const mobile=window.innerWidth<=760;
+        const fromLeft=parseFloat(getComputedStyle(thumb).left)||0;
+        const toLeft=isGrid?(mobile?98:106):0;
+        spaceToggle.classList.toggle('is-grid',isGrid);
+        spaceToggle.setAttribute('aria-pressed',isGrid?'true':'false');
+        thumb.style.left=toLeft+'px';
+        if(Math.abs(fromLeft-toLeft)>0.5){
+            thumb.animate(
+                [{left:fromLeft+'px'},{left:toLeft+'px'}],
+                {duration:220,easing:'cubic-bezier(0.4,0,0.2,1)'}
+            );
+        }
+        return;
+    }
+    spaceToggle.classList.toggle('is-grid',isGrid);
+    spaceToggle.setAttribute('aria-pressed',isGrid?'true':'false');
 }
 
 function setSpace(space){
     currentSpace=space==='space2'?'space2':'space1';
-    if(spaceBtn1) spaceBtn1.classList.toggle('active',currentSpace==='space1');
-    if(spaceBtn2) spaceBtn2.classList.toggle('active',currentSpace==='space2');
     if(currentSpace==='space2'){
         document.body.classList.add('space-2');
         const forcedCollapsed=window.innerWidth<=760;
@@ -3925,8 +3929,20 @@ if(geminiToggleBtn) geminiToggleBtn.addEventListener('click',e=>{
 });
 settingsModal.addEventListener('click',e=>{if(e.target===settingsModal) closeSettings();});
 
-if(spaceBtn1) spaceBtn1.addEventListener('click',e=>{e.stopPropagation();setSpace('space1');});
-if(spaceBtn2) spaceBtn2.addEventListener('click',e=>{e.stopPropagation();setSpace('space2');});
+if(spaceToggle){
+    spaceToggle.addEventListener('click',e=>{
+        e.stopPropagation();
+        const rect=spaceToggle.getBoundingClientRect();
+        const clickX=typeof e.clientX==='number'?e.clientX-rect.left:rect.width;
+        setSpace(clickX>=rect.width/2?'space2':'space1');
+    });
+    spaceToggle.addEventListener('keydown',e=>{
+        if(e.key===' '||e.key==='Enter'){
+            e.preventDefault();
+            setSpace(currentSpace==='space2'?'space1':'space2');
+        }
+    });
+}
 if(space2Search) space2Search.addEventListener('input',()=>{
     space2SearchText=space2Search.value||'';
     if(space2View==='discover') filterDiscoverFeedBySearch();

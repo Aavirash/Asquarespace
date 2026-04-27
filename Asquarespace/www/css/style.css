@@ -52,17 +52,21 @@ body.auth-locked #ui-container{display:none;}
 #theme-toggle:hover{background:var(--surface);border-color:var(--border);color:var(--text);}
 #theme-toggle svg{width:16px;height:16px;fill:currentColor;}
 
-.space-switcher{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:3px;border-radius:11px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 84%,transparent);backdrop-filter:blur(10px);box-shadow:var(--shadow);z-index:310;}
+.space-switcher{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;align-items:center;padding:3px;border-radius:11px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 84%,transparent);backdrop-filter:blur(10px);box-shadow:var(--shadow);z-index:310;}
 .space2-top-corner{position:absolute;top:14px;right:12px;z-index:338;pointer-events:auto;display:flex;align-items:center;gap:8px;}
 .space2-top-corner.hidden{display:none;}
 .space2-top-import{height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 84%,transparent);backdrop-filter:blur(10px);box-shadow:var(--shadow);color:var(--text);font-size:12px;font-family:inherit;font-weight:600;letter-spacing:.01em;cursor:pointer;transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease;display:flex;align-items:center;gap:8px;flex-shrink:0;}
 .space2-top-import:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg);border-color:color-mix(in srgb,var(--accent) 32%,var(--border));}
 .space2-top-import svg{width:15px;height:15px;fill:currentColor;opacity:.94;}
 .space2-top-import span{display:block;}
-.space-btn{position:relative;z-index:1;min-width:104px;height:30px;border:none;border-radius:8px;background:transparent;color:var(--text-mid);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;transition:color .16s ease;}
-.space-btn.active{color:var(--text);}
-.space-slider{position:absolute;left:3px;top:3px;width:104px;height:30px;border-radius:8px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06);transform:translateX(0);transition:transform .22s cubic-bezier(.4,0,.2,1);will-change:transform;z-index:0;}
-.space-switcher.is-grid .space-slider{transform:translateX(106px);}
+.space-toggle{position:relative;width:210px;height:30px;border:none;border-radius:8px;background:transparent;padding:0;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--text-mid);font-size:12px;font-weight:500;font-family:inherit;}
+.space-toggle-label{position:absolute;top:0;z-index:2;width:104px;height:30px;display:flex;align-items:center;justify-content:center;opacity:.92;transition:color .16s ease,opacity .16s ease;}
+.space-toggle-label-space{left:0;}
+.space-toggle-label-grid{right:0;}
+.space-toggle-thumb{position:absolute;top:0;left:0;width:104px;height:30px;border-radius:8px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06);transition:left .22s cubic-bezier(.4,0,.2,1);z-index:1;}
+.space-toggle.is-grid .space-toggle-thumb{left:106px;}
+.space-toggle:not(.is-grid) .space-toggle-label-space{color:var(--text);opacity:1;}
+.space-toggle.is-grid .space-toggle-label-grid{color:var(--text);opacity:1;}
 
 .space2-panel{position:absolute;inset:52px 16px 18px;z-index:170;border:none;border-radius:0;background:transparent;backdrop-filter:none;box-shadow:none;display:flex;flex-direction:column;overflow:visible;--space2-sidebar-width:238px;}
 .space2-panel.hidden{display:none;}
@@ -1061,9 +1065,10 @@ body.space-2 #space2-mode-dock{display:none!important;}
     #ui-container{height:100dvh;max-height:100dvh;overflow:hidden;}
     #viewport{width:100vw;height:100dvh;overflow:hidden;overscroll-behavior:none;}
     .space-switcher{top:10px;}
-    .space-btn{min-width:96px;font-size:12px;height:30px;}
-    .space-slider{width:96px;}
-    .space-switcher.is-grid .space-slider{transform:translateX(98px);}
+    .space-toggle{width:194px;height:30px;}
+    .space-toggle-label{width:96px;height:30px;}
+    .space-toggle-thumb{width:96px;height:30px;}
+    .space-toggle.is-grid .space-toggle-thumb{left:98px;}
     .space2-panel{inset:58px 10px calc(112px + env(safe-area-inset-bottom)) 10px;}
     .space2-panel{--space2-sidebar-width:198px;}
     .space2-sidebar{overflow:auto;padding-top:8px;padding-bottom:10px;-webkit-overflow-scrolling:touch;top:10px;}
