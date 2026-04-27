@@ -61,7 +61,7 @@ body.auth-locked #ui-container{display:none;}
 .space2-top-import span{display:block;}
 .space-btn{position:relative;z-index:1;min-width:104px;height:30px;border:none;border-radius:8px;background:transparent;color:var(--text-mid);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;transition:color .16s ease;}
 .space-btn.active{color:var(--text);}
-.space-slider{position:absolute;left:3px;top:3px;height:30px;border-radius:8px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06);transform:translateX(var(--space-slider-x,0px));transition:transform .22s cubic-bezier(.4,0,.2,1),width .22s cubic-bezier(.4,0,.2,1);z-index:0;will-change:transform,width;}
+.space-slider{position:absolute;left:3px;top:3px;height:30px;border-radius:8px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06);transition:left .22s cubic-bezier(.4,0,.2,1),width .22s cubic-bezier(.4,0,.2,1);z-index:0;will-change:left,width;}
 
 .space2-panel{position:absolute;inset:52px 16px 18px;z-index:170;border:none;border-radius:0;background:transparent;backdrop-filter:none;box-shadow:none;display:flex;flex-direction:column;overflow:visible;--space2-sidebar-width:238px;}
 .space2-panel.hidden{display:none;}
@@ -1061,7 +1061,7 @@ body.space-2 #space2-mode-dock{display:none!important;}
     #viewport{width:100vw;height:100dvh;overflow:hidden;overscroll-behavior:none;}
     .space-switcher{top:10px;}
     .space-btn{min-width:96px;font-size:12px;height:30px;}
-    .space2-panel{inset:58px 10px calc(132px + env(safe-area-inset-bottom)) 10px;}
+    .space2-panel{inset:58px 10px calc(112px + env(safe-area-inset-bottom)) 10px;}
     .space2-panel{--space2-sidebar-width:198px;}
     .space2-sidebar{overflow:auto;padding-top:8px;padding-bottom:10px;-webkit-overflow-scrolling:touch;top:10px;}
     .space2-head{gap:8px;}
@@ -1106,7 +1106,7 @@ body.space-2 #space2-mode-dock{display:none!important;}
 @media (max-width:390px){
     #toolbar-hub{width:calc(100% - 10px);}
     .space2-ai-hub{width:calc(100% - 10px);}
-    .space2-panel{inset:56px 8px calc(126px + env(safe-area-inset-bottom)) 8px;}
+    .space2-panel{inset:56px 8px calc(108px + env(safe-area-inset-bottom)) 8px;}
 }
 
 @media (max-width:1280px){
