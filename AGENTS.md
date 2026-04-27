@@ -25,15 +25,32 @@ This repository mixes multiple experiments, but the active shipped Space 2 runti
 - Avoid staging gitignored mirror files under `Asquarespace/` when the runtime change is intended for the deployed app.
 - Validate the exact touched slice after edits: DOM/CSS/JS errors first, then push only the tracked runtime files.
 
-### Why phone changes may appear to "not show"
+### ⚠️ MANDATORY: Always sync BOTH runtime trees on every edit
 
-- This repo currently has **two tracked runtime trees** (`Asquarespace/` and `Asquarespace/www/`) with overlapping HTML/CSS/JS (`index.html`, `css/style.css`, `js/main.js`).
-- Depending on how the phone wrapper/web URL is configured at that moment, the app may render one tree while fixes were made in the other.
-- Symptom: many reloads show no UI change even though commits succeeded.
-- Required verification before/after UI fixes:
-  - Confirm which runtime path the phone build is serving right now.
-  - Keep cache-bust versions in the served `index.html` in sync with edited CSS/JS.
-  - If unsure, mirror critical mobile fixes into both trees intentionally and then prune later.
+**Both trees are git-tracked and the app may load from either one:**
+
+| File | www/ path | Root path |
+|------|-----------|-----------|
+| HTML | `Asquarespace/www/index.html` | `Asquarespace/index.html` |
+| CSS  | `Asquarespace/www/css/style.css` | `Asquarespace/css/style.css` |
+| JS   | `Asquarespace/www/js/main.js` | `Asquarespace/js/main.js` |
+
+**After every edit to `www/` files, ALWAYS run:**
+```bash
+cp Asquarespace/www/js/main.js Asquarespace/js/main.js
+cp Asquarespace/www/css/style.css Asquarespace/css/style.css
+cp Asquarespace/www/index.html Asquarespace/index.html
+```
+
+**Then stage and force-add the root files (they are .gitignored by pattern but were pre-committed):**
+```bash
+git add Asquarespace/www/js/main.js Asquarespace/www/css/style.css Asquarespace/www/index.html
+git add -f Asquarespace/js/main.js Asquarespace/css/style.css Asquarespace/index.html
+```
+
+- **Never commit only the `www/` files.** Changes will be invisible to the app unless both trees are identical.
+- Symptom when you forget: user reloads app after a successful push and sees zero change.
+- Cache-bust version must also be bumped in BOTH `index.html` files on every CSS/JS change.
 
 ## Supabase / Media Rules
 

@@ -1059,6 +1059,7 @@ body.space-2 #space2-mode-dock{display:none!important;}
 
 @media (min-width:761px){
     #space2-view-switch.grid-float{position:fixed;top:12px;left:16px;z-index:500;}
+    .space2-search-wrap.search-float{position:fixed;top:12px;left:114px;z-index:500;width:240px;height:38px;box-shadow:var(--shadow);}
 }
 
 @media (max-width:760px){

@@ -3535,22 +3535,17 @@ function openBoardPanel(){
 
 function updateSpaceSlider(){
     if(!spaceSwitcher||!spaceSlider) return;
-    const active=spaceSwitcher.querySelector('.space-btn.active');
-    if(!active) return;
-    const isGrid=active===spaceBtn2||currentSpace==='space2';
-    // Read from position BEFORE class change (class change alters CSS computed value).
-    const fromLeft  = parseFloat(getComputedStyle(spaceSlider).left)  || 3;
-    const fromWidth = parseFloat(getComputedStyle(spaceSlider).width) || 104;
-    spaceSwitcher.classList.toggle('is-grid',isGrid);
-    const toLeft  = active.offsetLeft;
-    const toWidth = active.offsetWidth;
-    // Set final position as inline style immediately (always kept in sync).
-    spaceSlider.style.left  = toLeft  + 'px';
-    spaceSlider.style.width = toWidth + 'px';
-    // Web Animations API: runs on the compositor thread, no CSS-transition tricks needed.
-    if(fromLeft!==toLeft||fromWidth!==toWidth){
+    const isGrid = currentSpace === 'space2';
+    const mobile = window.innerWidth <= 980;
+    // Hardcoded positions matching CSS exactly — no offsetLeft dependency.
+    const toLeft = isGrid ? (mobile ? 101 : 109) : 3;
+    const fromLeft = parseFloat(getComputedStyle(spaceSlider).left) || (isGrid ? 3 : 109);
+    spaceSwitcher.classList.toggle('is-grid', isGrid);
+    // Set final state as inline style so it holds after animation (same pattern as showSpace2View).
+    spaceSlider.style.left = toLeft + 'px';
+    if(Math.abs(fromLeft - toLeft) > 1){
         spaceSlider.animate(
-            [{left:fromLeft+'px',width:fromWidth+'px'},{left:toLeft+'px',width:toWidth+'px'}],
+            [{left:fromLeft+'px'},{left:toLeft+'px'}],
             {duration:220,easing:'cubic-bezier(0.4,0,0.2,1)'}
         );
     }
@@ -3589,7 +3584,6 @@ function setSpace(space){
     updateSpace2TopCornerVisibility();
     applySpace2MobileHeaderLayout();
     requestAnimationFrame(updateSpaceSlider);
-    setTimeout(updateSpaceSlider,120);
     schedulePersist(120);
 }
 
@@ -3934,8 +3928,8 @@ if(geminiToggleBtn) geminiToggleBtn.addEventListener('click',e=>{
 });
 settingsModal.addEventListener('click',e=>{if(e.target===settingsModal) closeSettings();});
 
-if(spaceBtn1) spaceBtn1.addEventListener('click',e=>{e.stopPropagation();setSpace('space1');requestAnimationFrame(updateSpaceSlider);setTimeout(updateSpaceSlider,80);});
-if(spaceBtn2) spaceBtn2.addEventListener('click',e=>{e.stopPropagation();setSpace('space2');requestAnimationFrame(updateSpaceSlider);setTimeout(updateSpaceSlider,80);});
+if(spaceBtn1) spaceBtn1.addEventListener('click',e=>{e.stopPropagation();setSpace('space1');});
+if(spaceBtn2) spaceBtn2.addEventListener('click',e=>{e.stopPropagation();setSpace('space2');});
 if(space2Search) space2Search.addEventListener('input',()=>{
     space2SearchText=space2Search.value||'';
     if(space2View==='discover') filterDiscoverFeedBySearch();
@@ -4056,6 +4050,9 @@ function showSpace2View(view) {
         // Desktop only: float the view-switch to top-left of the app in grid mode.
         if(space2ViewSwitch){
             space2ViewSwitch.classList.toggle('grid-float', isGrid && window.innerWidth > 760);
+        }
+        if(space2SearchWrap){
+            space2SearchWrap.classList.toggle('search-float', isGrid && window.innerWidth > 760);
         }
     }
     if(space2DiscoverControls) space2DiscoverControls.classList.toggle('hidden', isGrid);
