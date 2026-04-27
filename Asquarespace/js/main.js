@@ -3533,9 +3533,12 @@ function updateSpaceSlider(){
     const parentRect=spaceSwitcher.getBoundingClientRect();
     const activeRect=active.getBoundingClientRect();
     const left=activeRect.left-parentRect.left;
-    spaceSlider.style.left=Math.max(0,left)+'px';
-    spaceSlider.style.transform='';
-    spaceSlider.style.width=w+'px';
+    const newLeft=Math.max(0,left)+'px';
+    const newWidth=w+'px';
+    if(spaceSlider.style.left!==newLeft||spaceSlider.style.width!==newWidth){
+        spaceSlider.style.left=newLeft;
+        spaceSlider.style.width=newWidth;
+    }
 }
 
 function setSpace(space){
