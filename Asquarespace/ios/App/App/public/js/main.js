@@ -6606,8 +6606,8 @@ async function askAI(){
 function getSpace2AiSheetMaxPx(){
     const vv=window.visualViewport;
     const visibleHeight=Math.max(1,Math.floor((vv&&vv.height)||window.innerHeight||0));
-    if(IS_MOBILE_SHELL) return Math.max(340,Math.min(760,Math.floor(visibleHeight*0.74)));
-    return Math.max(420,Math.min(760,Math.floor(visibleHeight*0.72)));
+    if(IS_MOBILE_SHELL) return Math.max(360,Math.min(980,Math.floor(visibleHeight*0.84)));
+    return Math.max(500,Math.min(980,Math.floor(visibleHeight*0.82)));
 }
 
 function updateSpace2AiSheetSizing(){

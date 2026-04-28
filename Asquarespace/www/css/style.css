@@ -180,14 +180,14 @@ body.auth-locked #ui-container{display:none;}
 .space2-item.img-loaded .space2-thumb{opacity:1;}
 .space2-thumb-skeleton{position:absolute;inset:0;background:linear-gradient(110deg,color-mix(in srgb,var(--surface-2) 92%,transparent) 18%,color-mix(in srgb,var(--surface) 84%,transparent) 38%,color-mix(in srgb,var(--surface-2) 92%,transparent) 58%);background-size:220% 100%;animation:space2ThumbShimmer 1.35s linear infinite;transition:opacity .22s ease;}
 .space2-item.img-loaded .space2-thumb-skeleton{opacity:0;pointer-events:none;}
-.space2-ai-hub{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);width:min(680px,calc(100% - 28px));z-index:330;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;--space2-ai-sheet-max:min(72vh,760px);}
+.space2-ai-hub{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);width:min(680px,calc(100% - 28px));z-index:330;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;--space2-ai-sheet-max:min(86vh,980px);}
 .space2-ai-hub.hidden{display:none;}
 .space2-ai-hub:not(.chat-open){gap:2px;}
 .space2-ai-hub:not(.chat-open) #space2-mode-dock{margin-bottom:-3px;}
 .space2-ai-hub:not(.chat-open) .space2-ai-bar-wrap{margin-top:-1px;}
 .space2-ai-hub.chat-open #space2-mode-dock{opacity:0;transform:translateY(10px) scale(.985);pointer-events:none;}
-.space2-ai-chat-sheet{position:absolute;left:0;right:0;bottom:calc(100% + 6px);z-index:2;width:100%;max-height:0;opacity:0;transform:translateY(12px);overflow:hidden;border-radius:var(--r-md);background:transparent;border:1px solid transparent;box-shadow:none;pointer-events:none;transition:max-height .42s cubic-bezier(.2,.76,.18,1),opacity .24s ease,transform .42s cubic-bezier(.2,.76,.18,1),border-color .2s ease,box-shadow .2s ease,background .2s ease;}
-.space2-ai-hub.chat-open .space2-ai-chat-sheet{max-height:var(--space2-ai-sheet-max);opacity:1;transform:translateY(0);pointer-events:auto;background:var(--surface);border-color:var(--border);box-shadow:var(--shadow-lg);}
+.space2-ai-chat-sheet{position:absolute;left:0;right:0;bottom:100%;z-index:2;width:100%;max-height:0;opacity:1;transform:none;transform-origin:bottom center;will-change:max-height;overflow:hidden;border-radius:var(--r-md);background:transparent;border:1px solid transparent;box-shadow:none;pointer-events:none;transition:max-height .6s cubic-bezier(.22,.86,.2,1),border-color .2s ease,box-shadow .2s ease,background .2s ease;}
+.space2-ai-hub.chat-open .space2-ai-chat-sheet{max-height:var(--space2-ai-sheet-max);opacity:1;transform:none;pointer-events:auto;background:var(--surface);border-color:var(--border);box-shadow:var(--shadow-lg);}
 .space2-ai-chat-head{height:38px;padding:0 10px;border-bottom:1px solid color-mix(in srgb,var(--border) 88%,transparent);display:flex;align-items:center;justify-content:space-between;gap:10px;}
 .space2-ai-chat-title{font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.01em;}
 .space2-ai-chat-control{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;}
@@ -1206,8 +1206,8 @@ body.is-mobile-shell #theme-toggle:hover{background:color-mix(in srgb,var(--surf
     .space2-grid.feed-mode{--space2-grid-gap:16px;}
     .discover-feed{padding:24px 10px 10px;columns:1;column-gap:0;}
     .discover-card{margin-bottom:16px;}
-    .space2-ai-hub{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 12px);bottom:calc(-8px + var(--mobile-keyboard-inset));gap:6px;padding-bottom:env(safe-area-inset-bottom);--space2-ai-sheet-max:calc(72dvh - 90px);transition:bottom .2s ease;}
-    .space2-ai-chat-sheet{bottom:calc(100% + 4px);}
+    .space2-ai-hub{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 12px);bottom:calc(-8px + var(--mobile-keyboard-inset));gap:6px;padding-bottom:env(safe-area-inset-bottom);--space2-ai-sheet-max:calc(84dvh - 64px);transition:bottom .2s ease;}
+    .space2-ai-chat-sheet{bottom:100%;}
     .space2-ai-hub:not(.chat-open){gap:0;}
     .space2-ai-hub:not(.chat-open) #space2-mode-dock{margin-bottom:-3px;}
     .space2-ai-hub:not(.chat-open) .space2-ai-bar-wrap{margin-top:-1px;}
