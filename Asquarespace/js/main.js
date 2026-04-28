@@ -202,10 +202,16 @@ const space2CaptureBox = document.getElementById('space2-capture-box');
 const space2CaptureActions = document.getElementById('space2-capture-actions');
 const space2CaptureCancelBtn = document.getElementById('space2-capture-cancel');
 const space2CaptureApplyBtn = document.getElementById('space2-capture-apply');
+let lucideRefreshQueued = false;
 
 function refreshLucideIcons(){
     if(!window.lucide||typeof window.lucide.createIcons!=='function') return;
-    try{window.lucide.createIcons();}catch{}
+    if(lucideRefreshQueued) return;
+    lucideRefreshQueued = true;
+    requestAnimationFrame(()=>{
+        lucideRefreshQueued = false;
+        try{window.lucide.createIcons();}catch{}
+    });
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
