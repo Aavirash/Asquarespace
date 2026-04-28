@@ -148,6 +148,7 @@ const space2SettingsModal = document.getElementById('space2-settings-modal');
 const space2SettingsClose = document.getElementById('space2-settings-close');
 const space2SettingsSignOut = document.getElementById('space2-settings-signout');
 const space2SyncNowBtn = document.getElementById('space2-sync-now-btn');
+const space2SyncNowTopBtn = document.getElementById('space2-sync-now-top-btn');
 const space2SyncIndicator = document.getElementById('space2-sync-indicator');
 const space2SyncIndicatorLabel = document.getElementById('space2-sync-indicator-label');
 const space2CapturePermissionBtn = document.getElementById('space2-capture-permission-btn');
@@ -262,7 +263,7 @@ const space2MobileLayoutSlots=new Map();
     if(el&&el.parentElement) space2MobileLayoutSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
 });
 let space2AiModels=[];
-let space2AiModel='openai';
+let space2AiModel='gemini-fast';
 let space2AiCaptureArmed=false;
 let space2AiCaptureDrag=null;
 let space2AiCaptureRect=null;
@@ -275,6 +276,8 @@ let space2AiChatMessages=[];
 let space2AiStatusClearTimer=null;
 let space2DomCaptureLibPromise=null;
 let space2CapturePermissionBootAttempted=false;
+let mobileStableViewportWidth=0;
+let mobileStableViewportHeight=0;
 let discoverItems = [];
 let discoverVisibleCount = 0;
 let discoverLoading = false;
@@ -299,6 +302,11 @@ let space2StartupAutoSyncDone=false;
 const DISCOVER_PAGE_SIZE = 18;
 const SPACE2_AI_CHAT_HISTORY_KEY='asq.space2.ai.chat.v1';
 const SPACE2_AI_CHAT_HISTORY_LIMIT=40;
+const SPACE2_FIXED_MODEL='gemini-fast';
+
+function canRunCloudSync(reason='auto'){
+    return reason==='manual'||reason==='startup';
+}
 
 // ── Persistence ────────────────────────────────────────────────────────────
 function normalizeProjectKey(key){
@@ -556,7 +564,6 @@ async function syncPendingSpace2LocalItems(){
 function sanitizeSpace2ItemForCloud(item){
     if(!item||typeof item!=='object') return item;
     const clean={...item};
-    delete clean.signedUrlExpiresAt;
     delete clean.browserBlobKey;
     delete clean.analysisBlob;
     if(clean.cloudPath){
@@ -680,7 +687,8 @@ function buildSpace2CloudSyncPayload(){
     return {payload,signature};
 }
 
-async function syncSpace2StateToSupabase({force=false,allowEmptyOverwrite=false}={}){
+async function syncSpace2StateToSupabase({force=false,allowEmptyOverwrite=false,reason='auto'}={}){
+    if(!canRunCloudSync(reason)) return true;
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return false;
     const space2Sync=buildSpace2CloudSyncPayload();
@@ -803,7 +811,7 @@ function findLegacySpace2State(projectKey=currentProjectKey){
     return bestRaw;
 }
 
-function flushCloudSync({force=false}={}){
+function flushCloudSync({force=false,reason='auto'}={}){
     const hadPending=!!cloudSyncTimer;
     if(cloudSyncTimer){
         clearTimeout(cloudSyncTimer);
@@ -811,16 +819,19 @@ function flushCloudSync({force=false}={}){
     }
     if(!currentSupabaseUser) return;
     if(!force&&!hadPending) return;
-    syncStateToSupabase().catch(err=>console.warn('cloud sync flush failed',err));
+    if(!canRunCloudSync(reason)) return;
+    syncStateToSupabase({reason}).catch(err=>console.warn('cloud sync flush failed',err));
 }
 
-function scheduleCloudSync(delay=700){
+function scheduleCloudSync(delay=700,{reason='auto'}={}){
     if(!currentSupabaseUser) return;
+    if(!canRunCloudSync(reason)) return;
     if(cloudSyncTimer) clearTimeout(cloudSyncTimer);
-    cloudSyncTimer=setTimeout(()=>{cloudSyncTimer=null;syncStateToSupabase().catch(err=>console.warn('cloud sync failed',err));},delay);
+    cloudSyncTimer=setTimeout(()=>{cloudSyncTimer=null;syncStateToSupabase({reason}).catch(err=>console.warn('cloud sync failed',err));},delay);
 }
 
-async function syncStateToSupabase(){
+async function syncStateToSupabase({reason='auto'}={}){
+    if(!canRunCloudSync(reason)) return;
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return;
     const boardSync=buildBoardCloudSyncPayload();
@@ -846,7 +857,7 @@ async function syncStateToSupabase(){
         );
     }
     if(buildSpace2CloudSyncPayload().signature!==lastSpace2CloudSyncSignature){
-        writes.push(syncSpace2StateToSupabase());
+        writes.push(syncSpace2StateToSupabase({reason}));
     }
     if(!writes.length) return;
     await Promise.all(writes);
@@ -1099,6 +1110,21 @@ function setSpace2SyncIndicator(state='idle',message=''){
     space2SyncIndicator.dataset.state=normalized;
     if(space2SyncIndicatorLabel) space2SyncIndicatorLabel.textContent=label;
     space2SyncIndicator.setAttribute('title',label);
+    const showSyncBadge=normalized==='syncing';
+    space2SyncIndicator.classList.toggle('hidden',!showSyncBadge);
+    if(space2SyncNowTopBtn){
+        space2SyncNowTopBtn.classList.toggle('hidden',showSyncBadge);
+        if(normalized==='offline'){
+            space2SyncNowTopBtn.textContent='Sign in';
+            space2SyncNowTopBtn.disabled=true;
+        }else if(normalized==='error'){
+            space2SyncNowTopBtn.textContent='Retry Sync';
+            space2SyncNowTopBtn.disabled=false;
+        }else{
+            space2SyncNowTopBtn.textContent='Sync Now';
+            space2SyncNowTopBtn.disabled=false;
+        }
+    }
 }
 
 function stopSpace2AutoSyncLoop(){
@@ -1112,7 +1138,7 @@ function queueSpace2AutoSync(delay=1200){
     stopSpace2AutoSyncLoop();
     if(!currentSupabaseUser) return;
     space2AutoSyncTimer=setTimeout(()=>{
-        runSpace2ManualSync({background:true,source:'auto'}).finally(()=>{
+        runSpace2ManualSync({background:true,source:'startup'}).finally(()=>{
             space2StartupAutoSyncDone=true;
             stopSpace2AutoSyncLoop();
         });
@@ -2239,12 +2265,13 @@ async function runSpace2ManualSync({background=false,source='manual'}={}){
         if(!background) setSpace2AutoMetaStatus('Sign in is required before syncing.',true);
         return false;
     }
-    if(!background&&(!space2SyncNowBtn||space2SyncNowBtn.disabled)) return false;
+    const syncTriggerBtn=space2SyncNowTopBtn||space2SyncNowBtn;
+    if(!background&&syncTriggerBtn&&syncTriggerBtn.disabled) return false;
 
-    const originalLabel=space2SyncNowBtn?space2SyncNowBtn.textContent||'Sync Now':'Sync Now';
-    if(!background&&space2SyncNowBtn){
-        space2SyncNowBtn.disabled=true;
-        space2SyncNowBtn.textContent='Syncing...';
+    const originalLabel=syncTriggerBtn?syncTriggerBtn.textContent||'Sync Now':'Sync Now';
+    if(!background&&syncTriggerBtn){
+        syncTriggerBtn.disabled=true;
+        syncTriggerBtn.textContent='Syncing...';
     }
     space2SyncInFlight=true;
     setSpace2SyncIndicator('syncing',source==='auto'?'Syncing...':'Syncing now...');
@@ -2256,7 +2283,8 @@ async function runSpace2ManualSync({background=false,source='manual'}={}){
         await syncPendingSpace2LocalItems();
         saveProjectState();
         saveSpace2State(undefined,undefined,{skipCloudSync:true});
-        await syncStateToSupabase();
+        const syncReason=source==='startup'?'startup':'manual';
+        await syncStateToSupabase({reason:syncReason});
         await restoreStateFromSupabase();
         await refreshSpace2SignedUrls();
         renderSpace2Grid();
@@ -2273,9 +2301,9 @@ async function runSpace2ManualSync({background=false,source='manual'}={}){
         return false;
     }finally{
         space2SyncInFlight=false;
-        if(!background&&space2SyncNowBtn){
-            space2SyncNowBtn.disabled=false;
-            space2SyncNowBtn.textContent=originalLabel;
+        if(!background&&syncTriggerBtn){
+            syncTriggerBtn.disabled=false;
+            syncTriggerBtn.textContent=originalLabel;
         }
     }
 }
@@ -3189,16 +3217,8 @@ async function bootstrapAppAfterAuth(){
         if(currentSupabaseUser){
             await restoreStateFromSupabase();
             pendingSpace2CloudLoad=false;
-            // Diagnostic write-test: immediately attempt a sync and surface any error.
-            const writeOk=await syncSpace2StateToSupabase({force:true});
-            if(!writeOk){
-                // Error already shown in setSpace2AutoMetaStatus via syncSpace2StateToSupabase.
-                // Also show a persistent alert so it can't be missed.
-                setTimeout(()=>alert('⚠️ Supabase write test FAILED.\nCheck the Space 2 status bar for the error message.\nPersistence will not work until this is resolved.'),1000);
-            } else {
-                setSpace2AutoMetaStatus('✅ Cloud sync connected.');
-                setTimeout(()=>setSpace2AutoMetaStatus(''),4000);
-            }
+            setSpace2AutoMetaStatus('Cloud connected. Tap Sync Now when you want to sync.');
+            setTimeout(()=>setSpace2AutoMetaStatus(''),3200);
         }
     }
 }
@@ -3371,6 +3391,35 @@ function viewCenter(){const r=viewport.getBoundingClientRect();return vToC(r.wid
 
 function fitViewportToVisibleArea(){
     const vv=window.visualViewport;
+    if(IS_MOBILE_SHELL){
+        const winW=Math.max(1,Math.floor(window.innerWidth||0));
+        const winH=Math.max(1,Math.floor(window.innerHeight||0));
+        const vvW=Math.max(1,Math.floor(vv&&vv.width?vv.width:winW));
+        const vvH=Math.max(1,Math.floor(vv&&vv.height?vv.height:winH));
+        const vvTop=Math.max(0,Math.floor(vv&&typeof vv.offsetTop==='number'?vv.offsetTop:0));
+        const keyboardInsetRaw=Math.max(0,winH-(vvH+vvTop));
+        const keyboardInset=keyboardInsetRaw>72?keyboardInsetRaw:0;
+
+        mobileStableViewportWidth=Math.max(mobileStableViewportWidth||0,winW,vvW);
+        if(!mobileStableViewportHeight||keyboardInset===0){
+            mobileStableViewportHeight=Math.max(winH,mobileStableViewportHeight||0);
+        }
+
+        const visW=Math.max(1,mobileStableViewportWidth||winW);
+        const visH=Math.max(1,mobileStableViewportHeight||winH);
+        if(uiContainer){
+            uiContainer.style.width=visW+'px';
+            uiContainer.style.height=visH+'px';
+        }
+        if(viewport){
+            viewport.style.width=visW+'px';
+            viewport.style.height=visH+'px';
+        }
+        document.documentElement.style.setProperty('--mobile-keyboard-inset',`${keyboardInset}px`);
+        if(document.body) document.body.classList.toggle('mobile-keyboard-open',keyboardInset>0);
+        return;
+    }
+
     const visW=Math.max(1,Math.floor(vv&&vv.width?vv.width:window.innerWidth||0));
     const visH=Math.max(1,Math.floor(vv&&vv.height?vv.height:window.innerHeight||0));
     if(uiContainer){
@@ -5111,7 +5160,7 @@ function syncSpace2AIHubVisibility(){
     if(!space2AiHub) return;
     const visible=currentSpace==='space2';
     space2AiHub.classList.toggle('hidden',!visible);
-    if(visible&&(!space2AiModels||!space2AiModels.length)) refreshSpace2AiModels();
+    if(visible&&(!space2AiModels||!space2AiModels.length)) renderSpace2AiModels();
     if(!visible){
         if(space2AiModelDropdown) space2AiModelDropdown.classList.add('hidden');
         setSpace2CaptureArmed(false);
@@ -5225,6 +5274,7 @@ if(space2SettingsSignOut) space2SettingsSignOut.addEventListener('click',async e
     await signOutCurrentUser();
 });
 if(space2SyncNowBtn) space2SyncNowBtn.addEventListener('click',()=>{runSpace2ManualSync();});
+if(space2SyncNowTopBtn) space2SyncNowTopBtn.addEventListener('click',()=>{runSpace2ManualSync();});
 if(space2CapturePermissionBtn) space2CapturePermissionBtn.addEventListener('click',()=>requestSpace2CapturePermission({silent:false}));
 if(space2LayoutGridBtn) space2LayoutGridBtn.addEventListener('click',()=>{
     space2LayoutMode='grid';
@@ -6475,9 +6525,10 @@ async function askAI(){
 }
 
 function getSpace2AiSheetMaxPx(){
-    const vh=Math.max(window.innerHeight||0,1);
-    if(IS_MOBILE_SHELL) return Math.max(220,Math.floor(vh*0.5)-74);
-    return Math.max(220,Math.min(420,Math.floor(vh*0.44)));
+    const vv=window.visualViewport;
+    const visibleHeight=Math.max(1,Math.floor((vv&&vv.height)||window.innerHeight||0));
+    if(IS_MOBILE_SHELL) return Math.max(340,Math.min(760,Math.floor(visibleHeight*0.74)));
+    return Math.max(420,Math.min(760,Math.floor(visibleHeight*0.72)));
 }
 
 function updateSpace2AiSheetSizing(){
@@ -6912,76 +6963,13 @@ function getSpace2AiModelGroups(){
 }
 
 function renderSpace2AiModels(){
-    if(!space2AiModelDropdown||!space2AiModelLabel) return;
-    space2AiModelDropdown.innerHTML='';
-    const groups=getSpace2AiModelGroups();
-    const all=[...new Set(groups.flatMap(g=>g.models))];
-    space2AiModels=all;
-    if(!space2AiModels.length){
-        space2AiModel='openai';
-        space2AiModelLabel.textContent='openai';
-        const btn=buildModelBtn('openai',true);
-        btn.addEventListener('click',()=>{space2AiModel='openai';space2AiModelLabel.textContent='openai';});
-        space2AiModelDropdown.appendChild(btn);
-        return;
-    }
-    if(!space2AiModels.includes(space2AiModel)) space2AiModel=space2AiModels[0];
-    space2AiModelLabel.textContent=space2AiModel;
-    let section=0;
-    groups.forEach(group=>{
-        if(section>0){
-            const sep=document.createElement('div');
-            sep.className='model-divider';
-            space2AiModelDropdown.appendChild(sep);
-        }
-        const lbl=document.createElement('div');
-        lbl.className='model-group-label';
-        lbl.textContent=group.label;
-        space2AiModelDropdown.appendChild(lbl);
-        group.models.forEach(name=>{
-            const btn=document.createElement('button');
-            btn.className=`model-opt${name===space2AiModel?' active':''}`;
-            btn.type='button';
-            btn.textContent=name;
-            btn.addEventListener('click',e=>{
-                e.stopPropagation();
-                space2AiModel=name;
-                space2AiModelLabel.textContent=name;
-                space2AiModelDropdown.querySelectorAll('.model-opt').forEach(b=>b.classList.toggle('active',b.textContent===name));
-                space2AiModelDropdown.classList.add('hidden');
-            });
-            space2AiModelDropdown.appendChild(btn);
-        });
-        section++;
-    });
+    space2AiModels=[SPACE2_FIXED_MODEL];
+    space2AiModel=SPACE2_FIXED_MODEL;
+    if(space2AiModelLabel) space2AiModelLabel.textContent=SPACE2_FIXED_MODEL;
+    if(space2AiModelDropdown) space2AiModelDropdown.innerHTML='';
 }
 
 async function refreshSpace2AiModels(){
-    if(space2AiModelLabel) space2AiModelLabel.textContent='Loading models...';
-    try{
-        const [imgRes,textRes]=await Promise.all([
-            fetch(`${API_BASE}/image/models`,{headers:buildAuthHeaders()}),
-            fetch(`${API_BASE}/text/models`,{headers:buildAuthHeaders()})
-        ]);
-        if(imgRes.ok){
-            const imgList=normalizeModelList(await imgRes.json()).filter(m=>!m.paid_only);
-            modelCatalog.image=imgList.filter(m=>!m.output_modalities.includes('video')).map(m=>m.name);
-            modelCatalog.video=imgList.filter(m=>m.output_modalities.includes('video')).map(m=>m.name);
-            modelCatalog.imageVision=imgList.filter(m=>{
-                const inMods=(m.input_modalities||[]).map(v=>String(v).toLowerCase());
-                const outMods=(m.output_modalities||[]).map(v=>String(v).toLowerCase());
-                const supportsEndpoint=(m.supported_endpoints||[]).some(ep=>String(ep).includes('/v1/images/edits'));
-                const desc=(m.description||'').toLowerCase();
-                return (inMods.includes('image')&&outMods.includes('image'))||supportsEndpoint||desc.includes('image-to-image')||desc.includes('edit');
-            }).map(m=>m.name);
-        }
-        if(textRes.ok){
-            const textList=normalizeModelList(await textRes.json()).filter(m=>!m.paid_only);
-            modelCatalog.text=textList.filter(m=>m.output_modalities.includes('text')||!m.output_modalities.length).map(m=>m.name);
-        }
-    }catch(err){
-        console.warn('space2 model refresh failed',err);
-    }
     renderSpace2AiModels();
 }
 
@@ -7021,7 +7009,10 @@ async function streamSpace2AiCompletion(body,{onChunk}={}){
         headers:buildAuthHeaders({'Content-Type':'application/json'}),
         body:JSON.stringify({...body,stream:true})
     });
-    if(!res.ok) throw new Error(`AI request failed (${res.status})`);
+    if(!res.ok){
+        const detail=await res.text().catch(()=> '');
+        throw new Error(`AI request failed (${res.status})${detail?`: ${detail.slice(0,200)}`:''}`);
+    }
     if(!res.body||!res.body.getReader) throw new Error('Streaming unavailable');
 
     const reader=res.body.getReader();
@@ -7075,19 +7066,7 @@ async function askSpace2Ai(){
         space2AiInput.value='';
         space2AiInput.style.height='24px';
     }
-    setSpace2AiChatOpen(true);
-
-    let contextImage=(space2AiAttachedCapture||'').trim();
-    const hadManualCapture=!!contextImage;
-    if(!contextImage){
-        try{
-            setSpace2AiOutput('Capturing current screen context...', {persist:true});
-            contextImage=await captureSpace2AiContextImage();
-        }catch(err){
-            console.warn('space2 contextual capture failed',err);
-            contextImage='';
-        }
-    }
+    const contextImage=(space2AiAttachedCapture||'').trim();
 
     const userPrompt=prompt||'Analyze this screen and provide concise, actionable guidance.';
     if(!userPrompt&&!contextImage){
@@ -7108,7 +7087,7 @@ async function askSpace2Ai(){
             userContent.push({type:'image_url',image_url:{url:contextImage}});
         }
         const body={
-            model:space2AiModel||'openai',
+            model:SPACE2_FIXED_MODEL,
             messages:[
                 {role:'system',content:'You are a helpful visual assistant for designers. Be concise and actionable.'},
                 ...priorMessages,
@@ -7130,19 +7109,24 @@ async function askSpace2Ai(){
                 headers:buildAuthHeaders({'Content-Type':'application/json'}),
                 body:JSON.stringify({...body,stream:false})
             });
-            if(!res.ok) throw new Error(`AI request failed (${res.status})`);
+            if(!res.ok){
+                const detail=await res.text().catch(()=> '');
+                throw new Error(`AI request failed (${res.status})${detail?`: ${detail.slice(0,200)}`:''}`);
+            }
             const data=await res.json();
             fullText=extractSpace2ResponseText(data);
         }
 
         const finalText=(fullText||'').trim()||'No response text returned.';
         updateSpace2AiChatMessage(assistantIndex,finalText,{streaming:false});
-        setSpace2AiOutput('');
-        if(hadManualCapture) setSpace2AiAttachedCapture('');
+        if(space2AiChatOpen) setSpace2AiOutput('');
+        else setSpace2AiOutput(finalText);
+        if(contextImage) setSpace2AiAttachedCapture('');
     }catch(err){
         console.error('Space2 AI chat',err);
-        updateSpace2AiChatMessage(assistantIndex,'Could not get a response. Please retry.',{streaming:false});
-        setSpace2AiOutput('Could not get a response. Please retry.',{isError:true});
+        const detail=(err&&err.message)?` (${String(err.message).slice(0,160)})`:'';
+        updateSpace2AiChatMessage(assistantIndex,`Could not get a response. Please retry.${detail}`,{streaming:false});
+        setSpace2AiOutput(`Could not get a response. Please retry.${detail}`,{isError:true});
     }finally{
         space2AiChatStreaming=false;
     }
