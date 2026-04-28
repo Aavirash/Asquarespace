@@ -3546,7 +3546,16 @@ async function initAuthGate(){
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────
-function applyTheme(dark){isDark=dark;html.setAttribute('data-theme',dark?'dark':'light');if(iconSun) iconSun.style.display=dark?'none':'';if(iconMoon) iconMoon.style.display=dark?'':'none';try{localStorage.setItem('asq.theme',dark?'1':'0');}catch{}schedulePersist(250);}
+function applyTheme(dark){
+    isDark=dark;
+    html.setAttribute('data-theme',dark?'dark':'light');
+    const liveIconSun=document.getElementById('icon-sun');
+    const liveIconMoon=document.getElementById('icon-moon');
+    if(liveIconSun) liveIconSun.style.display=dark?'none':'';
+    if(liveIconMoon) liveIconMoon.style.display=dark?'':'none';
+    try{localStorage.setItem('asq.theme',dark?'1':'0');}catch{}
+    schedulePersist(250);
+}
 themeToggle.addEventListener('click',()=>applyTheme(!isDark));
 document.getElementById('extra-toggle-theme').addEventListener('click',()=>{closeAllDD();applyTheme(!isDark);});
 document.getElementById('extra-reset-view').addEventListener('click',()=>{closeAllDD();const r=viewport.getBoundingClientRect();setT(r.width/2,r.height/2,1);});
