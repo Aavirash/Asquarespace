@@ -114,6 +114,7 @@ const moveBoardModal= document.getElementById('move-board-modal');
 const moveBoardList = document.getElementById('move-board-list');
 const moveBoardCancel = document.getElementById('move-board-cancel');
 const extraMediaBrowserBtn = document.getElementById('extra-media-browser');
+const space2TopSync = document.getElementById('space2-top-sync');
 const space2TopCorner = document.getElementById('space2-top-corner');
 
 if(document.body){
@@ -193,6 +194,9 @@ const space2AiCaptureCancel = document.getElementById('space2-ai-capture-cancel'
 const space2AiCaptureConfirm = document.getElementById('space2-ai-capture-confirm');
 const space2CaptureOverlay = document.getElementById('space2-capture-overlay');
 const space2CaptureBox = document.getElementById('space2-capture-box');
+const space2CaptureActions = document.getElementById('space2-capture-actions');
+const space2CaptureCancelBtn = document.getElementById('space2-capture-cancel');
+const space2CaptureApplyBtn = document.getElementById('space2-capture-apply');
 
 // ── State ─────────────────────────────────────────────────────────────────
 let tx=0, ty=0, sc=1;
@@ -257,8 +261,11 @@ let space2AiModels=[];
 let space2AiModel='openai';
 let space2AiCaptureArmed=false;
 let space2AiCaptureDrag=null;
+let space2AiCaptureRect=null;
+let space2AiCaptureGesture=null;
 let space2AiPendingCapture='';
 let space2AiAttachedCapture='';
+let space2DomCaptureLibPromise=null;
 let space2CapturePermissionBootAttempted=false;
 let discoverItems = [];
 let discoverVisibleCount = 0;
@@ -280,7 +287,7 @@ let pendingSpace2CloudLoad=false;
 let space2SyncInFlight=false;
 let space2AutoSyncTimer=null;
 let space2SyncLastRunAt=0;
-const SPACE2_AUTO_SYNC_INTERVAL_MS = 45 * 1000;
+let space2StartupAutoSyncDone=false;
 const DISCOVER_PAGE_SIZE = 18;
 
 // ── Persistence ────────────────────────────────────────────────────────────
@@ -1091,30 +1098,33 @@ function stopSpace2AutoSyncLoop(){
     }
 }
 
-function queueSpace2AutoSync(delay=SPACE2_AUTO_SYNC_INTERVAL_MS){
+function queueSpace2AutoSync(delay=1200){
     stopSpace2AutoSyncLoop();
     if(!currentSupabaseUser) return;
     space2AutoSyncTimer=setTimeout(()=>{
         runSpace2ManualSync({background:true,source:'auto'}).finally(()=>{
-            queueSpace2AutoSync(SPACE2_AUTO_SYNC_INTERVAL_MS);
+            space2StartupAutoSyncDone=true;
+            stopSpace2AutoSyncLoop();
         });
-    },Math.max(5000,parseInt(delay,10)||SPACE2_AUTO_SYNC_INTERVAL_MS));
+    },Math.max(350,parseInt(delay,10)||1200));
 }
 
-function startSpace2AutoSyncLoop({immediate=false}={}){
+function startSpace2AutoSyncLoop({immediate=false,force=false}={}){
     stopSpace2AutoSyncLoop();
     if(!currentSupabaseUser){
         setSpace2SyncIndicator('offline');
         return;
     }
-    setSpace2SyncIndicator('idle',space2SyncLastRunAt?'Synced':'Waiting to sync');
-    if(immediate){
-        runSpace2ManualSync({background:true,source:'auto'}).finally(()=>{
-            queueSpace2AutoSync(SPACE2_AUTO_SYNC_INTERVAL_MS);
-        });
+    if(space2StartupAutoSyncDone&&!force){
+        setSpace2SyncIndicator('ok','Synced');
         return;
     }
-    queueSpace2AutoSync(SPACE2_AUTO_SYNC_INTERVAL_MS);
+    setSpace2SyncIndicator('idle',space2SyncLastRunAt?'Synced':'Waiting to sync');
+    if(immediate){
+        queueSpace2AutoSync(500);
+        return;
+    }
+    queueSpace2AutoSync();
 }
 
 function sanitizeMetaTitle(value=''){
@@ -2157,9 +2167,9 @@ function updateControlCornerState(){
 }
 
 function updateSpace2TopCornerVisibility(){
-    if(!space2TopCorner) return;
-    const show=currentSpace==='space2'&&space2View==='grid';
-    space2TopCorner.classList.toggle('hidden',!show);
+    const show=currentSpace==='space2';
+    if(space2TopCorner) space2TopCorner.classList.toggle('hidden',!show);
+    if(space2TopSync) space2TopSync.classList.toggle('hidden',!show);
 }
 
 function initSpace2SidebarSizing(){
@@ -2280,6 +2290,10 @@ function applySpace2LayoutSettings({persist=true}={}){
 }
 
 async function requestSpace2CapturePermission({silent=false}={}){
+    if(IS_MOBILE_SHELL){
+        if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Mobile capture works without system screen recording access.';
+        return true;
+    }
     if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
         if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Screen capture is not available in this environment.';
         return false;
@@ -3148,10 +3162,6 @@ async function initPersistence(){
     window.addEventListener('pagehide',flushWorkspaceSync);
     document.addEventListener('visibilitychange',()=>{
         if(document.visibilityState==='hidden') flushWorkspaceSync();
-        else if(currentSupabaseUser) startSpace2AutoSyncLoop({immediate:true});
-    });
-    window.addEventListener('online',()=>{
-        if(currentSupabaseUser) startSpace2AutoSyncLoop({immediate:true});
     });
     window.addEventListener('pageshow',()=>setTimeout(clearTransientSearchInputs,0));
 
@@ -3225,21 +3235,12 @@ function bindAuthUi(){
         const {error}=await client.auth.signInWithOtp({
             email,
             options:{
-                // Do not auto-create users here.
-                // Auto-create can trigger confirmation-link email flows that look like magic links.
-                shouldCreateUser:false
+                shouldCreateUser:true
             }
         });
         if(error){
-            const projectRef=((SUPABASE_URL.match(/https:\/\/([^.]+)\.supabase\.co/i)||[])[1]||'unknown');
             const rawMsg=String(error.message||'Unable to send login code.');
-            if(/not\s*found|user.*not\s*exist|signup/i.test(rawMsg)){
-                setAuthStatus(`This email is not in this Supabase project (${projectRef}). Use the account that already exists in this project.`,true);
-            }else if(/confirm|not\s*confirmed|verification/i.test(rawMsg)){
-                setAuthStatus(`Email exists but is not confirmed in project ${projectRef}. Confirm once, then request code again.`,true);
-            }else{
-                setAuthStatus(rawMsg,true);
-            }
+            setAuthStatus(rawMsg,true);
             return;
         }
         showAuthStep('otp');
@@ -3296,6 +3297,7 @@ async function initAuthGate(){
     client.auth.onAuthStateChange((event,session)=>{
         currentSupabaseUser=session&&session.user?session.user:null;
         if(currentSupabaseUser){
+            space2StartupAutoSyncDone=false;
             setSpace2SyncIndicator('idle','Connected');
             startSpace2AutoSyncLoop({immediate:true});
             setAuthStatus(`Signed in as ${currentSupabaseUser.email||'user'}. Preparing workspace...`);
@@ -3303,6 +3305,7 @@ async function initAuthGate(){
             bootstrapAppAfterAuth().catch(err=>console.warn('boot after auth failed',err));
         }else if(event==='SIGNED_OUT'){
             stopSpace2AutoSyncLoop();
+            space2StartupAutoSyncDone=false;
             setSpace2SyncIndicator('offline');
             appBootstrapped=false;
             lockAppForAuth();
@@ -3318,6 +3321,7 @@ async function initAuthGate(){
     }
     if(data&&data.session&&data.session.user){
         currentSupabaseUser=data.session.user;
+        space2StartupAutoSyncDone=false;
         setAuthStatus(`Restoring session for ${currentSupabaseUser.email||'user'}...`);
         unlockAppAfterAuth();
         await bootstrapAppAfterAuth();
@@ -4874,6 +4878,7 @@ async function signOutCurrentUser(){
     lastBoardCloudSyncSignature='';
     lastSpace2CloudSyncSignature='';
     stopSpace2AutoSyncLoop();
+    space2StartupAutoSyncDone=false;
     setSpace2SyncIndicator('offline');
     closeSettings();
     setSpace2AutoMetaStatus('Signed out. Please sign in again.');
@@ -4971,40 +4976,56 @@ if(space2AiCaptureConfirm) space2AiCaptureConfirm.addEventListener('click',()=>{
     setSpace2CapturePreview('');
     setSpace2AiOutput('');
 });
+if(space2CaptureCancelBtn) space2CaptureCancelBtn.addEventListener('click',()=>{
+    setSpace2CaptureArmed(false);
+    setSpace2AiOutput('');
+});
+if(space2CaptureApplyBtn) space2CaptureApplyBtn.addEventListener('click',()=>{
+    applySpace2MobileCaptureSelection();
+});
 if(space2AiDetach) space2AiDetach.addEventListener('click',()=>setSpace2AiAttachedCapture(''));
 if(space2CaptureOverlay){
-    space2CaptureOverlay.addEventListener('mousedown',e=>{
-        if(!space2AiCaptureArmed) return;
-        const r=space2CaptureOverlay.getBoundingClientRect();
-        space2AiCaptureDrag={x:e.clientX-r.left,y:e.clientY-r.top};
-        updateSpace2CaptureBox({left:space2AiCaptureDrag.x,top:space2AiCaptureDrag.y,width:1,height:1});
-    });
-    window.addEventListener('mousemove',e=>{
-        if(!space2AiCaptureArmed||!space2AiCaptureDrag) return;
-        const r=space2CaptureOverlay.getBoundingClientRect();
-        const now={x:e.clientX-r.left,y:e.clientY-r.top};
-        updateSpace2CaptureBox(getCaptureRectFromPoints(space2AiCaptureDrag,now));
-    });
-    window.addEventListener('mouseup',async e=>{
-        if(!space2AiCaptureArmed||!space2AiCaptureDrag) return;
-        const r=space2CaptureOverlay.getBoundingClientRect();
-        const now={x:e.clientX-r.left,y:e.clientY-r.top};
-        const rect=getCaptureRectFromPoints(space2AiCaptureDrag,now);
-        space2AiCaptureDrag=null;
-        setSpace2CaptureArmed(false);
-        if(rect.width<8||rect.height<8){
-            setSpace2AiOutput('');
-            return;
-        }
-        try{
-            const dataUrl=await captureSpace2ScreenRegion(rect);
-            setSpace2CapturePreview(dataUrl);
-            setSpace2AiOutput('');
-        }catch(err){
-            console.error('space2 capture',err);
-            setSpace2AiOutput('Capture failed. Please allow screen capture and try again.');
-        }
-    });
+    if(IS_MOBILE_SHELL){
+        space2CaptureOverlay.addEventListener('pointerdown',handleSpace2MobileCapturePointerDown,{passive:false});
+        window.addEventListener('pointermove',handleSpace2MobileCapturePointerMove,{passive:false});
+        window.addEventListener('pointerup',handleSpace2MobileCapturePointerUp);
+        window.addEventListener('pointercancel',handleSpace2MobileCapturePointerUp);
+    }else{
+        space2CaptureOverlay.addEventListener('mousedown',e=>{
+            if(!space2AiCaptureArmed) return;
+            const r=space2CaptureOverlay.getBoundingClientRect();
+            space2AiCaptureDrag={x:e.clientX-r.left,y:e.clientY-r.top};
+            space2AiCaptureRect={left:space2AiCaptureDrag.x,top:space2AiCaptureDrag.y,width:1,height:1};
+            updateSpace2CaptureBox(space2AiCaptureRect);
+        });
+        window.addEventListener('mousemove',e=>{
+            if(!space2AiCaptureArmed||!space2AiCaptureDrag) return;
+            const r=space2CaptureOverlay.getBoundingClientRect();
+            const now={x:e.clientX-r.left,y:e.clientY-r.top};
+            space2AiCaptureRect=getCaptureRectFromPoints(space2AiCaptureDrag,now);
+            updateSpace2CaptureBox(space2AiCaptureRect);
+        });
+        window.addEventListener('mouseup',async e=>{
+            if(!space2AiCaptureArmed||!space2AiCaptureDrag) return;
+            const r=space2CaptureOverlay.getBoundingClientRect();
+            const now={x:e.clientX-r.left,y:e.clientY-r.top};
+            const rect=getCaptureRectFromPoints(space2AiCaptureDrag,now);
+            space2AiCaptureDrag=null;
+            setSpace2CaptureArmed(false);
+            if(rect.width<8||rect.height<8){
+                setSpace2AiOutput('');
+                return;
+            }
+            try{
+                const dataUrl=await captureSpace2ScreenRegion(rect);
+                setSpace2CapturePreview(dataUrl);
+                setSpace2AiOutput('');
+            }catch(err){
+                console.error('space2 capture',err);
+                setSpace2AiOutput('Capture failed. Please allow screen capture and try again.');
+            }
+        });
+    }
 }
 setSpace2AiOutput('');
 setSpace2CapturePreview('');
@@ -6449,12 +6470,19 @@ function setSpace2CaptureArmed(armed){
     space2AiCaptureArmed=!!armed;
     if(space2AiEye) space2AiEye.classList.toggle('active',space2AiCaptureArmed);
     if(space2CaptureOverlay) space2CaptureOverlay.classList.toggle('hidden',!space2AiCaptureArmed);
+    if(space2CaptureActions) space2CaptureActions.classList.toggle('hidden',!(space2AiCaptureArmed&&IS_MOBILE_SHELL));
     if(space2CaptureBox){
         space2CaptureBox.style.display='none';
         space2CaptureBox.style.width='0px';
         space2CaptureBox.style.height='0px';
     }
     space2AiCaptureDrag=null;
+    space2AiCaptureGesture=null;
+    space2AiCaptureRect=null;
+    if(space2AiCaptureArmed&&IS_MOBILE_SHELL){
+        space2AiCaptureRect=getDefaultSpace2CaptureRect();
+        updateSpace2CaptureBox(space2AiCaptureRect);
+    }
 }
 
 function setSpace2CapturePreview(dataUrl){
@@ -6477,21 +6505,206 @@ function getCaptureRectFromPoints(a,b){
     return {left,top,width,height};
 }
 
+function getSpace2CaptureOverlayBounds(){
+    if(!space2CaptureOverlay) return null;
+    const r=space2CaptureOverlay.getBoundingClientRect();
+    return {
+        width:Math.max(1,Math.floor(r.width)),
+        height:Math.max(1,Math.floor(r.height))
+    };
+}
+
+function getDefaultSpace2CaptureRect(){
+    const bounds=getSpace2CaptureOverlayBounds();
+    if(!bounds) return {left:20,top:20,width:220,height:150};
+    const width=Math.max(180,Math.floor(bounds.width*0.62));
+    const height=Math.max(120,Math.floor(bounds.height*0.34));
+    return clampSpace2CaptureRect({
+        left:Math.floor((bounds.width-width)/2),
+        top:Math.floor((bounds.height-height)/2),
+        width,
+        height
+    });
+}
+
+function clampSpace2CaptureRect(rect){
+    if(!rect) return null;
+    const bounds=getSpace2CaptureOverlayBounds();
+    if(!bounds) return rect;
+    const minW=IS_MOBILE_SHELL?72:8;
+    const minH=IS_MOBILE_SHELL?72:8;
+    const width=Math.max(minW,Math.min(bounds.width,Math.floor(rect.width||0)));
+    const height=Math.max(minH,Math.min(bounds.height,Math.floor(rect.height||0)));
+    const left=Math.max(0,Math.min(bounds.width-width,Math.floor(rect.left||0)));
+    const top=Math.max(0,Math.min(bounds.height-height,Math.floor(rect.top||0)));
+    return {left,top,width,height};
+}
+
 function updateSpace2CaptureBox(rect){
     if(!space2CaptureBox) return;
-    if(!rect||rect.width<2||rect.height<2){
+    const next=clampSpace2CaptureRect(rect);
+    if(!next||next.width<2||next.height<2){
         space2CaptureBox.style.display='none';
         return;
     }
+    space2AiCaptureRect=next;
     space2CaptureBox.style.display='block';
-    space2CaptureBox.style.left=`${rect.left}px`;
-    space2CaptureBox.style.top=`${rect.top}px`;
-    space2CaptureBox.style.width=`${rect.width}px`;
-    space2CaptureBox.style.height=`${rect.height}px`;
+    space2CaptureBox.style.left=`${next.left}px`;
+    space2CaptureBox.style.top=`${next.top}px`;
+    space2CaptureBox.style.width=`${next.width}px`;
+    space2CaptureBox.style.height=`${next.height}px`;
 }
 
-async function captureSpace2ScreenRegion(rect){
+function getSpace2CapturePointFromEvent(e){
+    if(!space2CaptureOverlay) return {x:0,y:0};
+    const r=space2CaptureOverlay.getBoundingClientRect();
+    return {
+        x:e.clientX-r.left,
+        y:e.clientY-r.top
+    };
+}
+
+function handleSpace2MobileCapturePointerDown(e){
+    if(!IS_MOBILE_SHELL||!space2AiCaptureArmed) return;
+    const target=e.target;
+    if(target&&target.closest&&target.closest('#space2-capture-actions')) return;
+    const point=getSpace2CapturePointFromEvent(e);
+    const base=space2AiCaptureRect||getDefaultSpace2CaptureRect();
+    let mode='move';
+    let dir='';
+    const handle=target&&target.closest?target.closest('.space2-capture-handle'):null;
+    if(handle&&handle.dataset&&handle.dataset.dir){
+        mode='resize';
+        dir=handle.dataset.dir;
+    }else if(!(space2CaptureBox&&(target===space2CaptureBox||(target&&target.closest&&target.closest('#space2-capture-box'))))){
+        updateSpace2CaptureBox({
+            left:point.x-Math.floor(base.width/2),
+            top:point.y-Math.floor(base.height/2),
+            width:base.width,
+            height:base.height
+        });
+    }
+    space2AiCaptureGesture={
+        pointerId:e.pointerId,
+        mode,
+        dir,
+        start:point,
+        rect:{...(space2AiCaptureRect||base)}
+    };
+    try{ space2CaptureOverlay&&space2CaptureOverlay.setPointerCapture(e.pointerId); }catch{}
+    e.preventDefault();
+}
+
+function handleSpace2MobileCapturePointerMove(e){
+    const g=space2AiCaptureGesture;
+    if(!IS_MOBILE_SHELL||!space2AiCaptureArmed||!g||g.pointerId!==e.pointerId) return;
+    const point=getSpace2CapturePointFromEvent(e);
+    const dx=point.x-g.start.x;
+    const dy=point.y-g.start.y;
+    let next={...g.rect};
+
+    if(g.mode==='resize'){
+        if(g.dir.includes('w')){
+            next.left=g.rect.left+dx;
+            next.width=g.rect.width-dx;
+            if(next.width<72){
+                next.left=g.rect.left+(g.rect.width-72);
+                next.width=72;
+            }
+        }
+        if(g.dir.includes('e')) next.width=Math.max(72,g.rect.width+dx);
+        if(g.dir.includes('n')){
+            next.top=g.rect.top+dy;
+            next.height=g.rect.height-dy;
+            if(next.height<72){
+                next.top=g.rect.top+(g.rect.height-72);
+                next.height=72;
+            }
+        }
+        if(g.dir.includes('s')) next.height=Math.max(72,g.rect.height+dy);
+    }else{
+        next.left=g.rect.left+dx;
+        next.top=g.rect.top+dy;
+    }
+
+    updateSpace2CaptureBox(next);
+    e.preventDefault();
+}
+
+function handleSpace2MobileCapturePointerUp(e){
+    const g=space2AiCaptureGesture;
+    if(!g||g.pointerId!==e.pointerId) return;
+    try{ space2CaptureOverlay&&space2CaptureOverlay.releasePointerCapture(e.pointerId); }catch{}
+    space2AiCaptureGesture=null;
+}
+
+async function loadSpace2DomCaptureLibrary(){
+    if(window.html2canvas) return window.html2canvas;
+    if(space2DomCaptureLibPromise) return space2DomCaptureLibPromise;
+    space2DomCaptureLibPromise=new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.src='https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+        script.async=true;
+        script.onload=()=>{
+            if(window.html2canvas) resolve(window.html2canvas);
+            else reject(new Error('html2canvas failed to initialize'));
+        };
+        script.onerror=()=>reject(new Error('Failed to load html2canvas'));
+        document.head.appendChild(script);
+    });
+    return space2DomCaptureLibPromise;
+}
+
+async function captureSpace2DomRegion(rect){
+    if(!space2CaptureOverlay) throw new Error('Capture overlay unavailable');
+    const html2canvas=await loadSpace2DomCaptureLibrary();
+    const sourceEl=viewport||document.body;
+    const sourceRect=sourceEl.getBoundingClientRect();
+    const overlayRect=space2CaptureOverlay.getBoundingClientRect();
+    const canvas=await html2canvas(sourceEl,{backgroundColor:null,useCORS:true,logging:false,scale:Math.max(1,Math.min(window.devicePixelRatio||1,2))});
+
+    const scaleX=canvas.width/Math.max(sourceRect.width,1);
+    const scaleY=canvas.height/Math.max(sourceRect.height,1);
+    const absLeft=overlayRect.left+rect.left;
+    const absTop=overlayRect.top+rect.top;
+    const sx=Math.max(0,Math.floor((absLeft-sourceRect.left)*scaleX));
+    const sy=Math.max(0,Math.floor((absTop-sourceRect.top)*scaleY));
+    const sw=Math.max(1,Math.min(canvas.width-sx,Math.floor(rect.width*scaleX)));
+    const sh=Math.max(1,Math.min(canvas.height-sy,Math.floor(rect.height*scaleY)));
+
+    const out=document.createElement('canvas');
+    out.width=sw;
+    out.height=sh;
+    const ctx=out.getContext('2d');
+    ctx.drawImage(canvas,sx,sy,sw,sh,0,0,sw,sh);
+    return out.toDataURL('image/png');
+}
+
+async function applySpace2MobileCaptureSelection(){
+    if(!IS_MOBILE_SHELL||!space2AiCaptureArmed) return;
+    const rect=space2AiCaptureRect&&space2AiCaptureRect.width>=8&&space2AiCaptureRect.height>=8
+        ? {...space2AiCaptureRect}
+        : getDefaultSpace2CaptureRect();
+    try{
+        if(space2CaptureOverlay) space2CaptureOverlay.classList.add('hidden');
+        if(space2CaptureActions) space2CaptureActions.classList.add('hidden');
+        await wait(34);
+        const dataUrl=await captureSpace2ScreenRegion(rect,{preferDomCapture:true});
+        setSpace2CaptureArmed(false);
+        setSpace2AiAttachedCapture(dataUrl);
+        setSpace2CapturePreview('');
+        setSpace2AiOutput('');
+    }catch(err){
+        console.error('space2 mobile capture',err);
+        if(space2CaptureOverlay&&space2AiCaptureArmed) space2CaptureOverlay.classList.remove('hidden');
+        if(space2CaptureActions&&space2AiCaptureArmed) space2CaptureActions.classList.remove('hidden');
+        setSpace2AiOutput('Capture failed. Try again.');
+    }
+}
+
+async function captureSpace2ScreenRegion(rect,{preferDomCapture=false}={}){
     if(!rect||rect.width<4||rect.height<4) throw new Error('Capture area too small');
+    if(preferDomCapture||IS_MOBILE_SHELL) return captureSpace2DomRegion(rect);
     if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
         throw new Error('Screen capture is not available in this environment');
     }

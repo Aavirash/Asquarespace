@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20260428-89">
+    <link rel="stylesheet" href="css/style.css?v=20260428-90">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -50,6 +50,13 @@
       <span id="space-toggle-thumb" class="space-toggle-thumb" aria-hidden="true"></span>
       <button id="space-toggle-space" class="space-toggle-btn" type="button" role="tab" aria-selected="false" title="Canvas Space">Space</button>
       <button id="space-toggle-grid" class="space-toggle-btn" type="button" role="tab" aria-selected="true" title="Inspiration Grid">Grid</button>
+    </div>
+  </div>
+
+  <div id="space2-top-sync" class="space2-top-sync hidden">
+    <div id="space2-sync-indicator" class="space2-sync-indicator" data-state="idle" role="status" aria-live="polite" title="Sync status">
+      <span class="space2-sync-dot" aria-hidden="true"></span>
+      <span id="space2-sync-indicator-label">Synced</span>
     </div>
   </div>
 
@@ -255,10 +262,6 @@
             <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
             <input id="space2-search" type="text" placeholder="Search title or description..." autocomplete="off">
           </div>
-          <div id="space2-sync-indicator" class="space2-sync-indicator" data-state="idle" role="status" aria-live="polite" title="Sync status">
-            <span class="space2-sync-dot" aria-hidden="true"></span>
-            <span id="space2-sync-indicator-label">Synced</span>
-          </div>
         </div>
         <div id="space2-discover-controls" class="space2-discover-controls">
           <div class="discover-tabs">
@@ -342,7 +345,16 @@
         </div>
       </div>
       <div id="space2-capture-overlay" class="space2-capture-overlay hidden" aria-hidden="true">
-        <div id="space2-capture-box" class="space2-capture-box"></div>
+        <div id="space2-capture-box" class="space2-capture-box">
+          <span class="space2-capture-handle nw" data-dir="nw" aria-hidden="true"></span>
+          <span class="space2-capture-handle ne" data-dir="ne" aria-hidden="true"></span>
+          <span class="space2-capture-handle sw" data-dir="sw" aria-hidden="true"></span>
+          <span class="space2-capture-handle se" data-dir="se" aria-hidden="true"></span>
+        </div>
+        <div id="space2-capture-actions" class="space2-capture-actions hidden">
+          <button id="space2-capture-cancel" class="space2-ai-cap-btn" type="button" aria-label="Cancel capture">✕</button>
+          <button id="space2-capture-apply" class="space2-ai-cap-btn ok" type="button" aria-label="Use selected capture">✓</button>
+        </div>
       </div>
     </div>
   </div>
@@ -622,6 +634,6 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/CSInterface.js"></script>
-<script src="js/main.js?v=20260428-89"></script>
+<script src="js/main.js?v=20260428-90"></script>
 </body>
 </html>
