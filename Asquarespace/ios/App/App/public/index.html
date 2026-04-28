@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20260428-90">
+    <link rel="stylesheet" href="css/style.css?v=20260428-91">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -311,6 +311,13 @@
             <span>Collection</span>
           </button>
         </div>
+        <div id="space2-ai-chat-sheet" class="space2-ai-chat-sheet" aria-live="polite" aria-label="AI chat history">
+          <div class="space2-ai-chat-head">
+            <span class="space2-ai-chat-title">Explore with AI</span>
+            <button id="space2-ai-collapse" class="space2-ai-chat-control" type="button" aria-label="Minimize chat" title="Minimize chat">−</button>
+          </div>
+          <div id="space2-ai-chat-scroll" class="space2-ai-chat-scroll"></div>
+        </div>
         <div id="space2-ai-output" class="space2-ai-output hidden"></div>
         <div id="space2-ai-capture-preview" class="space2-ai-capture-preview hidden">
           <img id="space2-ai-capture-img" alt="Capture preview">
@@ -330,7 +337,7 @@
                 <button id="space2-ai-detach" class="prompt-thumb-badge" type="button" aria-label="Remove attached capture">×</button>
               </div>
             </div>
-            <textarea id="space2-ai-input" rows="1" placeholder="Ask AI about your grid or captured region..."></textarea>
+            <textarea id="space2-ai-input" rows="1" placeholder="Explore with AI"></textarea>
             <div class="space2-ai-model-wrap">
               <button id="space2-ai-model-btn" class="space2-ai-model-btn" type="button">
                 <span id="space2-ai-model-label">Loading models...</span>
@@ -338,6 +345,9 @@
               </button>
               <div id="space2-ai-model-dropdown" class="model-dropdown hidden"></div>
             </div>
+            <button id="space2-ai-history-toggle" class="space2-ai-history-toggle" type="button" aria-label="Expand chat history" title="Expand chat history">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
+            </button>
             <button id="space2-ai-send" class="space2-ai-send" type="button" aria-label="Send prompt">
               <span class="space2-ai-send-glyph" aria-hidden="true">➤</span>
             </button>
@@ -634,6 +644,6 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/CSInterface.js"></script>
-<script src="js/main.js?v=20260428-90"></script>
+<script src="js/main.js?v=20260428-91"></script>
 </body>
 </html>

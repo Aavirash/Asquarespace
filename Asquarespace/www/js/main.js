@@ -182,6 +182,10 @@ const space2AiInput = document.getElementById('space2-ai-input');
 const space2AiEye = document.getElementById('space2-ai-eye');
 const space2AiSend = document.getElementById('space2-ai-send');
 const space2AiOutput = document.getElementById('space2-ai-output');
+const space2AiChatSheet = document.getElementById('space2-ai-chat-sheet');
+const space2AiChatScroll = document.getElementById('space2-ai-chat-scroll');
+const space2AiCollapse = document.getElementById('space2-ai-collapse');
+const space2AiHistoryToggle = document.getElementById('space2-ai-history-toggle');
 const space2AiModelBtn = document.getElementById('space2-ai-model-btn');
 const space2AiModelLabel = document.getElementById('space2-ai-model-label');
 const space2AiModelDropdown = document.getElementById('space2-ai-model-dropdown');
@@ -265,6 +269,10 @@ let space2AiCaptureRect=null;
 let space2AiCaptureGesture=null;
 let space2AiPendingCapture='';
 let space2AiAttachedCapture='';
+let space2AiChatOpen=false;
+let space2AiChatStreaming=false;
+let space2AiChatMessages=[];
+let space2AiStatusClearTimer=null;
 let space2DomCaptureLibPromise=null;
 let space2CapturePermissionBootAttempted=false;
 let discoverItems = [];
@@ -289,6 +297,8 @@ let space2AutoSyncTimer=null;
 let space2SyncLastRunAt=0;
 let space2StartupAutoSyncDone=false;
 const DISCOVER_PAGE_SIZE = 18;
+const SPACE2_AI_CHAT_HISTORY_KEY='asq.space2.ai.chat.v1';
+const SPACE2_AI_CHAT_HISTORY_LIMIT=40;
 
 // ── Persistence ────────────────────────────────────────────────────────────
 function normalizeProjectKey(key){
@@ -3377,11 +3387,13 @@ fitViewportToVisibleArea();
 window.addEventListener('resize',()=>{
     fitViewportToVisibleArea();
     applySpace2MobileHeaderLayout();
+    updateSpace2AiSheetSizing();
 });
 if(window.visualViewport){
     window.visualViewport.addEventListener('resize',()=>{
         fitViewportToVisibleArea();
         applySpace2MobileHeaderLayout();
+        updateSpace2AiSheetSizing();
     });
     window.visualViewport.addEventListener('scroll',fitViewportToVisibleArea);
 }
@@ -3390,6 +3402,7 @@ setTimeout(fitViewportToVisibleArea,120);
 setTimeout(fitViewportToVisibleArea,420);
 setTimeout(fitViewportToVisibleArea,1200);
 setTimeout(applySpace2MobileHeaderLayout,0);
+setTimeout(updateSpace2AiSheetSizing,0);
 setTimeout(()=>{const r=viewport.getBoundingClientRect();setT(r.width/2,r.height/2,1);},0);
 window.addEventListener('resize',scheduleSpace2GridLayout);
 
@@ -4955,6 +4968,18 @@ if(space2AiInput){
     });
 }
 if(space2AiSend) space2AiSend.addEventListener('click',e=>{e.stopPropagation();askSpace2Ai();});
+if(space2AiHistoryToggle){
+    space2AiHistoryToggle.addEventListener('click',e=>{
+        e.stopPropagation();
+        setSpace2AiChatOpen(!space2AiChatOpen);
+    });
+}
+if(space2AiCollapse){
+    space2AiCollapse.addEventListener('click',e=>{
+        e.stopPropagation();
+        setSpace2AiChatOpen(false);
+    });
+}
 if(space2AiModelBtn&&space2AiModelDropdown){
     space2AiModelBtn.addEventListener('click',e=>{
         e.stopPropagation();
@@ -5027,6 +5052,11 @@ if(space2CaptureOverlay){
         });
     }
 }
+loadSpace2AiChatHistory();
+renderSpace2AiChatHistory();
+attachSpace2AiScrollIsolation();
+updateSpace2AiSheetSizing();
+setSpace2AiChatOpen(false,{autoScroll:false});
 setSpace2AiOutput('');
 setSpace2CapturePreview('');
 setSpace2AiAttachedCapture('');
@@ -6444,16 +6474,139 @@ async function askAI(){
     }
 }
 
-function setSpace2AiOutput(text){
+function getSpace2AiSheetMaxPx(){
+    const vh=Math.max(window.innerHeight||0,1);
+    if(IS_MOBILE_SHELL) return Math.max(220,Math.floor(vh*0.5)-74);
+    return Math.max(220,Math.min(420,Math.floor(vh*0.44)));
+}
+
+function updateSpace2AiSheetSizing(){
+    if(!space2AiHub) return;
+    space2AiHub.style.setProperty('--space2-ai-sheet-max',`${getSpace2AiSheetMaxPx()}px`);
+}
+
+function trimSpace2AiChatHistory(){
+    if(space2AiChatMessages.length<=SPACE2_AI_CHAT_HISTORY_LIMIT) return;
+    space2AiChatMessages=space2AiChatMessages.slice(space2AiChatMessages.length-SPACE2_AI_CHAT_HISTORY_LIMIT);
+}
+
+function saveSpace2AiChatHistory(){
+    try{
+        trimSpace2AiChatHistory();
+        localStorage.setItem(SPACE2_AI_CHAT_HISTORY_KEY,JSON.stringify(space2AiChatMessages));
+    }catch{}
+}
+
+function loadSpace2AiChatHistory(){
+    try{
+        const raw=localStorage.getItem(SPACE2_AI_CHAT_HISTORY_KEY);
+        const parsed=raw?JSON.parse(raw):[];
+        if(Array.isArray(parsed)){
+            space2AiChatMessages=parsed
+                .filter(msg=>msg&&typeof msg.text==='string'&&msg.text.trim())
+                .map(msg=>({
+                    role:(msg.role==='user'||msg.role==='assistant')?msg.role:'system',
+                    text:String(msg.text||''),
+                    hasImage:!!msg.hasImage,
+                    streaming:false
+                }));
+            trimSpace2AiChatHistory();
+        }
+    }catch{
+        space2AiChatMessages=[];
+    }
+}
+
+function scrollSpace2AiChatToBottom(smooth=false){
+    if(!space2AiChatScroll) return;
+    space2AiChatScroll.scrollTo({top:space2AiChatScroll.scrollHeight,behavior:smooth?'smooth':'auto'});
+}
+
+function renderSpace2AiChatHistory({scrollToBottom=false}={}){
+    if(!space2AiChatScroll) return;
+    space2AiChatScroll.innerHTML='';
+    if(!space2AiChatMessages.length){
+        const empty=document.createElement('div');
+        empty.className='space2-ai-msg system';
+        empty.textContent='Chat with AI. You can type normally or attach a capture.';
+        space2AiChatScroll.appendChild(empty);
+        return;
+    }
+    space2AiChatMessages.forEach(msg=>{
+        const bubble=document.createElement('div');
+        bubble.className=`space2-ai-msg ${msg.role}${msg.streaming?' is-streaming':''}${msg.hasImage?' has-image':''}`;
+        bubble.textContent=msg.text;
+        space2AiChatScroll.appendChild(bubble);
+    });
+    if(scrollToBottom) scrollSpace2AiChatToBottom();
+}
+
+function appendSpace2AiChatMessage(role,text,{hasImage=false,streaming=false}={}){
+    const next=(text||'').trim();
+    if(!next) return -1;
+    space2AiChatMessages.push({
+        role:(role==='user'||role==='assistant')?role:'system',
+        text:next,
+        hasImage:!!hasImage,
+        streaming:!!streaming
+    });
+    trimSpace2AiChatHistory();
+    renderSpace2AiChatHistory({scrollToBottom:true});
+    saveSpace2AiChatHistory();
+    return space2AiChatMessages.length-1;
+}
+
+function updateSpace2AiChatMessage(index,text,{streaming=false}={}){
+    if(index<0||index>=space2AiChatMessages.length) return;
+    space2AiChatMessages[index].text=String(text||'');
+    space2AiChatMessages[index].streaming=!!streaming;
+    renderSpace2AiChatHistory({scrollToBottom:true});
+    saveSpace2AiChatHistory();
+}
+
+function setSpace2AiChatOpen(open,{autoScroll=true}={}){
+    space2AiChatOpen=!!open;
+    if(space2AiHub) space2AiHub.classList.toggle('chat-open',space2AiChatOpen);
+    if(space2AiHistoryToggle){
+        space2AiHistoryToggle.classList.toggle('active',space2AiChatOpen);
+        space2AiHistoryToggle.setAttribute('aria-label',space2AiChatOpen?'Collapse chat history':'Expand chat history');
+        space2AiHistoryToggle.setAttribute('title',space2AiChatOpen?'Collapse chat history':'Expand chat history');
+    }
+    updateSpace2AiSheetSizing();
+    if(space2AiChatOpen&&autoScroll) requestAnimationFrame(()=>scrollSpace2AiChatToBottom());
+}
+
+function setSpace2AiOutput(text,{isError=false,persist=false}={}){
     if(!space2AiOutput) return;
+    if(space2AiStatusClearTimer){
+        clearTimeout(space2AiStatusClearTimer);
+        space2AiStatusClearTimer=null;
+    }
     const next=(text||'').trim();
     if(!next){
         space2AiOutput.classList.add('hidden');
         space2AiOutput.textContent='';
+        space2AiOutput.style.color='';
         return;
     }
     space2AiOutput.textContent=next;
+    space2AiOutput.style.color=isError?'#d25a5a':'';
     space2AiOutput.classList.remove('hidden');
+    if(!persist){
+        space2AiStatusClearTimer=setTimeout(()=>setSpace2AiOutput(''),2800);
+    }
+}
+
+function attachSpace2AiScrollIsolation(){
+    if(!space2AiChatScroll) return;
+    const stopBubble=evt=>{
+        if(space2AiChatScroll.scrollHeight>space2AiChatScroll.clientHeight){
+            evt.stopPropagation();
+        }
+    };
+    space2AiChatScroll.addEventListener('pointerdown',stopBubble,{passive:true});
+    space2AiChatScroll.addEventListener('wheel',stopBubble,{passive:true});
+    space2AiChatScroll.addEventListener('touchmove',stopBubble,{passive:true});
 }
 
 function setSpace2AiAttachedCapture(dataUrl){
@@ -6832,43 +6985,166 @@ async function refreshSpace2AiModels(){
     renderSpace2AiModels();
 }
 
+function getSpace2AiContextRect(){
+    if(space2CaptureOverlay){
+        const r=space2CaptureOverlay.getBoundingClientRect();
+        if(r.width>4&&r.height>4){
+            return {left:0,top:0,width:Math.floor(r.width),height:Math.floor(r.height)};
+        }
+    }
+    const source=viewport||document.body;
+    const r=source.getBoundingClientRect();
+    return {left:0,top:0,width:Math.max(1,Math.floor(r.width)),height:Math.max(1,Math.floor(r.height))};
+}
+
+async function captureSpace2AiContextImage(){
+    const rect=getSpace2AiContextRect();
+    return captureSpace2ScreenRegion(rect,{preferDomCapture:true});
+}
+
+function normalizeSpace2StreamDelta(content){
+    if(typeof content==='string') return content;
+    if(Array.isArray(content)){
+        return content.map(part=>{
+            if(typeof part==='string') return part;
+            if(part&&typeof part.text==='string') return part.text;
+            return '';
+        }).join('');
+    }
+    if(content&&typeof content.text==='string') return content.text;
+    return '';
+}
+
+async function streamSpace2AiCompletion(body,{onChunk}={}){
+    const res=await fetch(`${API_BASE}/v1/chat/completions`,{
+        method:'POST',
+        headers:buildAuthHeaders({'Content-Type':'application/json'}),
+        body:JSON.stringify({...body,stream:true})
+    });
+    if(!res.ok) throw new Error(`AI request failed (${res.status})`);
+    if(!res.body||!res.body.getReader) throw new Error('Streaming unavailable');
+
+    const reader=res.body.getReader();
+    const decoder=new TextDecoder();
+    let buf='';
+    let full='';
+    while(true){
+        const {done,value}=await reader.read();
+        if(done) break;
+        buf+=decoder.decode(value,{stream:true});
+        const events=buf.split(/\r?\n\r?\n/);
+        buf=events.pop()||'';
+        for(const evt of events){
+            const lines=evt.split(/\r?\n/).filter(line=>line.startsWith('data:'));
+            if(!lines.length) continue;
+            const payload=lines.map(line=>line.slice(5).trim()).join('\n');
+            if(payload==='[DONE]') return full;
+            try{
+                const parsed=JSON.parse(payload);
+                const delta=normalizeSpace2StreamDelta(parsed?.choices?.[0]?.delta?.content);
+                if(delta){
+                    full+=delta;
+                    if(onChunk) onChunk(full,delta);
+                }
+            }catch{}
+        }
+    }
+    return full;
+}
+
+function extractSpace2ResponseText(data){
+    const raw=data?.choices?.[0]?.message?.content;
+    return normalizeSpace2StreamDelta(raw).trim();
+}
+
+function buildSpace2AiContextMessages(limit=8){
+    const entries=space2AiChatMessages
+        .filter(msg=>msg&&(msg.role==='user'||msg.role==='assistant')&&String(msg.text||'').trim())
+        .slice(-Math.max(0,limit));
+    return entries.map(msg=>({
+        role:msg.role,
+        content:String(msg.text||'').slice(0,2400)
+    }));
+}
+
 async function askSpace2Ai(){
     if(!space2AiInput) return;
     const prompt=(space2AiInput.value||'').trim();
-    if(!prompt&&!space2AiAttachedCapture) return;
     if(prompt){
         addPromptToHistory(prompt);
         space2AiInput.value='';
         space2AiInput.style.height='24px';
     }
-    setSpace2AiOutput('Thinking...');
+    setSpace2AiChatOpen(true);
+
+    let contextImage=(space2AiAttachedCapture||'').trim();
+    const hadManualCapture=!!contextImage;
+    if(!contextImage){
+        try{
+            setSpace2AiOutput('Capturing current screen context...', {persist:true});
+            contextImage=await captureSpace2AiContextImage();
+        }catch(err){
+            console.warn('space2 contextual capture failed',err);
+            contextImage='';
+        }
+    }
+
+    const userPrompt=prompt||'Analyze this screen and provide concise, actionable guidance.';
+    if(!userPrompt&&!contextImage){
+        setSpace2AiOutput('Type a prompt or attach/capture context first.',{isError:true});
+        return;
+    }
+
+    const priorMessages=buildSpace2AiContextMessages(8);
+    appendSpace2AiChatMessage('user',userPrompt,{hasImage:!!contextImage});
+    const assistantIndex=appendSpace2AiChatMessage('assistant','Thinking...', {streaming:true});
+    space2AiChatStreaming=true;
+    setSpace2AiOutput('Thinking...', {persist:true});
+
     try{
         const userContent=[];
-        if(prompt) userContent.push({type:'text',text:prompt});
-        if(space2AiAttachedCapture){
-            userContent.push({type:'image_url',image_url:{url:space2AiAttachedCapture}});
+        if(userPrompt) userContent.push({type:'text',text:userPrompt});
+        if(contextImage){
+            userContent.push({type:'image_url',image_url:{url:contextImage}});
         }
         const body={
             model:space2AiModel||'openai',
-            stream:false,
             messages:[
                 {role:'system',content:'You are a helpful visual assistant for designers. Be concise and actionable.'},
-                {role:'user',content:(space2AiAttachedCapture||userContent.length>1)?userContent:(prompt||'Analyze this image and provide guidance.')}
+                ...priorMessages,
+                {role:'user',content:(contextImage||userContent.length>1)?userContent:userPrompt}
             ]
         };
-        const res=await fetch(`${API_BASE}/v1/chat/completions`,{
-            method:'POST',
-            headers:buildAuthHeaders({'Content-Type':'application/json'}),
-            body:JSON.stringify(body)
-        });
-        if(!res.ok) throw new Error(`AI request failed (${res.status})`);
-        const data=await res.json();
-        const text=(data?.choices?.[0]?.message?.content||'').trim()||'No response text returned.';
-        setSpace2AiOutput(text);
-        if(space2AiAttachedCapture) setSpace2AiAttachedCapture('');
+
+        let fullText='';
+        try{
+            fullText=await streamSpace2AiCompletion(body,{
+                onChunk:(aggregate)=>{
+                    updateSpace2AiChatMessage(assistantIndex,aggregate,{streaming:true});
+                }
+            });
+        }catch(streamErr){
+            console.warn('space2 streaming fallback',streamErr);
+            const res=await fetch(`${API_BASE}/v1/chat/completions`,{
+                method:'POST',
+                headers:buildAuthHeaders({'Content-Type':'application/json'}),
+                body:JSON.stringify({...body,stream:false})
+            });
+            if(!res.ok) throw new Error(`AI request failed (${res.status})`);
+            const data=await res.json();
+            fullText=extractSpace2ResponseText(data);
+        }
+
+        const finalText=(fullText||'').trim()||'No response text returned.';
+        updateSpace2AiChatMessage(assistantIndex,finalText,{streaming:false});
+        setSpace2AiOutput('');
+        if(hadManualCapture) setSpace2AiAttachedCapture('');
     }catch(err){
         console.error('Space2 AI chat',err);
-        setSpace2AiOutput('Could not get a response. Please retry.');
+        updateSpace2AiChatMessage(assistantIndex,'Could not get a response. Please retry.',{streaming:false});
+        setSpace2AiOutput('Could not get a response. Please retry.',{isError:true});
+    }finally{
+        space2AiChatStreaming=false;
     }
 }
 
