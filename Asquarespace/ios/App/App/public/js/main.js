@@ -147,6 +147,8 @@ const space2SettingsModal = document.getElementById('space2-settings-modal');
 const space2SettingsClose = document.getElementById('space2-settings-close');
 const space2SettingsSignOut = document.getElementById('space2-settings-signout');
 const space2SyncNowBtn = document.getElementById('space2-sync-now-btn');
+const space2SyncIndicator = document.getElementById('space2-sync-indicator');
+const space2SyncIndicatorLabel = document.getElementById('space2-sync-indicator-label');
 const space2CapturePermissionBtn = document.getElementById('space2-capture-permission-btn');
 const space2CaptureStatus = document.getElementById('space2-capture-status');
 const space2LayoutGridBtn = document.getElementById('space2-layout-grid-btn');
@@ -275,6 +277,10 @@ let boardSyncAlertShown=false;
 let space2SyncAlertShown=false;
 let appBootstrapped=false;
 let pendingSpace2CloudLoad=false;
+let space2SyncInFlight=false;
+let space2AutoSyncTimer=null;
+let space2SyncLastRunAt=0;
+const SPACE2_AUTO_SYNC_INTERVAL_MS = 45 * 1000;
 const DISCOVER_PAGE_SIZE = 18;
 
 // ── Persistence ────────────────────────────────────────────────────────────
@@ -573,6 +579,31 @@ function buildSpace2StatePayload({forCloud=false}={}){
     };
 }
 
+function normalizeCanvasStateForSignature(canvasState){
+    if(!canvasState||typeof canvasState!=='object') return null;
+    const clone=JSON.parse(JSON.stringify(canvasState));
+    if(Object.prototype.hasOwnProperty.call(clone,'savedAt')) clone.savedAt=0;
+    return clone;
+}
+
+function normalizeSpace2StateForSignature(space2StateValue){
+    if(!space2StateValue||typeof space2StateValue!=='object') return null;
+    const clone=JSON.parse(JSON.stringify(space2StateValue));
+    if(Object.prototype.hasOwnProperty.call(clone,'savedAt')) clone.savedAt=0;
+    return clone;
+}
+
+function buildCloudSyncSignature({userId='',boardKey='',projectKey='',boardId='',canvasState=null,space2StateValue=null}={}){
+    return JSON.stringify({
+        user_id:userId,
+        board_key:boardKey,
+        project_key:projectKey,
+        board_id:boardId,
+        canvas_state:normalizeCanvasStateForSignature(canvasState),
+        space2_state:normalizeSpace2StateForSignature(space2StateValue)
+    });
+}
+
 function sanitizeNodeForCloud(node){
     if(!node||typeof node!=='object') return node;
     const clean={...node};
@@ -584,63 +615,71 @@ function sanitizeNodeForCloud(node){
 
 function buildBoardCloudSyncPayload(){
     const canvas_state=buildBoardPayload({forCloud:true});
+    const normalizedProjectKey=normalizeProjectKey(currentProjectKey);
+    const boardKey=getCloudBoardKey();
+    const boardId=currentBoardId||'board-1';
     const payload={
         user_id:currentSupabaseUser.id,
-        board_key:getCloudBoardKey(),
-        project_key:normalizeProjectKey(currentProjectKey),
-        board_id:currentBoardId||'board-1',
+        board_key:boardKey,
+        project_key:normalizedProjectKey,
+        board_id:boardId,
         canvas_state,
         space2_state:{items:[],collections:[],savedAt:0},
         updated_at:new Date().toISOString()
     };
-    const signature=JSON.stringify({
-        user_id:payload.user_id,
-        board_key:payload.board_key,
-        project_key:payload.project_key,
-        board_id:payload.board_id,
-        canvas_state,
-        space2_state:null
+    const signature=buildCloudSyncSignature({
+        userId:payload.user_id,
+        boardKey,
+        projectKey:normalizedProjectKey,
+        boardId,
+        canvasState:canvas_state,
+        space2StateValue:null
     });
     return {payload,signature};
 }
 
 function buildSpace2CloudSyncPayload(){
     const space2_state=buildSpace2StatePayload({forCloud:true});
+    const normalizedProjectKey=normalizeProjectKey(currentProjectKey);
+    const boardKey=getCloudSpace2Key();
+    const boardId='space2-global';
     const payload={
         user_id:currentSupabaseUser.id,
-        board_key:getCloudSpace2Key(),
-        project_key:normalizeProjectKey(currentProjectKey),
-        board_id:'space2-global',
+        board_key:boardKey,
+        project_key:normalizedProjectKey,
+        board_id:boardId,
         canvas_state:{},
         space2_state,
         updated_at:new Date().toISOString()
     };
-    const signature=JSON.stringify({
-        user_id:payload.user_id,
-        board_key:payload.board_key,
-        project_key:payload.project_key,
-        board_id:payload.board_id,
-        canvas_state:null,
-        space2_state
+    const signature=buildCloudSyncSignature({
+        userId:payload.user_id,
+        boardKey,
+        projectKey:normalizedProjectKey,
+        boardId,
+        canvasState:null,
+        space2StateValue:space2_state
     });
     return {payload,signature};
 }
 
-async function syncSpace2StateToSupabase({force=false}={}){
+async function syncSpace2StateToSupabase({force=false,allowEmptyOverwrite=false}={}){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser) return false;
     const space2Sync=buildSpace2CloudSyncPayload();
     const localItemCount=Array.isArray(space2State&&space2State.items)?space2State.items.length:0;
+    const localCollectionCount=Array.isArray(space2State&&space2State.collections)?space2State.collections.length:0;
     const cloudItemCount=Array.isArray(space2Sync.payload&&space2Sync.payload.space2_state&&space2Sync.payload.space2_state.items)
         ? space2Sync.payload.space2_state.items.length
         : 0;
+    const shouldGuardEmptyLocal=(!allowEmptyOverwrite&&localItemCount===0&&localCollectionCount===0);
     let effectiveSignature=space2Sync.signature;
     // Do not let an empty local state overwrite cloud rows while restore is in flight.
-    if(pendingSpace2CloudLoad&&localItemCount===0){
+    if(pendingSpace2CloudLoad&&localItemCount===0&&localCollectionCount===0){
         return true;
     }
-    if(localItemCount>0&&cloudItemCount===0){
-        // Keep cloud media entries, but still sync collection metadata changes.
+    if((localItemCount>0&&cloudItemCount===0)||shouldGuardEmptyLocal){
+        // Keep cloud media entries and collection metadata when local payload is stale/partial.
         const existing=await client
             .from(SUPABASE_STATE_TABLE)
             .select('space2_state')
@@ -653,21 +692,34 @@ async function syncSpace2StateToSupabase({force=false}={}){
             setSpace2AutoMetaStatus('⚠️ '+msg,true);
             return false;
         }
-        const cloudItems=Array.isArray(existing&&existing.data&&existing.data.space2_state&&existing.data.space2_state.items)
-            ? existing.data.space2_state.items.filter(hasCloudRenderableSpace2Source)
+        const existingSpace2State=(existing&&existing.data&&existing.data.space2_state)||null;
+        const cloudItems=Array.isArray(existingSpace2State&&existingSpace2State.items)
+            ? existingSpace2State.items.filter(hasCloudRenderableSpace2Source)
             : [];
-        if(cloudItems.length){
+        const cloudCollections=Array.isArray(existingSpace2State&&existingSpace2State.collections)
+            ? existingSpace2State.collections.filter(col=>col&&col.id&&col.name)
+            : [];
+
+        if(localItemCount>0&&cloudItemCount===0&&cloudItems.length){
             space2Sync.payload.space2_state.items=cloudItems;
             space2Sync.payload.space2_state.savedAt=Date.now();
+            setSpace2AutoMetaStatus('ℹ️ Synced collections; local-only images are pending cloud upload.');
         }
-        setSpace2AutoMetaStatus('ℹ️ Synced collections; local-only images are pending cloud upload.');
-        effectiveSignature=JSON.stringify({
-            user_id:space2Sync.payload.user_id,
-            board_key:space2Sync.payload.board_key,
-            project_key:space2Sync.payload.project_key,
-            board_id:space2Sync.payload.board_id,
-            canvas_state:null,
-            space2_state:space2Sync.payload.space2_state||null
+
+        if(shouldGuardEmptyLocal&&(cloudItems.length||cloudCollections.length)){
+            space2Sync.payload.space2_state.items=cloudItems;
+            space2Sync.payload.space2_state.collections=cloudCollections;
+            space2Sync.payload.space2_state.savedAt=Date.now();
+            setSpace2AutoMetaStatus('ℹ️ Kept cloud Space 2 state; skipped empty local overwrite.');
+        }
+
+        effectiveSignature=buildCloudSyncSignature({
+            userId:space2Sync.payload.user_id,
+            boardKey:space2Sync.payload.board_key,
+            projectKey:space2Sync.payload.project_key,
+            boardId:space2Sync.payload.board_id,
+            canvasState:null,
+            space2StateValue:space2Sync.payload.space2_state||null
         });
     }
     if(!force&&effectiveSignature===lastSpace2CloudSyncSignature) return true;
@@ -846,23 +898,23 @@ async function restoreStateFromSupabase(){
         return;
     }
     if(boardData){
-        lastBoardCloudSyncSignature=JSON.stringify({
-            user_id:currentSupabaseUser.id,
-            board_key:getCloudBoardKey(),
-            project_key:normalizeProjectKey(currentProjectKey),
-            board_id:currentBoardId||'board-1',
-            canvas_state:boardData.canvas_state||null,
-            space2_state:null
+        lastBoardCloudSyncSignature=buildCloudSyncSignature({
+            userId:currentSupabaseUser.id,
+            boardKey:getCloudBoardKey(),
+            projectKey:normalizeProjectKey(currentProjectKey),
+            boardId:currentBoardId||'board-1',
+            canvasState:boardData.canvas_state||null,
+            space2StateValue:null
         });
     }
     if(space2Data&&hasGlobalSpace2){
-        lastSpace2CloudSyncSignature=JSON.stringify({
-            user_id:currentSupabaseUser.id,
-            board_key:getCloudSpace2Key(),
-            project_key:normalizeProjectKey(currentProjectKey),
-            board_id:'space2-global',
-            canvas_state:null,
-            space2_state:space2Data.space2_state||null
+        lastSpace2CloudSyncSignature=buildCloudSyncSignature({
+            userId:currentSupabaseUser.id,
+            boardKey:getCloudSpace2Key(),
+            projectKey:normalizeProjectKey(currentProjectKey),
+            boardId:'space2-global',
+            canvasState:null,
+            space2StateValue:space2Data.space2_state||null
         });
     }else if(space2Data){
         lastSpace2CloudSyncSignature='';
@@ -1014,6 +1066,55 @@ function setSpace2AutoMetaStatus(message,isError=false){
     if(!space2AutoMetaStatus) return;
     space2AutoMetaStatus.textContent=message||'';
     space2AutoMetaStatus.style.color=isError?'#d25a5a':'';
+}
+
+function setSpace2SyncIndicator(state='idle',message=''){
+    if(!space2SyncIndicator) return;
+    const normalized=String(state||'idle').toLowerCase();
+    const defaultLabel={
+        idle:'Synced',
+        syncing:'Syncing...',
+        ok:'Synced',
+        error:'Sync issue',
+        offline:'Sign in to sync'
+    };
+    const label=(message||defaultLabel[normalized]||defaultLabel.idle).trim();
+    space2SyncIndicator.dataset.state=normalized;
+    if(space2SyncIndicatorLabel) space2SyncIndicatorLabel.textContent=label;
+    space2SyncIndicator.setAttribute('title',label);
+}
+
+function stopSpace2AutoSyncLoop(){
+    if(space2AutoSyncTimer){
+        clearTimeout(space2AutoSyncTimer);
+        space2AutoSyncTimer=null;
+    }
+}
+
+function queueSpace2AutoSync(delay=SPACE2_AUTO_SYNC_INTERVAL_MS){
+    stopSpace2AutoSyncLoop();
+    if(!currentSupabaseUser) return;
+    space2AutoSyncTimer=setTimeout(()=>{
+        runSpace2ManualSync({background:true,source:'auto'}).finally(()=>{
+            queueSpace2AutoSync(SPACE2_AUTO_SYNC_INTERVAL_MS);
+        });
+    },Math.max(5000,parseInt(delay,10)||SPACE2_AUTO_SYNC_INTERVAL_MS));
+}
+
+function startSpace2AutoSyncLoop({immediate=false}={}){
+    stopSpace2AutoSyncLoop();
+    if(!currentSupabaseUser){
+        setSpace2SyncIndicator('offline');
+        return;
+    }
+    setSpace2SyncIndicator('idle',space2SyncLastRunAt?'Synced':'Waiting to sync');
+    if(immediate){
+        runSpace2ManualSync({background:true,source:'auto'}).finally(()=>{
+            queueSpace2AutoSync(SPACE2_AUTO_SYNC_INTERVAL_MS);
+        });
+        return;
+    }
+    queueSpace2AutoSync(SPACE2_AUTO_SYNC_INTERVAL_MS);
 }
 
 function sanitizeMetaTitle(value=''){
@@ -2110,13 +2211,28 @@ function closeSpace2SettingsModal(){
     if(space2SettingsModal) space2SettingsModal.classList.add('hidden');
 }
 
-async function runSpace2ManualSync(){
-    if(!space2SyncNowBtn||space2SyncNowBtn.disabled) return;
-    const originalLabel=space2SyncNowBtn.textContent||'Sync Now';
-    space2SyncNowBtn.disabled=true;
-    space2SyncNowBtn.textContent='Syncing...';
-    setSpace2AutoMetaStatus('Syncing latest Space 2 items...');
+async function runSpace2ManualSync({background=false,source='manual'}={}){
+    if(space2SyncInFlight) return false;
+    if(background&&document.hidden) return false;
+    if(!currentSupabaseUser){
+        setSpace2SyncIndicator('offline');
+        if(!background) setSpace2AutoMetaStatus('Sign in is required before syncing.',true);
+        return false;
+    }
+    if(!background&&(!space2SyncNowBtn||space2SyncNowBtn.disabled)) return false;
+
+    const originalLabel=space2SyncNowBtn?space2SyncNowBtn.textContent||'Sync Now':'Sync Now';
+    if(!background&&space2SyncNowBtn){
+        space2SyncNowBtn.disabled=true;
+        space2SyncNowBtn.textContent='Syncing...';
+    }
+    space2SyncInFlight=true;
+    setSpace2SyncIndicator('syncing',source==='auto'?'Syncing...':'Syncing now...');
+    if(!background) setSpace2AutoMetaStatus('Syncing latest Space 2 items...');
+
     try{
+        // Pull first, then push local changes. This avoids stale-local overwrites.
+        await restoreStateFromSupabase();
         await syncPendingSpace2LocalItems();
         saveProjectState();
         saveSpace2State(undefined,undefined,{skipCloudSync:true});
@@ -2124,13 +2240,23 @@ async function runSpace2ManualSync(){
         await restoreStateFromSupabase();
         await refreshSpace2SignedUrls();
         renderSpace2Grid();
-        setSpace2AutoMetaStatus('✅ Sync complete. Safe to close/restart.');
+
+        space2SyncLastRunAt=Date.now();
+        setSpace2SyncIndicator('ok','Synced');
+        if(!background) setSpace2AutoMetaStatus('✅ Sync complete. Safe to close/restart.');
+        return true;
     }catch(err){
         console.warn('space2 manual sync failed',err);
-        setSpace2AutoMetaStatus(`⚠️ Sync failed: ${(err&&err.message)||'unknown error'}`,true);
+        setSpace2SyncIndicator('error','Sync issue');
+        const message=`⚠️ Sync failed: ${(err&&err.message)||'unknown error'}`;
+        setSpace2AutoMetaStatus(message,true);
+        return false;
     }finally{
-        space2SyncNowBtn.disabled=false;
-        space2SyncNowBtn.textContent=originalLabel;
+        space2SyncInFlight=false;
+        if(!background&&space2SyncNowBtn){
+            space2SyncNowBtn.disabled=false;
+            space2SyncNowBtn.textContent=originalLabel;
+        }
     }
 }
 
@@ -3022,6 +3148,10 @@ async function initPersistence(){
     window.addEventListener('pagehide',flushWorkspaceSync);
     document.addEventListener('visibilitychange',()=>{
         if(document.visibilityState==='hidden') flushWorkspaceSync();
+        else if(currentSupabaseUser) startSpace2AutoSyncLoop({immediate:true});
+    });
+    window.addEventListener('online',()=>{
+        if(currentSupabaseUser) startSpace2AutoSyncLoop({immediate:true});
     });
     window.addEventListener('pageshow',()=>setTimeout(clearTransientSearchInputs,0));
 
@@ -3159,16 +3289,21 @@ async function initAuthGate(){
     const client=initSupabaseClient();
     if(!client){
         setAuthStatus('Auth unavailable. Running local mode only.',true);
+        setSpace2SyncIndicator('offline','Local mode');
         return;
     }
 
     client.auth.onAuthStateChange((event,session)=>{
         currentSupabaseUser=session&&session.user?session.user:null;
         if(currentSupabaseUser){
+            setSpace2SyncIndicator('idle','Connected');
+            startSpace2AutoSyncLoop({immediate:true});
             setAuthStatus(`Signed in as ${currentSupabaseUser.email||'user'}. Preparing workspace...`);
             unlockAppAfterAuth();
             bootstrapAppAfterAuth().catch(err=>console.warn('boot after auth failed',err));
         }else if(event==='SIGNED_OUT'){
+            stopSpace2AutoSyncLoop();
+            setSpace2SyncIndicator('offline');
             appBootstrapped=false;
             lockAppForAuth();
             showAuthStep('passcode');
@@ -3186,6 +3321,9 @@ async function initAuthGate(){
         setAuthStatus(`Restoring session for ${currentSupabaseUser.email||'user'}...`);
         unlockAppAfterAuth();
         await bootstrapAppAfterAuth();
+        startSpace2AutoSyncLoop({immediate:true});
+    }else{
+        setSpace2SyncIndicator('offline');
     }
 }
 
@@ -4735,6 +4873,8 @@ async function signOutCurrentUser(){
     currentSupabaseUser=null;
     lastBoardCloudSyncSignature='';
     lastSpace2CloudSyncSignature='';
+    stopSpace2AutoSyncLoop();
+    setSpace2SyncIndicator('offline');
     closeSettings();
     setSpace2AutoMetaStatus('Signed out. Please sign in again.');
 }
