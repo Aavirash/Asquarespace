@@ -77,10 +77,14 @@ body.auth-locked #ui-container{display:none;}
 .space2-search-wrap:focus-within{width:min(58vw,420px);box-shadow:var(--shadow-lg);border-color:color-mix(in srgb,var(--accent) 35%,var(--border));}
 .space2-search-wrap svg{width:14px;height:14px;fill:var(--text-dim);opacity:.9;}
 #space2-search{border:none;outline:none;background:transparent;color:var(--text);font-size:13px;width:100%;font-family:inherit;}
-.space2-sync-indicator{height:26px;padding:0 9px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 88%,transparent);display:inline-flex;align-items:center;gap:6px;color:var(--text-dim);font-size:11px;font-weight:600;white-space:nowrap;flex:0 0 auto;}
-.space2-sync-btn{height:26px;padding:0 11px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 90%,transparent);color:var(--text);font-size:11px;font-weight:700;letter-spacing:.01em;display:inline-flex;align-items:center;cursor:pointer;box-shadow:var(--shadow);transition:border-color .16s ease,transform .16s ease,box-shadow .16s ease;}
+.space2-sync-indicator{display:none !important;}
+.space2-sync-btn{height:26px;padding:0 11px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 90%,transparent);color:var(--text);font-size:11px;font-weight:700;letter-spacing:.01em;display:inline-flex;align-items:center;gap:7px;cursor:pointer;box-shadow:var(--shadow);transition:border-color .16s ease,transform .16s ease,box-shadow .16s ease;}
+.space2-sync-btn::before{content:'';width:7px;height:7px;border-radius:50%;background:color-mix(in srgb,var(--text-mid) 72%,transparent);display:block;flex:0 0 auto;}
 .space2-sync-btn:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 34%,var(--border));box-shadow:var(--shadow-lg);}
 .space2-sync-btn:disabled{opacity:.58;cursor:not-allowed;transform:none;box-shadow:var(--shadow);}
+.space2-sync-btn[data-state="ok"]::before{background:#31b26b;}
+.space2-sync-btn[data-state="error"]::before{background:#d25a5a;}
+.space2-sync-btn[data-state="syncing"]::before{width:9px;height:9px;border:1.5px solid color-mix(in srgb,var(--border) 84%,transparent);border-top-color:var(--accent);background:transparent;animation:space2SyncSpin .8s linear infinite;}
 .space2-sync-dot{width:7px;height:7px;border-radius:50%;background:color-mix(in srgb,var(--text-mid) 72%,transparent);}
 .space2-sync-indicator[data-state="syncing"]{color:var(--text);}
 .space2-sync-indicator[data-state="syncing"] .space2-sync-dot{width:9px;height:9px;border:1.5px solid color-mix(in srgb,var(--border) 84%,transparent);border-top-color:var(--accent);background:transparent;animation:space2SyncSpin .8s linear infinite;}
@@ -1202,11 +1206,11 @@ body.is-mobile-shell #theme-toggle:hover{background:color-mix(in srgb,var(--surf
     .space2-grid.feed-mode{--space2-grid-gap:16px;}
     .discover-feed{padding:24px 10px 10px;columns:1;column-gap:0;}
     .discover-card{margin-bottom:16px;}
-    .space2-ai-hub{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 12px);bottom:calc(-12px + var(--mobile-keyboard-inset));gap:6px;padding-bottom:env(safe-area-inset-bottom);--space2-ai-sheet-max:calc(72dvh - 90px);transition:bottom .2s ease;}
+    .space2-ai-hub{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 12px);bottom:calc(-8px + var(--mobile-keyboard-inset));gap:6px;padding-bottom:env(safe-area-inset-bottom);--space2-ai-sheet-max:calc(72dvh - 90px);transition:bottom .2s ease;}
     .space2-ai-chat-sheet{bottom:calc(100% + 4px);}
     .space2-ai-hub:not(.chat-open){gap:0;}
-    .space2-ai-hub:not(.chat-open) #space2-mode-dock{margin-bottom:-5px;}
-    .space2-ai-hub:not(.chat-open) .space2-ai-bar-wrap{margin-top:-2px;}
+    .space2-ai-hub:not(.chat-open) #space2-mode-dock{margin-bottom:-3px;}
+    .space2-ai-hub:not(.chat-open) .space2-ai-bar-wrap{margin-top:-1px;}
     .space2-ai-bar{min-height:50px;border-radius:12px;padding:5px 6px;gap:6px;background:var(--surface);backdrop-filter:none;border:1px solid var(--border);box-shadow:none;}
     #bottom-bar{border-radius:12px;background:var(--surface);backdrop-filter:none;border-color:var(--border);box-shadow:none;}
     .space2-mode-dock{background:var(--surface);backdrop-filter:none;border-color:var(--border);box-shadow:none;}

@@ -590,6 +590,92 @@ function hasCloudRenderableSpace2Source(item){
     return /^https?:\/\//i.test(src);
 }
 
+function getSpace2ItemMergeKey(item,index=0){
+    if(!item||typeof item!=='object') return `idx:${index}`;
+    if(item.id) return `id:${item.id}`;
+    if(item.cloudPath) return `cloud:${item.cloudPath}`;
+    if(item.browserBlobKey) return `blob:${item.browserBlobKey}`;
+    if(item.filePath) return `file:${item.filePath}`;
+    const src=String(item.src||'').trim();
+    if(src) return `src:${src}`;
+    return `idx:${index}`;
+}
+
+function mergeSpace2ItemRecord(left,right){
+    const a=(left&&typeof left==='object')?left:{};
+    const b=(right&&typeof right==='object')?right:{};
+    const aStamp=Math.max(parseInt(a.updatedAt||0,10)||0,parseInt(a.createdAt||0,10)||0);
+    const bStamp=Math.max(parseInt(b.updatedAt||0,10)||0,parseInt(b.createdAt||0,10)||0);
+    const preferred=bStamp>=aStamp?b:a;
+    const fallback=preferred===b?a:b;
+    const merged={...fallback,...preferred};
+
+    merged.collectionIds=[...new Set([
+        ...((fallback.collectionIds&&Array.isArray(fallback.collectionIds))?fallback.collectionIds:[]),
+        ...((preferred.collectionIds&&Array.isArray(preferred.collectionIds))?preferred.collectionIds:[])
+    ].filter(Boolean))];
+
+    if(!merged.src) merged.src=preferred.src||fallback.src||'';
+    if(!merged.cloudPath) merged.cloudPath=preferred.cloudPath||fallback.cloudPath||'';
+    if(!merged.filePath) merged.filePath=preferred.filePath||fallback.filePath||'';
+    if(!merged.browserBlobKey) merged.browserBlobKey=preferred.browserBlobKey||fallback.browserBlobKey||'';
+    if(!merged.title) merged.title=preferred.title||fallback.title||'Untitled';
+    if(!merged.description) merged.description=preferred.description||fallback.description||'';
+    if(!merged.createdAt) merged.createdAt=preferred.createdAt||fallback.createdAt||Date.now();
+    const mergedUpdatedAt=Math.max(parseInt(merged.updatedAt||0,10)||0,aStamp,bStamp);
+    if(mergedUpdatedAt>0) merged.updatedAt=mergedUpdatedAt;
+    if(!merged.id) merged.id=preferred.id||fallback.id||`item-${Date.now()}-${Math.floor(Math.random()*99999)}`;
+    return merged;
+}
+
+function mergeSpace2Collections(localCollections,remoteCollections){
+    const map=new Map();
+    const ingest=(list=[])=>{
+        list.forEach(col=>{
+            if(!col||typeof col!=='object') return;
+            const id=String(col.id||'').trim();
+            const name=String(col.name||'').trim();
+            if(!id||!name) return;
+            const prev=map.get(id);
+            map.set(id,prev?{...prev,name:name||prev.name}:{id,name});
+        });
+    };
+    ingest(remoteCollections);
+    ingest(localCollections);
+    return [...map.values()];
+}
+
+function mergeSpace2States(localState,remoteState){
+    const localItems=Array.isArray(localState&&localState.items)?localState.items:[];
+    const remoteItems=Array.isArray(remoteState&&remoteState.items)?remoteState.items:[];
+    const itemMap=new Map();
+    const ingestItems=(list=[])=>{
+        list.forEach((item,idx)=>{
+            if(!item||typeof item!=='object') return;
+            const key=getSpace2ItemMergeKey(item,idx);
+            const prev=itemMap.get(key);
+            itemMap.set(key,prev?mergeSpace2ItemRecord(prev,item):{...item});
+        });
+    };
+
+    ingestItems(remoteItems);
+    ingestItems(localItems);
+
+    const mergedItems=[...itemMap.values()].filter(hasRenderableSpace2Source);
+    const mergedCollections=mergeSpace2Collections(
+        Array.isArray(localState&&localState.collections)?localState.collections:[],
+        Array.isArray(remoteState&&remoteState.collections)?remoteState.collections:[]
+    );
+    const localSavedAt=parseInt(localState&&localState.savedAt||0,10)||0;
+    const remoteSavedAt=parseInt(remoteState&&remoteState.savedAt||0,10)||0;
+
+    return {
+        items:mergedItems,
+        collections:mergedCollections,
+        savedAt:Math.max(localSavedAt,remoteSavedAt)
+    };
+}
+
 function buildSpace2StatePayload({forCloud=false}={}){
     const items=JSON.parse(JSON.stringify((space2State&&space2State.items)||[]));
     const collections=JSON.parse(JSON.stringify((space2State&&space2State.collections)||[]));
@@ -962,29 +1048,24 @@ async function restoreStateFromSupabase(){
             setSpace2AutoMetaStatus('ℹ️ Kept newer local board state (cloud row appears older).');
         }
     }
-    // Trust remote Space 2 state only if it has items, OR local has none.
-    // This prevents an early/empty remote row from wiping items that were saved locally
-    // but not yet cloud-synced (e.g. user uploaded and reloaded very fast).
     if(space2Data&&space2Data.space2_state){
-        const remoteItems=(space2Data.space2_state.items||[]).length;
-        const remoteRenderableItems=(space2Data.space2_state.items||[]).filter(hasRenderableSpace2Source).length;
-        const remoteSavedAt=parseInt(space2Data.space2_state&&space2Data.space2_state.savedAt,10)||0;
-        let localItems=0;
-        let localSavedAt=0;
+        let localState=defaultSpace2State();
         try{
             const localRaw=localStorage.getItem(getSpace2Key(currentProjectKey));
             const localParsed=localRaw?JSON.parse(localRaw):null;
-            localItems=Array.isArray(localParsed&&localParsed.items)?localParsed.items.length:0;
-            localSavedAt=parseInt(localParsed&&localParsed.savedAt,10)||0;
-        }catch{}
-        if(localSavedAt>0&&remoteSavedAt>0&&localSavedAt>remoteSavedAt&&localItems>0){
-            setSpace2AutoMetaStatus('ℹ️ Kept newer local Space 2 state (cloud row appears older).');
-        }else if(remoteItems>0&&remoteRenderableItems===0&&localItems>0){
-            const msg='Cloud Space 2 row had media entries without valid sources; kept local state.';
-            console.warn(msg);
-            setSpace2AutoMetaStatus('⚠️ '+msg,true);
-        }else if(remoteItems>0||localItems===0){
-            try{ localStorage.setItem(getSpace2Key(currentProjectKey),JSON.stringify(space2Data.space2_state)); }catch{}
+            if(localParsed&&typeof localParsed==='object') localState=localParsed;
+        }catch{
+            localState=defaultSpace2State();
+        }
+
+        const mergedSpace2State=mergeSpace2States(localState,space2Data.space2_state);
+        try{ localStorage.setItem(getSpace2Key(currentProjectKey),JSON.stringify(mergedSpace2State)); }catch{}
+
+        const remoteItems=Array.isArray(space2Data.space2_state.items)?space2Data.space2_state.items.length:0;
+        const localItems=Array.isArray(localState.items)?localState.items.length:0;
+        const mergedItems=Array.isArray(mergedSpace2State.items)?mergedSpace2State.items.length:0;
+        if(localItems>0&&remoteItems===0&&mergedItems>=localItems){
+            setSpace2AutoMetaStatus('ℹ️ Preserved local Space 2 items while applying cloud state.');
         }
     }
     if(boardData&&boardData.canvas_state&&Array.isArray(boardData.canvas_state.nodes)) loadBoardState(currentProjectKey,currentBoardId);
@@ -1097,33 +1178,41 @@ function setSpace2AutoMetaStatus(message,isError=false){
 }
 
 function setSpace2SyncIndicator(state='idle',message=''){
-    if(!space2SyncIndicator) return;
+    const syncBtn=space2SyncNowTopBtn||space2SyncNowBtn;
+    if(space2SyncIndicator) space2SyncIndicator.classList.add('hidden');
     const normalized=String(state||'idle').toLowerCase();
+    const resolvedState=(normalized==='idle'&&space2SyncLastRunAt>0)?'ok':normalized;
     const defaultLabel={
-        idle:'Synced',
-        syncing:'Syncing...',
-        ok:'Synced',
-        error:'Sync issue',
-        offline:'Sign in to sync'
+        idle:'Tap to sync',
+        syncing:'Syncing now',
+        ok:'Last sync completed',
+        error:'Sync issue, tap to retry',
+        offline:'Sign in required'
     };
-    const label=(message||defaultLabel[normalized]||defaultLabel.idle).trim();
-    space2SyncIndicator.dataset.state=normalized;
-    if(space2SyncIndicatorLabel) space2SyncIndicatorLabel.textContent=label;
-    space2SyncIndicator.setAttribute('title',label);
-    const showSyncBadge=normalized==='syncing';
-    space2SyncIndicator.classList.toggle('hidden',!showSyncBadge);
-    if(space2SyncNowTopBtn){
-        space2SyncNowTopBtn.classList.toggle('hidden',showSyncBadge);
-        if(normalized==='offline'){
-            space2SyncNowTopBtn.textContent='Sign in';
-            space2SyncNowTopBtn.disabled=true;
-        }else if(normalized==='error'){
-            space2SyncNowTopBtn.textContent='Retry Sync';
-            space2SyncNowTopBtn.disabled=false;
-        }else{
-            space2SyncNowTopBtn.textContent='Sync Now';
-            space2SyncNowTopBtn.disabled=false;
-        }
+    const label=(message||defaultLabel[resolvedState]||defaultLabel.idle).trim();
+
+    if(space2SyncIndicator){
+        space2SyncIndicator.dataset.state=resolvedState;
+        if(space2SyncIndicatorLabel) space2SyncIndicatorLabel.textContent=label;
+        space2SyncIndicator.setAttribute('title',label);
+    }
+    if(!syncBtn) return;
+
+    syncBtn.dataset.state=resolvedState;
+    syncBtn.setAttribute('title',label);
+    syncBtn.classList.remove('hidden');
+    if(resolvedState==='offline'){
+        syncBtn.textContent='Sign in';
+        syncBtn.disabled=true;
+    }else if(resolvedState==='syncing'){
+        syncBtn.textContent='Syncing...';
+        syncBtn.disabled=true;
+    }else if(resolvedState==='error'){
+        syncBtn.textContent='Retry Sync';
+        syncBtn.disabled=false;
+    }else{
+        syncBtn.textContent='Sync Now';
+        syncBtn.disabled=false;
     }
 }
 
@@ -1427,7 +1516,7 @@ async function toggleItemCollection(itemId,colId){
             requestAnimationFrame(()=>{if(space2Grid) space2Grid.scrollTop=previousScrollTop;});
         }
     }
-    await syncSpace2StateToSupabase({force:true});
+    await syncSpace2StateToSupabase({force:true,reason:'manual'});
 }
 
 async function removeSpace2Collection(colId){
@@ -1439,7 +1528,7 @@ async function removeSpace2Collection(colId){
     saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
-    await syncSpace2StateToSupabase({force:true});
+    await syncSpace2StateToSupabase({force:true,reason:'manual'});
 }
 
 async function removeItemFromSpace2View(itemId){
@@ -1455,7 +1544,7 @@ async function removeItemFromSpace2View(itemId){
     saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
-    await syncSpace2StateToSupabase({force:true});
+    await syncSpace2StateToSupabase({force:true,reason:'manual'});
 }
 
 function openCollectionModal(mode='create',collectionId='',discoverItem=null){
@@ -1510,7 +1599,7 @@ async function saveCollectionModal(){
     renderSpace2Collections();
     renderSpace2Grid();
     closeCollectionModal();
-    await syncSpace2StateToSupabase({force:true});
+    await syncSpace2StateToSupabase({force:true,reason:'manual'});
 }
 
 function renderSpace2Collections(){
@@ -1907,7 +1996,7 @@ async function saveSpace2Item(){
     renderSpace2Collections();
     renderSpace2Grid();
     closeSpace2Item();
-    await syncSpace2StateToSupabase({force:true});
+    await syncSpace2StateToSupabase({force:true,reason:'manual'});
 }
 
 async function deleteSpace2Item(){
@@ -1917,7 +2006,7 @@ async function deleteSpace2Item(){
     renderSpace2Collections();
     renderSpace2Grid();
     closeSpace2Item();
-    await syncSpace2StateToSupabase({force:true});
+    await syncSpace2StateToSupabase({force:true,reason:'manual'});
 }
 
 async function downloadSpace2ActiveItem(){
@@ -2008,7 +2097,7 @@ function upsertSpace2Items(items,{openEditor=false}={}){
         });
     }
     if(openEditor&&firstAddedItemId) openSpace2Item(firstAddedItemId);
-    syncSpace2StateToSupabase({force:true}).catch(err=>console.warn('space2 immediate sync failed',err));
+    syncSpace2StateToSupabase({force:true,reason:'manual'}).catch(err=>console.warn('space2 immediate sync failed',err));
     return added;
 }
 
@@ -2026,7 +2115,7 @@ function sendDiscoverItem(item,target,collectionId=''){
         saveSpace2State(undefined,undefined,{skipCloudSync:true});
         renderSpace2Collections();
         renderSpace2Grid();
-        syncSpace2StateToSupabase({force:true}).catch(err=>console.warn('space2 immediate sync failed',err));
+        syncSpace2StateToSupabase({force:true,reason:'manual'}).catch(err=>console.warn('space2 immediate sync failed',err));
         return 'grid';
     }
     const activeCollectionIds=collectionId
@@ -2036,7 +2125,7 @@ function sendDiscoverItem(item,target,collectionId=''){
     saveSpace2State(undefined,undefined,{skipCloudSync:true});
     renderSpace2Collections();
     renderSpace2Grid();
-    syncSpace2StateToSupabase({force:true}).catch(err=>console.warn('space2 immediate sync failed',err));
+    syncSpace2StateToSupabase({force:true,reason:'manual'}).catch(err=>console.warn('space2 immediate sync failed',err));
     if(activeCollectionIds.length) return inserted.added?'collection':'collection';
     if(inserted.item) openSpace2Item(inserted.item.id);
     return 'collections';
@@ -2114,7 +2203,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
     }
     const added=upsertSpace2Items(items,{openEditor});
     if(added){
-        await syncSpace2StateToSupabase({force:true});
+        await syncSpace2StateToSupabase({force:true,reason:'manual'});
     }
     if(currentSupabaseUser&&failedCloudUploads){
         const msg=`${failedCloudUploads} upload${failedCloudUploads>1?'s':''} failed cloud save and were not added.`;
@@ -2267,12 +2356,6 @@ async function runSpace2ManualSync({background=false,source='manual'}={}){
     }
     const syncTriggerBtn=space2SyncNowTopBtn||space2SyncNowBtn;
     if(!background&&syncTriggerBtn&&syncTriggerBtn.disabled) return false;
-
-    const originalLabel=syncTriggerBtn?syncTriggerBtn.textContent||'Sync Now':'Sync Now';
-    if(!background&&syncTriggerBtn){
-        syncTriggerBtn.disabled=true;
-        syncTriggerBtn.textContent='Syncing...';
-    }
     space2SyncInFlight=true;
     setSpace2SyncIndicator('syncing',source==='auto'?'Syncing...':'Syncing now...');
     if(!background) setSpace2AutoMetaStatus('Syncing latest Space 2 items...');
@@ -2301,10 +2384,6 @@ async function runSpace2ManualSync({background=false,source='manual'}={}){
         return false;
     }finally{
         space2SyncInFlight=false;
-        if(!background&&syncTriggerBtn){
-            syncTriggerBtn.disabled=false;
-            syncTriggerBtn.textContent=originalLabel;
-        }
     }
 }
 
