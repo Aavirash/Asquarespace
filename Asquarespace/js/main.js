@@ -203,6 +203,11 @@ const space2CaptureActions = document.getElementById('space2-capture-actions');
 const space2CaptureCancelBtn = document.getElementById('space2-capture-cancel');
 const space2CaptureApplyBtn = document.getElementById('space2-capture-apply');
 
+function refreshLucideIcons(){
+    if(!window.lucide||typeof window.lucide.createIcons!=='function') return;
+    try{window.lucide.createIcons();}catch{}
+}
+
 // ── State ─────────────────────────────────────────────────────────────────
 let tx=0, ty=0, sc=1;
 let allNodes    = [];
@@ -1399,11 +1404,11 @@ async function autoGenerateSpace2Metadata(item,{analysisBlob=null,force=false,si
 
     item.aiMetaState='loading';
     item.updatedAt=Date.now();
-    saveSpace2State();
-    renderSpace2Grid();
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
+    updateSpace2GridCardMeta(item);
     if(space2ItemModal&&space2ActiveItemId===item.id&&!space2ItemModal.classList.contains('hidden')){
-        if(space2ItemTitle) space2ItemTitle.value='Generating...';
-        if(space2ItemDesc) space2ItemDesc.value='Generating description...';
+        if(space2ItemTitle) space2ItemTitle.value='Generating';
+        if(space2ItemDesc) space2ItemDesc.value='Writing title and description';
     }
 
     try{
@@ -1414,7 +1419,7 @@ async function autoGenerateSpace2Metadata(item,{analysisBlob=null,force=false,si
         item.updatedAt=Date.now();
         if(!silent) setSpace2AutoMetaStatus('Image metadata generated.');
         saveSpace2State();
-        renderSpace2Grid();
+        updateSpace2GridCardMeta(item);
         if(space2ItemModal&&space2ActiveItemId===item.id&&!space2ItemModal.classList.contains('hidden')){
             if(space2ItemTitle) space2ItemTitle.value=item.title||'';
             if(space2ItemDesc) space2ItemDesc.value=item.description||'';
@@ -1426,7 +1431,7 @@ async function autoGenerateSpace2Metadata(item,{analysisBlob=null,force=false,si
         item.updatedAt=Date.now();
         if(!silent) setSpace2AutoMetaStatus((err&&err.message)||'Metadata generation failed.',true);
         saveSpace2State();
-        renderSpace2Grid();
+        updateSpace2GridCardMeta(item);
         return false;
     }
 }
@@ -1676,14 +1681,14 @@ function renderSpace2Collections(){
         rename.type='button';
         rename.className='space2-col-action';
         rename.title='Rename collection';
-        rename.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l8.06-8.06.92.92L5.92 19.58zM20.71 7.04a1.003 1.003 0 000-1.42L18.37 3.29a1.003 1.003 0 00-1.42 0l-1.13 1.13 3.75 3.75 1.14-1.13z"/></svg>';
+        rename.innerHTML='<i data-lucide="pencil" aria-hidden="true"></i>';
         rename.addEventListener('click',e=>{e.stopPropagation();openCollectionModal('rename',col.id);});
 
         const remove=document.createElement('button');
         remove.type='button';
         remove.className='space2-col-action';
         remove.title='Delete collection';
-        remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3 3v8h2v-8H9zm4 0v8h2v-8h-2zM9 3h6l1 2h4v2H4V5h4l1-2z"/></svg>';
+        remove.innerHTML='<i data-lucide="trash-2" aria-hidden="true"></i>';
         remove.addEventListener('click',e=>{e.stopPropagation();removeSpace2Collection(col.id);});
 
         row.appendChild(pick);
@@ -1691,6 +1696,39 @@ function renderSpace2Collections(){
         row.appendChild(remove);
         space2Collections.appendChild(row);
     });
+    refreshLucideIcons();
+}
+
+function getSpace2MetaMarkup(item){
+    const isGenerating=item&&item.aiMetaState==='loading';
+    if(isGenerating){
+        return `
+            <div class="space2-gen-row">
+                <span class="space2-echo-ring" aria-hidden="true">
+                    <span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span>
+                </span>
+                <div class="space2-name is-generating">Generating</div>
+            </div>
+            <div class="space2-desc is-generating">Writing title and description</div>
+        `;
+    }
+    const safeTitle=(item&&item.title?item.title:'Untitled').replace(/</g,'&lt;');
+    const safeDesc=((item&&item.description?item.description:'').replace(/</g,'&lt;')||'Image');
+    return `
+        <div class="space2-name">${safeTitle}</div>
+        <div class="space2-desc">${safeDesc}</div>
+    `;
+}
+
+function updateSpace2GridCardMeta(item){
+    if(!item||!item.id||!space2Grid) return;
+    const card=space2Grid.querySelector(`.space2-item[data-item-id="${item.id}"]`);
+    if(!card) return;
+    const metaWrap=card.querySelector('.space2-meta');
+    if(!metaWrap) return;
+    metaWrap.innerHTML=getSpace2MetaMarkup(item);
+    scheduleSpace2GridLayout();
 }
 
 function renderSpace2Grid(){
@@ -1726,11 +1764,11 @@ function renderSpace2Grid(){
     }
     space2Grid.innerHTML='';
     list.forEach(item=>{
-        const isGenerating=item.aiMetaState==='loading';
         const thumbSrc=String(item.src||'').trim();
         const card=document.createElement('button');
         card.type='button';
         card.className='space2-item img-pending';
+        card.dataset.itemId=item.id||'';
         card.innerHTML=`
             <div class="space2-thumb-shell">
                 <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id||thumbSrc)}" alt="" loading="lazy" decoding="async">
@@ -1743,15 +1781,14 @@ function renderSpace2Grid(){
             </div>
             <div class="space2-card-actions">
                 <button class="space2-card-action" data-action="collection" title="Add to collection" aria-label="Add to collection">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8a2 2 0 0 1 2 2v2H2V6a2 2 0 0 1 2-2h6zm12 8v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8h20zm-10 2v2H10v2h2v2h2v-2h2v-2h-2v-2h-2z"/></svg>
+                    <i data-lucide="folder-plus" aria-hidden="true"></i>
                 </button>
                 <button class="space2-card-action" data-action="remove" title="Remove" aria-label="Remove">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3 3v8h2v-8H9zm4 0v8h2v-8h-2zM9 3h6l1 2h4v2H4V5h4l1-2z"/></svg>
+                    <i data-lucide="trash-2" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="space2-meta">
-                <div class="space2-name${isGenerating?' is-generating':''}">${isGenerating?'Generating...':(item.title||'Untitled').replace(/</g,'&lt;')}</div>
-                <div class="space2-desc${isGenerating?' is-generating':''}">${isGenerating?'Generating description...':((item.description||'').replace(/</g,'&lt;')||'Image')}</div>
+                ${getSpace2MetaMarkup(item)}
             </div>
         `;
         const img=card.querySelector('.space2-thumb');
@@ -1767,6 +1804,7 @@ function renderSpace2Grid(){
             };
             if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth) onLoaded();
             else img.addEventListener('load',onLoaded,{once:true});
+        refreshLucideIcons();
             img.addEventListener('error',()=>{
                 card.classList.remove('img-pending');
                 card.classList.add('img-loaded');
@@ -3047,13 +3085,14 @@ function renderBoardList(){
 
         const actions=document.createElement('div');
         actions.className='board-actions';
-        actions.innerHTML='<button class="board-action" data-action="rename" title="Rename"><svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm14.71-9.04a1 1 0 0 0 0-1.41l-2.5-2.5a1 1 0 0 0-1.41 0l-1.96 1.96 3.75 3.75 2.12-2.12z"/></svg></button><button class="board-action" data-action="duplicate" title="Duplicate"><svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button><button class="board-action" data-action="delete" title="Delete"><svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>';
+        actions.innerHTML='<button class="board-action" data-action="rename" title="Rename"><i data-lucide="pencil" aria-hidden="true"></i></button><button class="board-action" data-action="duplicate" title="Duplicate"><i data-lucide="copy" aria-hidden="true"></i></button><button class="board-action" data-action="delete" title="Delete"><i data-lucide="trash-2" aria-hidden="true"></i></button>';
 
         row.appendChild(name);
         row.appendChild(count);
         row.appendChild(actions);
         boardList.appendChild(row);
     });
+    refreshLucideIcons();
     renderBoardQuickMenu();
 }
 
@@ -3501,11 +3540,12 @@ async function initAuthGate(){
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────
-function applyTheme(dark){isDark=dark;html.setAttribute('data-theme',dark?'dark':'light');iconSun.style.display=dark?'none':'';iconMoon.style.display=dark?'':'none';try{localStorage.setItem('asq.theme',dark?'1':'0');}catch{}schedulePersist(250);}
+function applyTheme(dark){isDark=dark;html.setAttribute('data-theme',dark?'dark':'light');if(iconSun) iconSun.style.display=dark?'none':'';if(iconMoon) iconMoon.style.display=dark?'':'none';try{localStorage.setItem('asq.theme',dark?'1':'0');}catch{}schedulePersist(250);}
 themeToggle.addEventListener('click',()=>applyTheme(!isDark));
 document.getElementById('extra-toggle-theme').addEventListener('click',()=>{closeAllDD();applyTheme(!isDark);});
 document.getElementById('extra-reset-view').addEventListener('click',()=>{closeAllDD();const r=viewport.getBoundingClientRect();setT(r.width/2,r.height/2,1);});
 applyTheme(isDark);
+refreshLucideIcons();
 
 // ── Transform ─────────────────────────────────────────────────────────────
 function setT(x,y,s){
@@ -4245,7 +4285,7 @@ function createMediaPlayer(kind,src,w,h){
     controls.className='media-controls';
     const play=document.createElement('button');
     play.className='media-play';
-    play.innerHTML='<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+    play.innerHTML='<i data-lucide="play" aria-hidden="true"></i>';
     const seek=document.createElement('input');
     seek.className='media-seek';
     seek.type='range';
@@ -4265,12 +4305,14 @@ function createMediaPlayer(kind,src,w,h){
         const c=media.currentTime||0;
         seek.value=d?String(Math.floor((c/d)*1000)):'0';
         time.textContent=`${fmtTime(c)} / ${fmtTime(d)}`;
-        play.innerHTML=media.paused?'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>':'<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+        play.innerHTML=media.paused?'<i data-lucide="play" aria-hidden="true"></i>':'<i data-lucide="pause" aria-hidden="true"></i>';
+        refreshLucideIcons();
     }
     play.addEventListener('click',e=>{e.stopPropagation();if(media.paused)media.play();else media.pause();update();});
     seek.addEventListener('input',e=>{e.stopPropagation();const d=media.duration||0;media.currentTime=d*(parseFloat(seek.value)/1000);update();});
     ['timeupdate','loadedmetadata','play','pause','ended'].forEach(evt=>media.addEventListener(evt,update));
     update();
+    refreshLucideIcons();
     return wrap;
 }
 
@@ -5608,9 +5650,9 @@ function renderDiscoverCard(item) {
             <div class="discover-card-src">${srcHost}</div>
         </div>
         <div class="discover-card-actions">
-            <button class="discover-save-btn" data-target="grid" title="Add to grid" aria-label="Add to grid"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg></button>
-            <button class="discover-save-btn" data-target="collection" title="Add to collection" aria-label="Add to collection"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8a2 2 0 0 1 2 2v2H2V6a2 2 0 0 1 2-2h6zm12 8v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8h20zm-10 2v2H10v2h2v2h2v-2h2v-2h-2v-2h-2z"/></svg></button>
-            <button class="discover-save-btn" data-target="dismiss" title="Dismiss" aria-label="Dismiss"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3 3v8h2v-8H9zm4 0v8h2v-8h-2zM9 3h6l1 2h4v2H4V5h4l1-2z"/></svg></button>
+            <button class="discover-save-btn" data-target="grid" title="Add to grid" aria-label="Add to grid"><i data-lucide="layout-grid" aria-hidden="true"></i></button>
+            <button class="discover-save-btn" data-target="collection" title="Add to collection" aria-label="Add to collection"><i data-lucide="folder-plus" aria-hidden="true"></i></button>
+            <button class="discover-save-btn" data-target="dismiss" title="Dismiss" aria-label="Dismiss"><i data-lucide="trash-2" aria-hidden="true"></i></button>
         </div>
     `;
     const img=card.querySelector('img');
@@ -5650,6 +5692,7 @@ function appendDiscoverBatch(){
     next.forEach(item => feed.appendChild(renderDiscoverCard(item)));
     discoverVisibleCount += next.length;
     filterDiscoverFeedBySearch();
+    refreshLucideIcons();
 }
 
 function renderDiscoverFeed(items) {
@@ -7395,7 +7438,7 @@ function renderMBGrid() {
         item.innerHTML = `
             <div class="mb-thumb-wrap">
                 <div class="mb-check">
-                    <svg viewBox="0 0 24 24" style="fill:#fff;width:14px;height:14px;margin:2px;"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>
+                    <i data-lucide="check" aria-hidden="true" style="color:#fff;width:14px;height:14px;margin:2px;"></i>
                 </div>
                 ${f.kind === 'image' ? `<img class="mb-thumb" src="${f.src}">` : 
                   f.kind === 'video' ? `<video class="mb-thumb" src="${f.src}" muted loop preload="metadata"></video>` :
@@ -7435,6 +7478,7 @@ function renderMBGrid() {
         const w = zoomSize === 1 ? 120 : zoomSize === 2 ? 140 : zoomSize === 3 ? 180 : zoomSize === 4 ? 220 : 280;
         mbGrid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${w}px, 1fr))`;
     }
+    refreshLucideIcons();
 }
 
 if(mbSearchInput) mbSearchInput.addEventListener('input', renderMBGrid);
@@ -7789,6 +7833,7 @@ if(mbPreviewBtn) mbPreviewBtn.addEventListener('click', () => {
         el.addEventListener('click',e=>e.stopPropagation());
         makeDraggable(el,node);
         bindNodeInputs(el,node);
+        refreshLucideIcons();
         return el;
     }
 
@@ -7843,7 +7888,7 @@ if(mbPreviewBtn) mbPreviewBtn.addEventListener('click', () => {
             <div class="wf-dd" data-role="${role}">
                 <button class="wf-dd-btn" data-role="dd-btn">
                     <span data-role="dd-label">${escapeHtml(label)}</span>
-                    <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+                    <i data-lucide="chevron-down" aria-hidden="true"></i>
                 </button>
                 <div class="model-dropdown hidden" data-role="dd-menu"></div>
             </div>

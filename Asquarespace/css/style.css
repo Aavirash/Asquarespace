@@ -1,3 +1,32 @@
+@font-face{
+    font-family:'HK Grotesk Wide';
+    src:url('../Font/HK%20Grotesque%20Wide/HKGroteskWide-Regular.otf') format('opentype');
+    font-style:normal;
+    font-weight:400;
+    font-display:swap;
+}
+@font-face{
+    font-family:'HK Grotesk Wide';
+    src:url('../Font/HK%20Grotesque%20Wide/HKGroteskWide-Medium.otf') format('opentype');
+    font-style:normal;
+    font-weight:500;
+    font-display:swap;
+}
+@font-face{
+    font-family:'HK Grotesk Wide';
+    src:url('../Font/HK%20Grotesque%20Wide/HKGroteskWide-SemiBold.otf') format('opentype');
+    font-style:normal;
+    font-weight:600;
+    font-display:swap;
+}
+@font-face{
+    font-family:'HK Grotesk Wide';
+    src:url('../Font/HK%20Grotesque%20Wide/HKGroteskWide-Bold.otf') format('opentype');
+    font-style:normal;
+    font-weight:700;
+    font-display:swap;
+}
+
 :root { --accent:#c77b6b; --app-red:#ef4027; --r-sm:10px; --r-md:14px; --accent-glass:rgba(199,123,107,0.22); --mobile-keyboard-inset:0px; }
 [data-theme="light"] {
     --bg:#f0f0f0; --dot:#ccc;
@@ -16,7 +45,7 @@
     --shadow:0 2px 10px rgba(0,0,0,0.3); --shadow-lg:0 8px 28px rgba(0,0,0,0.45);
 }
 *,*::before,*::after{box-sizing:border-box;user-select:none;}
-body,html{margin:0;padding:0;width:100%;height:100%;min-width:0;min-height:0;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,sans-serif;overflow:hidden;overscroll-behavior:none;transition:background .25s,color .25s;}
+body,html{margin:0;padding:0;width:100%;height:100%;min-width:0;min-height:0;background:var(--bg);color:var(--text);font-family:'HK Grotesk Wide',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;overscroll-behavior:none;transition:background .25s,color .25s;}
 html{height:100dvh;}
 body{position:fixed;inset:0;height:100dvh;max-height:100dvh;-webkit-overflow-scrolling:auto;}
 #ui-container{position:fixed;inset:0;width:100vw;height:100dvh;max-height:100dvh;overflow:hidden;background:var(--bg);}
@@ -249,16 +278,38 @@ body.auth-locked #ui-container{display:none;}
 .space2-capture-actions.hidden{display:none;}
 .space2-meta{display:flex;flex-direction:column;gap:3px;padding:8px 2px 0;}
 .space2-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.space2-desc{font-size:11px;color:var(--text-dim);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.5em;}
-.space2-name.is-generating,.space2-desc.is-generating{color:inherit;animation:space2TextSheen 2.35s ease-in-out infinite;}
+.space2-desc{font-size:11px;color:var(--text-dim);line-height:1.25;display:-webkit-box;line-clamp:2;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.5em;}
+.space2-gen-row{display:flex;align-items:center;gap:8px;min-height:1.3em;}
+.space2-echo-ring{position:relative;width:13px;height:13px;display:inline-block;flex-shrink:0;}
+.space2-echo-ring span{position:absolute;left:50%;top:50%;width:3px;height:3px;border-radius:999px;background:var(--app-red);transform:translate(-50%,-50%);opacity:.2;animation:space2EchoRing 1.1s ease-in-out infinite;}
+.space2-echo-ring span:nth-child(1){transform:translate(-50%,-50%) translateY(-6px);animation-delay:0ms;}
+.space2-echo-ring span:nth-child(2){transform:translate(-50%,-50%) translate(4.2px,-4.2px);animation-delay:90ms;}
+.space2-echo-ring span:nth-child(3){transform:translate(-50%,-50%) translateX(6px);animation-delay:180ms;}
+.space2-echo-ring span:nth-child(4){transform:translate(-50%,-50%) translate(4.2px,4.2px);animation-delay:270ms;}
+.space2-echo-ring span:nth-child(5){transform:translate(-50%,-50%) translateY(6px);animation-delay:360ms;}
+.space2-echo-ring span:nth-child(6){transform:translate(-50%,-50%) translate(-4.2px,4.2px);animation-delay:450ms;}
+.space2-echo-ring span:nth-child(7){transform:translate(-50%,-50%) translateX(-6px);animation-delay:540ms;}
+.space2-echo-ring span:nth-child(8){transform:translate(-50%,-50%) translate(-4.2px,-4.2px);animation-delay:630ms;}
+.space2-name.is-generating,.space2-desc.is-generating{
+    color:color-mix(in srgb,var(--text) 94%,#fff 6%);
+    background-image:linear-gradient(110deg,color-mix(in srgb,var(--text-dim) 70%,transparent) 0%,color-mix(in srgb,var(--text) 98%,#fff 2%) 46%,color-mix(in srgb,var(--text-dim) 74%,transparent) 100%);
+    background-size:220% 100%;
+    -webkit-background-clip:text;
+    background-clip:text;
+    -webkit-text-fill-color:transparent;
+    animation:space2TextSheen 1.9s linear infinite;
+}
 @keyframes space2ThumbShimmer{
     from{background-position:200% 0;}
     to{background-position:-20% 0;}
 }
+@keyframes space2EchoRing{
+    0%,100%{opacity:.2;transform:scale(1) translateZ(0);}
+    45%{opacity:1;transform:scale(1.35) translateZ(0);}
+}
 @keyframes space2TextSheen{
-    0%{text-shadow:-16px 0 0 color-mix(in srgb,var(--text) 0%,transparent);}
-    48%{text-shadow:0 0 8px color-mix(in srgb,var(--text) 34%,transparent);}
-    100%{text-shadow:16px 0 0 color-mix(in srgb,var(--text) 0%,transparent);}
+    from{background-position:220% 0;}
+    to{background-position:-20% 0;}
 }
 
 
