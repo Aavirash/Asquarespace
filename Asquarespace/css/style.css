@@ -1231,8 +1231,8 @@ body.is-mobile-shell #theme-toggle:hover{background:color-mix(in srgb,var(--surf
         background:linear-gradient(to bottom,var(--bg),rgba(0,0,0,0));
     }
     body.is-mobile-shell.space-2 .space2-panel::after{
-        bottom:calc(122px + env(safe-area-inset-bottom));
-        height:28px;
+        bottom:-2px;
+        height:20px;
         background:linear-gradient(to top,var(--bg),rgba(0,0,0,0));
     }
 
