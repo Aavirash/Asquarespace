@@ -1178,7 +1178,7 @@ function setSpace2AutoMetaStatus(message,isError=false){
 }
 
 function setSpace2SyncIndicator(state='idle',message=''){
-    const syncBtn=space2SyncNowTopBtn||space2SyncNowBtn;
+    const syncBtn=space2SyncNowBtn||space2SyncNowTopBtn;
     if(space2SyncIndicator) space2SyncIndicator.classList.add('hidden');
     const normalized=String(state||'idle').toLowerCase();
     const resolvedState=(normalized==='idle'&&space2SyncLastRunAt>0)?'ok':normalized;
@@ -1208,10 +1208,10 @@ function setSpace2SyncIndicator(state='idle',message=''){
         syncBtn.textContent='Syncing...';
         syncBtn.disabled=true;
     }else if(resolvedState==='error'){
-        syncBtn.textContent='Retry Sync';
+        syncBtn.textContent='Retry';
         syncBtn.disabled=false;
     }else{
-        syncBtn.textContent='Sync Now';
+        syncBtn.textContent='Sync';
         syncBtn.disabled=false;
     }
 }
@@ -2354,7 +2354,7 @@ async function runSpace2ManualSync({background=false,source='manual'}={}){
         if(!background) setSpace2AutoMetaStatus('Sign in is required before syncing.',true);
         return false;
     }
-    const syncTriggerBtn=space2SyncNowTopBtn||space2SyncNowBtn;
+    const syncTriggerBtn=space2SyncNowBtn||space2SyncNowTopBtn;
     if(!background&&syncTriggerBtn&&syncTriggerBtn.disabled) return false;
     space2SyncInFlight=true;
     setSpace2SyncIndicator('syncing',source==='auto'?'Syncing...':'Syncing now...');
