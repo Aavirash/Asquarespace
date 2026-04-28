@@ -5087,6 +5087,7 @@ if(space2AiInput){
     space2AiInput.addEventListener('input',()=>{
         space2AiInput.style.height='24px';
         space2AiInput.style.height=Math.min(space2AiInput.scrollHeight,120)+'px';
+        updateSpace2AiSheetSizing();
     });
     space2AiInput.addEventListener('keydown',e=>{
         if(e.key==='Enter'&&!e.shiftKey){
@@ -6606,13 +6607,26 @@ async function askAI(){
 function getSpace2AiSheetMaxPx(){
     const vv=window.visualViewport;
     const visibleHeight=Math.max(1,Math.floor((vv&&vv.height)||window.innerHeight||0));
-    if(IS_MOBILE_SHELL) return Math.max(360,Math.min(980,Math.floor(visibleHeight*0.84)));
-    return Math.max(500,Math.min(980,Math.floor(visibleHeight*0.82)));
+    if(IS_MOBILE_SHELL) return Math.max(420,Math.min(1200,Math.floor(visibleHeight*0.90)));
+    return Math.max(560,Math.min(1200,Math.floor(visibleHeight*0.88)));
 }
 
 function updateSpace2AiSheetSizing(){
     if(!space2AiHub) return;
     space2AiHub.style.setProperty('--space2-ai-sheet-max',`${getSpace2AiSheetMaxPx()}px`);
+    const fallbackBarHeight=54;
+    let sheetBottom=fallbackBarHeight;
+    if(space2AiBar&&space2AiHub){
+        const barHeight=Math.max(44,Math.round(space2AiBar.getBoundingClientRect().height||fallbackBarHeight));
+        const hubRect=space2AiHub.getBoundingClientRect();
+        const barRect=space2AiBar.getBoundingClientRect();
+        if(hubRect&&barRect&&hubRect.height>0&&barRect.height>0){
+            sheetBottom=Math.max(barHeight,Math.round(hubRect.bottom-barRect.top));
+        }else{
+            sheetBottom=barHeight;
+        }
+    }
+    space2AiHub.style.setProperty('--space2-ai-sheet-bottom',`${sheetBottom}px`);
 }
 
 function trimSpace2AiChatHistory(){
@@ -6714,6 +6728,12 @@ function setSpace2AiOutput(text,{isError=false,persist=false}={}){
     }
     const next=(text||'').trim();
     if(!next){
+        space2AiOutput.classList.add('hidden');
+        space2AiOutput.textContent='';
+        space2AiOutput.style.color='';
+        return;
+    }
+    if(space2AiChatOpen){
         space2AiOutput.classList.add('hidden');
         space2AiOutput.textContent='';
         space2AiOutput.style.color='';
@@ -7154,10 +7174,11 @@ async function askSpace2Ai(){
     }
 
     const priorMessages=buildSpace2AiContextMessages(8);
+    setSpace2AiChatOpen(true,{autoScroll:true});
+    setSpace2AiOutput('');
     appendSpace2AiChatMessage('user',userPrompt,{hasImage:!!contextImage});
     const assistantIndex=appendSpace2AiChatMessage('assistant','Thinking...', {streaming:true});
     space2AiChatStreaming=true;
-    setSpace2AiOutput('Thinking...', {persist:true});
 
     try{
         const userContent=[];
@@ -7198,14 +7219,13 @@ async function askSpace2Ai(){
 
         const finalText=(fullText||'').trim()||'No response text returned.';
         updateSpace2AiChatMessage(assistantIndex,finalText,{streaming:false});
-        if(space2AiChatOpen) setSpace2AiOutput('');
-        else setSpace2AiOutput(finalText);
+        setSpace2AiOutput('');
         if(contextImage) setSpace2AiAttachedCapture('');
     }catch(err){
         console.error('Space2 AI chat',err);
         const detail=(err&&err.message)?` (${String(err.message).slice(0,160)})`:'';
         updateSpace2AiChatMessage(assistantIndex,`Could not get a response. Please retry.${detail}`,{streaming:false});
-        setSpace2AiOutput(`Could not get a response. Please retry.${detail}`,{isError:true});
+        setSpace2AiOutput('');
     }finally{
         space2AiChatStreaming=false;
     }
