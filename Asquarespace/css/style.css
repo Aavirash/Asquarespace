@@ -1151,7 +1151,7 @@ body.is-mobile-shell #theme-toggle:hover{background:color-mix(in srgb,var(--surf
     .space2-sidebar{top:44px;bottom:118px;padding-top:10px;padding-bottom:12px;}
     .space2-sash{top:44px;bottom:118px;}
     .space2-panel.sidebar-collapsed .space2-sash{top:44px;bottom:118px;}
-    .space2-grid{padding:8px 10px calc(142px + env(safe-area-inset-bottom)) 10px;--space2-grid-gap:10px;touch-action:pan-y;-webkit-overflow-scrolling:touch;box-shadow:inset 0 14px 12px -12px rgba(8,11,16,.28),inset 0 -18px 14px -12px rgba(8,11,16,.34);}
+    .space2-grid{padding:14px 10px calc(142px + env(safe-area-inset-bottom)) 10px;--space2-grid-gap:10px;touch-action:pan-y;-webkit-overflow-scrolling:touch;box-shadow:inset 0 14px 12px -12px rgba(8,11,16,.28),inset 0 -18px 14px -12px rgba(8,11,16,.34);}
     .space2-grid.feed-mode{--space2-grid-gap:16px;}
     .discover-feed{padding:24px 10px 10px;columns:1;column-gap:0;}
     .discover-card{margin-bottom:16px;}
@@ -1204,16 +1204,17 @@ body.is-mobile-shell #theme-toggle:hover{background:color-mix(in srgb,var(--surf
         bottom:138px !important;
     }
 
+    body.is-mobile-shell.space-2 .space2-grid{padding-top:14px !important;}
     body.is-mobile-shell.space-2 .space2-grid.feed-mode{--space2-grid-gap:18px;}
 
     body.is-mobile-shell.space-2 .space2-mode-dock,
     body.is-mobile-shell.space-2 .space2-ai-bar,
     body.is-mobile-shell.space-2 #bottom-bar{
-        background:color-mix(in srgb,var(--surface) 70%,transparent) !important;
-        border-color:color-mix(in srgb,var(--border) 78%,transparent) !important;
-        -webkit-backdrop-filter:blur(14px) saturate(1.08);
-        backdrop-filter:blur(14px) saturate(1.08);
-        box-shadow:0 8px 24px rgba(6,10,16,.20),inset 0 1px 0 rgba(255,255,255,.18);
+        background:color-mix(in srgb,var(--surface) 86%,transparent) !important;
+        border-color:color-mix(in srgb,var(--border) 90%,transparent) !important;
+        -webkit-backdrop-filter:blur(8px) saturate(1.02);
+        backdrop-filter:blur(8px) saturate(1.02);
+        box-shadow:0 5px 14px rgba(6,10,16,.14),inset 0 1px 0 rgba(255,255,255,.10);
     }
 
     body.is-mobile-shell.space-2 #space2-ai-input::placeholder{font-size:12px !important;}
