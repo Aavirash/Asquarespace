@@ -297,15 +297,54 @@ let appBootstrapped=false;
 let pendingSpace2CloudLoad=false;
 let space2SyncInFlight=false;
 let space2AutoSyncTimer=null;
+let space2BackgroundSyncTimer=null;
 let space2SyncLastRunAt=0;
 let space2StartupAutoSyncDone=false;
+let space2StartupAutoSyncRequested=false;
 const DISCOVER_PAGE_SIZE = 18;
 const SPACE2_AI_CHAT_HISTORY_KEY='asq.space2.ai.chat.v1';
 const SPACE2_AI_CHAT_HISTORY_LIMIT=40;
 const SPACE2_FIXED_MODEL='gemini-fast';
+const SPACE2_BACKGROUND_SYNC_INTERVAL_MS = 60 * 60 * 1000;
 
 function canRunCloudSync(reason='auto'){
     return reason==='manual'||reason==='startup';
+}
+
+function shouldTriggerStartupSyncFromAuthEvent(event=''){
+    const normalized=String(event||'').toUpperCase();
+    return normalized==='SIGNED_IN'||normalized==='INITIAL_SESSION';
+}
+
+function requestStartupAutoSyncOnce(){
+    if(space2StartupAutoSyncDone||space2StartupAutoSyncRequested) return;
+    space2StartupAutoSyncRequested=true;
+    startSpace2AutoSyncLoop({immediate:true});
+}
+
+function stopSpace2BackgroundSyncLoop(){
+    if(space2BackgroundSyncTimer){
+        clearTimeout(space2BackgroundSyncTimer);
+        space2BackgroundSyncTimer=null;
+    }
+}
+
+function startSpace2BackgroundSyncLoop({immediate=false}={}){
+    stopSpace2BackgroundSyncLoop();
+    if(!currentSupabaseUser) return;
+
+    const scheduleNext=(delayMs=SPACE2_BACKGROUND_SYNC_INTERVAL_MS)=>{
+        space2BackgroundSyncTimer=setTimeout(async()=>{
+            if(!currentSupabaseUser) return;
+            try{
+                await runSpace2ManualSync({background:true,source:'auto-hourly'});
+            }finally{
+                if(currentSupabaseUser) scheduleNext(SPACE2_BACKGROUND_SYNC_INTERVAL_MS);
+            }
+        },Math.max(60_000,parseInt(delayMs,10)||SPACE2_BACKGROUND_SYNC_INTERVAL_MS));
+    };
+
+    scheduleNext(immediate?120_000:SPACE2_BACKGROUND_SYNC_INTERVAL_MS);
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────
@@ -1229,6 +1268,7 @@ function queueSpace2AutoSync(delay=1200){
     space2AutoSyncTimer=setTimeout(()=>{
         runSpace2ManualSync({background:true,source:'startup'}).finally(()=>{
             space2StartupAutoSyncDone=true;
+            space2StartupAutoSyncRequested=false;
             stopSpace2AutoSyncLoop();
         });
     },Math.max(350,parseInt(delay,10)||1200));
@@ -2348,7 +2388,7 @@ function closeSpace2SettingsModal(){
 
 async function runSpace2ManualSync({background=false,source='manual'}={}){
     if(space2SyncInFlight) return false;
-    if(background&&document.hidden) return false;
+    if(background&&document.hidden&&source!=='auto-hourly') return false;
     if(!currentSupabaseUser){
         setSpace2SyncIndicator('offline');
         if(!background) setSpace2AutoMetaStatus('Sign in is required before syncing.',true);
@@ -2356,11 +2396,26 @@ async function runSpace2ManualSync({background=false,source='manual'}={}){
     }
     const syncTriggerBtn=space2SyncNowBtn||space2SyncNowTopBtn;
     if(!background&&syncTriggerBtn&&syncTriggerBtn.disabled) return false;
+    const isSilentHourly=background&&source==='auto-hourly';
     space2SyncInFlight=true;
-    setSpace2SyncIndicator('syncing',source==='auto'?'Syncing...':'Syncing now...');
-    if(!background) setSpace2AutoMetaStatus('Syncing latest Space 2 items...');
+    if(!isSilentHourly){
+        setSpace2SyncIndicator('syncing',source==='auto'?'Syncing...':'Syncing now...');
+        if(!background) setSpace2AutoMetaStatus('Syncing latest Space 2 items...');
+    }
 
     try{
+        if(isSilentHourly){
+            await syncPendingSpace2LocalItems();
+            saveProjectState();
+            saveSpace2State(undefined,undefined,{skipCloudSync:true});
+            await syncStateToSupabase({reason:'manual'});
+            if(document.visibilityState==='hidden'){
+                await restoreStateFromSupabase();
+            }
+            space2SyncLastRunAt=Date.now();
+            return true;
+        }
+
         // Pull first, then push local changes. This avoids stale-local overwrites.
         await restoreStateFromSupabase();
         await syncPendingSpace2LocalItems();
@@ -2378,9 +2433,9 @@ async function runSpace2ManualSync({background=false,source='manual'}={}){
         return true;
     }catch(err){
         console.warn('space2 manual sync failed',err);
-        setSpace2SyncIndicator('error','Sync issue');
+        if(!isSilentHourly) setSpace2SyncIndicator('error','Sync issue');
         const message=`⚠️ Sync failed: ${(err&&err.message)||'unknown error'}`;
-        setSpace2AutoMetaStatus(message,true);
+        if(!isSilentHourly) setSpace2AutoMetaStatus(message,true);
         return false;
     }finally{
         space2SyncInFlight=false;
@@ -3404,17 +3459,22 @@ async function initAuthGate(){
     }
 
     client.auth.onAuthStateChange((event,session)=>{
+        const hadUser=!!currentSupabaseUser;
         currentSupabaseUser=session&&session.user?session.user:null;
         if(currentSupabaseUser){
-            space2StartupAutoSyncDone=false;
             setSpace2SyncIndicator('idle','Connected');
-            startSpace2AutoSyncLoop({immediate:true});
-            setAuthStatus(`Signed in as ${currentSupabaseUser.email||'user'}. Preparing workspace...`);
-            unlockAppAfterAuth();
-            bootstrapAppAfterAuth().catch(err=>console.warn('boot after auth failed',err));
+            if(shouldTriggerStartupSyncFromAuthEvent(event)) requestStartupAutoSyncOnce();
+            if(!hadUser) startSpace2BackgroundSyncLoop({immediate:false});
+            if(!hadUser){
+                setAuthStatus(`Signed in as ${currentSupabaseUser.email||'user'}. Preparing workspace...`);
+                unlockAppAfterAuth();
+                bootstrapAppAfterAuth().catch(err=>console.warn('boot after auth failed',err));
+            }
         }else if(event==='SIGNED_OUT'){
             stopSpace2AutoSyncLoop();
+            stopSpace2BackgroundSyncLoop();
             space2StartupAutoSyncDone=false;
+            space2StartupAutoSyncRequested=false;
             setSpace2SyncIndicator('offline');
             appBootstrapped=false;
             lockAppForAuth();
@@ -3430,11 +3490,11 @@ async function initAuthGate(){
     }
     if(data&&data.session&&data.session.user){
         currentSupabaseUser=data.session.user;
-        space2StartupAutoSyncDone=false;
         setAuthStatus(`Restoring session for ${currentSupabaseUser.email||'user'}...`);
         unlockAppAfterAuth();
         await bootstrapAppAfterAuth();
-        startSpace2AutoSyncLoop({immediate:true});
+        requestStartupAutoSyncOnce();
+        startSpace2BackgroundSyncLoop({immediate:false});
     }else{
         setSpace2SyncIndicator('offline');
     }
@@ -5019,7 +5079,9 @@ async function signOutCurrentUser(){
     lastBoardCloudSyncSignature='';
     lastSpace2CloudSyncSignature='';
     stopSpace2AutoSyncLoop();
+    stopSpace2BackgroundSyncLoop();
     space2StartupAutoSyncDone=false;
+    space2StartupAutoSyncRequested=false;
     setSpace2SyncIndicator('offline');
     closeSettings();
     setSpace2AutoMetaStatus('Signed out. Please sign in again.');
