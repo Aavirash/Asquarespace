@@ -1782,7 +1782,7 @@ function renderSpace2Grid(){
             </div>
             <div class="space2-card-action-left">
                 <button class="space2-card-action" data-action="meta" title="Regenerate metadata" aria-label="Regenerate metadata">
-                    <span class="space2-card-action-glyph" aria-hidden="true">AI</span>
+                    <span class="space2-card-action-dot" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span>
                 </button>
             </div>
             <div class="space2-card-actions">
@@ -7875,7 +7875,7 @@ if(mbPreviewBtn) mbPreviewBtn.addEventListener('click', () => {
                 <textarea class="wf-textarea wf-prompt-ta" data-role="prompt" placeholder="Style, composition, expression, lighting...">${escapeHtml(wfState.prompt)}</textarea>
                 <div class="wf-prompt-row">
                     <button class="wf-prompt-magic" data-role="prompt-magic" title="Enhance prompt">
-                        <span class="magic-wand-icon"></span>
+                        <i data-lucide="wand-sparkles" aria-hidden="true"></i>
                     </button>
                 </div>
             `;
