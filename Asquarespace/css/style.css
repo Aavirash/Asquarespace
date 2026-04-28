@@ -131,10 +131,10 @@ body.auth-locked #ui-container{display:none;}
 .space2-sidebar{width:var(--space2-sidebar-width);min-width:0;border:1px solid color-mix(in srgb,var(--border) 82%,transparent);border-radius:14px;background:color-mix(in srgb,var(--surface) 70%,transparent);backdrop-filter:blur(12px);display:flex;flex-direction:column;padding:12px 10px;gap:10px;overflow:hidden;transition:width .18s cubic-bezier(.4,0,.2,1),padding .18s cubic-bezier(.4,0,.2,1),opacity .14s ease;position:absolute;left:8px;top:18px;bottom:8px;height:auto;z-index:20;margin:0;box-shadow:0 8px 28px rgba(0,0,0,.24);}
 .space2-panel.sidebar-collapsed .space2-sidebar{width:0;padding-left:0;padding-right:0;opacity:0;pointer-events:none;border-color:transparent;margin-left:0;}
 .space2-side-view-toggle{display:flex;gap:6px;flex-wrap:wrap;padding:2px 2px 6px;}
-.space2-sash{width:16px;cursor:col-resize;position:absolute;left:calc(2px + var(--space2-sidebar-width));top:18px;bottom:8px;z-index:21;flex-shrink:0;transition:left .18s cubic-bezier(.4,0,.2,1);}
-.space2-sash::before{content:'';position:absolute;left:6px;top:42%;width:4px;height:64px;transform:translateY(-50%);border-radius:999px;background:var(--app-red);border:1px solid color-mix(in srgb,var(--app-red) 80%,#fff 20%);box-shadow:0 2px 10px rgba(239,64,39,.25);transition:background .14s ease,border-color .14s ease,opacity .14s ease;opacity:.88;}
+.space2-sash{width:20px;cursor:col-resize;position:absolute;left:calc(2px + var(--space2-sidebar-width));top:18px;bottom:8px;z-index:21;flex-shrink:0;transition:left .18s cubic-bezier(.4,0,.2,1);}
+.space2-sash::before{content:'';position:absolute;left:8px;top:42%;width:4px;height:64px;transform:translateY(-50%);border-radius:999px;background:var(--app-red);border:1px solid color-mix(in srgb,var(--app-red) 80%,#fff 20%);box-shadow:0 2px 10px rgba(239,64,39,.25);transition:background .14s ease,border-color .14s ease,opacity .14s ease;opacity:.88;}
 .space2-sash:hover::before,.space2-panel.space2-resizing .space2-sash::before{background:color-mix(in srgb,var(--app-red) 92%,#fff 8%);border-color:var(--app-red);opacity:1;}
-.space2-panel.sidebar-collapsed .space2-sash{position:absolute;left:-1px;top:0;bottom:0;width:18px;}
+.space2-panel.sidebar-collapsed .space2-sash{position:absolute;left:-1px;top:0;bottom:0;width:22px;}
 .space2-sidebar-actions{display:flex;flex-direction:column;gap:8px;}
 .space2-side-title{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);padding:0 4px;}
 .space2-collections{display:flex;flex-direction:column;gap:4px;}
