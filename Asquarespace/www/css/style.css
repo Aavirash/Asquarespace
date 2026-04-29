@@ -117,6 +117,8 @@ body.sketch-mode #sketch-draft-layer{display:block;cursor:crosshair;}
 .space2-top-sync.hidden{display:none;}
 .space2-top-corner{position:absolute;top:14px;right:12px;z-index:338;pointer-events:auto;display:flex;align-items:center;gap:8px;}
 .space2-top-corner.hidden{display:none;}
+.space2-top-icon-btn.hidden{display:none !important;}
+.sketch-fab-wrap:has(#bar-sketch-btn.hidden) .sketch-menu{display:none !important;}
 .space2-top-import{height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 84%,transparent);backdrop-filter:blur(10px);box-shadow:var(--shadow);color:var(--text);font-size:12px;font-family:inherit;font-weight:600;letter-spacing:.01em;cursor:pointer;transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease;display:flex;align-items:center;gap:8px;flex-shrink:0;}
 .space2-top-import:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg);border-color:color-mix(in srgb,var(--accent) 32%,var(--border));}
 .space2-top-import svg{width:15px;height:15px;fill:currentColor;opacity:.94;}
