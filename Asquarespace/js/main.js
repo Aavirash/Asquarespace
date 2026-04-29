@@ -64,6 +64,7 @@ const authChangeEmailBtn = document.getElementById('auth-change-email-btn');
 const authStatus = document.getElementById('auth-status');
 const viewport    = document.getElementById('viewport');
 const canvas      = document.getElementById('canvas');
+const sketchDraftLayer = document.getElementById('sketch-draft-layer');
 const selBox      = document.getElementById('selection-box');
 const multiSelBox = document.getElementById('multi-selection-box');
 const ctxToolbar  = document.getElementById('context-toolbar');
@@ -229,7 +230,7 @@ let interactionDirty=false;
 let sketchModeActive=false;
 let sketchTool='brush';
 let sketchSize=4;
-let sketchStroke={pointerId:null,canvas:null,node:null,lastPoint:null};
+let sketchStroke={pointerId:null,canvas:null,node:null,lastPoint:null,bounds:null,hasInk:false};
 let sketchMouseStroke=false;
 let suppressNextViewportMouseDown=false;
 let genW=1024, genH=1024;
@@ -2386,9 +2387,12 @@ function updateControlCornerState(){
 }
 
 function updateSpace2TopCornerVisibility(){
-    const show=currentSpace==='space2';
+    const show=currentSpace==='space1'||currentSpace==='space2';
     if(space2TopCorner) space2TopCorner.classList.toggle('hidden',!show);
-    if(space2TopSync) space2TopSync.classList.toggle('hidden',!show);
+    if(space2TopSync) space2TopSync.classList.toggle('hidden',currentSpace!=='space2');
+    if(barSketchBtn) barSketchBtn.classList.toggle('hidden',currentSpace!=='space1');
+    if(sketchMenu&&currentSpace!=='space1') sketchMenu.classList.add('hidden');
+    if(themeToggle) themeToggle.classList.toggle('hidden',currentSpace!=='space2');
 }
 
 function initSpace2SidebarSizing(){
@@ -3673,14 +3677,17 @@ function fitViewportToVisibleArea(){
 }
 
 fitViewportToVisibleArea();
+resizeSketchDraftLayer();
 window.addEventListener('resize',()=>{
     fitViewportToVisibleArea();
+    resizeSketchDraftLayer();
     applySpace2MobileHeaderLayout();
     updateSpace2AiSheetSizing();
 });
 if(window.visualViewport){
     window.visualViewport.addEventListener('resize',()=>{
         fitViewportToVisibleArea();
+        resizeSketchDraftLayer();
         applySpace2MobileHeaderLayout();
         updateSpace2AiSheetSizing();
     });
@@ -4061,7 +4068,8 @@ function setSketchMode(active,{keepMenu=false}={}){
     sketchModeActive=!!active;
     if(!sketchModeActive){
         sketchMouseStroke=false;
-        sketchStroke={pointerId:null,canvas:null,node:null,lastPoint:null};
+        clearSketchDraftLayer();
+        sketchStroke={pointerId:null,canvas:null,node:null,lastPoint:null,bounds:null,hasInk:false};
         if(sketchMenu&&!keepMenu) sketchMenu.classList.add('hidden');
     }
     updateSketchControlsUI();
@@ -4078,6 +4086,95 @@ function getSketchCanvasPoint(canvasEl,clientX,clientY){
         x:Math.max(0,Math.min(r.width,clientX-r.left)),
         y:Math.max(0,Math.min(r.height,clientY-r.top))
     };
+}
+
+function resizeSketchDraftLayer(){
+    if(!sketchDraftLayer||!viewport) return;
+    const rect=viewport.getBoundingClientRect();
+    const width=Math.max(1,Math.round(rect.width));
+    const height=Math.max(1,Math.round(rect.height));
+    if(sketchDraftLayer.width!==width) sketchDraftLayer.width=width;
+    if(sketchDraftLayer.height!==height) sketchDraftLayer.height=height;
+    sketchDraftLayer.style.width=`${width}px`;
+    sketchDraftLayer.style.height=`${height}px`;
+    const ctx=sketchDraftLayer.getContext('2d');
+    if(ctx){
+        ctx.lineCap='round';
+        ctx.lineJoin='round';
+    }
+}
+
+function clearSketchDraftLayer(){
+    if(!sketchDraftLayer) return;
+    resizeSketchDraftLayer();
+    const ctx=sketchDraftLayer.getContext('2d');
+    if(ctx) ctx.clearRect(0,0,sketchDraftLayer.width,sketchDraftLayer.height);
+}
+
+function expandSketchBounds(bounds,point,radius){
+    const next=bounds?{...bounds}:{left:point.x,right:point.x,top:point.y,bottom:point.y};
+    next.left=Math.min(next.left,point.x-radius);
+    next.right=Math.max(next.right,point.x+radius);
+    next.top=Math.min(next.top,point.y-radius);
+    next.bottom=Math.max(next.bottom,point.y+radius);
+    return next;
+}
+
+function getVisibleSketchBounds(canvasEl,bounds){
+    if(!canvasEl||!bounds) return null;
+    const left=Math.max(0,Math.floor(bounds.left));
+    const top=Math.max(0,Math.floor(bounds.top));
+    const right=Math.min(canvasEl.width,Math.ceil(bounds.right));
+    const bottom=Math.min(canvasEl.height,Math.ceil(bounds.bottom));
+    const width=Math.max(0,right-left);
+    const height=Math.max(0,bottom-top);
+    if(!width||!height) return null;
+    const ctx=canvasEl.getContext('2d');
+    if(!ctx) return null;
+    let imageData;
+    try{imageData=ctx.getImageData(left,top,width,height);}catch{return null;}
+    const data=imageData.data;
+    let minX=width,minY=height,maxX=-1,maxY=-1;
+    for(let y=0;y<height;y++){
+        for(let x=0;x<width;x++){
+            if(data[(y*width+x)*4+3]===0) continue;
+            if(x<minX) minX=x;
+            if(y<minY) minY=y;
+            if(x>maxX) maxX=x;
+            if(y>maxY) maxY=y;
+        }
+    }
+    if(maxX<0||maxY<0) return null;
+    return {
+        left:left+minX,
+        top:top+minY,
+        right:left+maxX+1,
+        bottom:top+maxY+1
+    };
+}
+
+function finalizeSketchDraft(){
+    if(!sketchDraftLayer||!sketchStroke.hasInk||!sketchStroke.bounds) return;
+    const visibleBounds=getVisibleSketchBounds(sketchDraftLayer,sketchStroke.bounds);
+    if(!visibleBounds) return;
+    const pad=Math.max(10,Math.ceil(sketchSize*1.75));
+    const sourceLeft=Math.max(0,Math.floor(visibleBounds.left-pad));
+    const sourceTop=Math.max(0,Math.floor(visibleBounds.top-pad));
+    const sourceRight=Math.min(sketchDraftLayer.width,Math.ceil(visibleBounds.right+pad));
+    const sourceBottom=Math.min(sketchDraftLayer.height,Math.ceil(visibleBounds.bottom+pad));
+    const sourceWidth=Math.max(1,sourceRight-sourceLeft);
+    const sourceHeight=Math.max(1,sourceBottom-sourceTop);
+    const viewportRect=viewport.getBoundingClientRect();
+    const topLeft=vToC(viewportRect.left+sourceLeft,viewportRect.top+sourceTop);
+    const bottomRight=vToC(viewportRect.left+sourceRight,viewportRect.top+sourceBottom);
+    const nodeWidth=Math.max(1,Math.round(bottomRight.x-topLeft.x));
+    const nodeHeight=Math.max(1,Math.round(bottomRight.y-topLeft.y));
+    const created=createSketchNodeAt(topLeft.x,topLeft.y,nodeWidth,nodeHeight,'',false);
+    const targetCtx=created.canvas.getContext('2d');
+    if(targetCtx){
+        targetCtx.clearRect(0,0,created.canvas.width,created.canvas.height);
+        targetCtx.drawImage(sketchDraftLayer,sourceLeft,sourceTop,sourceWidth,sourceHeight,0,0,created.canvas.width,created.canvas.height);
+    }
 }
 
 function drawSketchSegment(canvasEl,from,to){
@@ -4105,9 +4202,16 @@ function drawSketchSegment(canvasEl,from,to){
 }
 
 function beginSketchStroke(canvasEl,node,clientX,clientY,pointerId=null){
-    if(!canvasEl||!node||!sketchModeActive) return;
+    if(!canvasEl||!sketchModeActive) return;
     const p=getSketchCanvasPoint(canvasEl,clientX,clientY);
-    sketchStroke={pointerId,canvas:canvasEl,node,lastPoint:p};
+    sketchStroke={
+        pointerId,
+        canvas:canvasEl,
+        node,
+        lastPoint:p,
+        bounds:expandSketchBounds(null,p,Math.max(1,sketchSize)),
+        hasInk:sketchTool!=='eraser'
+    };
     drawSketchSegment(canvasEl,p,p);
     interactionDirty=true;
 }
@@ -4117,43 +4221,33 @@ function continueSketchStroke(clientX,clientY,pointerId=null){
     if(sketchStroke.pointerId!==null&&pointerId!==null&&pointerId!==sketchStroke.pointerId) return;
     const next=getSketchCanvasPoint(sketchStroke.canvas,clientX,clientY);
     drawSketchSegment(sketchStroke.canvas,sketchStroke.lastPoint,next);
+    const radius=Math.max(1,sketchSize);
+    sketchStroke.bounds=expandSketchBounds(sketchStroke.bounds,sketchStroke.lastPoint,radius);
+    sketchStroke.bounds=expandSketchBounds(sketchStroke.bounds,next,radius);
+    if(sketchTool!=='eraser') sketchStroke.hasInk=true;
     sketchStroke.lastPoint=next;
     interactionDirty=true;
 }
 
 function endSketchStroke(pointerId=null){
     if(sketchStroke.pointerId!==null&&pointerId!==null&&pointerId!==sketchStroke.pointerId) return;
+    finalizeSketchDraft();
+    clearSketchDraftLayer();
     if(interactionDirty){
         schedulePersist(120);
         scheduleHistoryCapture(120);
         interactionDirty=false;
     }
-    sketchStroke={pointerId:null,canvas:null,node:null,lastPoint:null};
+    sketchStroke={pointerId:null,canvas:null,node:null,lastPoint:null,bounds:null,hasInk:false};
     sketchMouseStroke=false;
 }
 
 function bindSketchCanvasEvents(node,canvasEl){
     if(!canvasEl||canvasEl.__asqSketchBound) return;
-    canvasEl.addEventListener('pointerdown',e=>{
-        if(!sketchModeActive) return;
-        if(e.button!==0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        beginSketchStroke(canvasEl,node,e.clientX,e.clientY,e.pointerId);
-        try{canvasEl.setPointerCapture(e.pointerId);}catch{}
-    },{passive:false});
-    canvasEl.addEventListener('mousedown',e=>{
-        if(!sketchModeActive) return;
-        if(e.button!==0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        sketchMouseStroke=true;
-        beginSketchStroke(canvasEl,node,e.clientX,e.clientY,null);
-    });
     canvasEl.__asqSketchBound=true;
 }
 
-function createSketchNodeAt(cx,cy,w=320,h=220,dataUrl=''){
+function createSketchNodeAt(cx,cy,w=320,h=220,dataUrl='',autoSelect=false){
     const node=makeNode(cx,cy);
     node.classList.add('sketch-card');
     const inner=document.createElement('div');
@@ -4178,19 +4272,15 @@ function createSketchNodeAt(cx,cy,w=320,h=220,dataUrl=''){
         img.src=dataUrl;
     }
     inner.appendChild(sketchCanvas);
-    finishNode(node,inner,true);
+    finishNode(node,inner,autoSelect);
     bindSketchCanvasEvents(node,sketchCanvas);
     return {node,canvas:sketchCanvas};
 }
 
 function startSketchFromViewport(clientX,clientY,pointerId=null){
     if(!sketchModeActive||currentSpace!=='space1') return;
-    if(sketchTool==='eraser') return;
-    const p=vToC(clientX,clientY);
-    const width=320;
-    const height=220;
-    const created=createSketchNodeAt(p.x-width/2,p.y-height/2,width,height,'');
-    beginSketchStroke(created.canvas,created.node,clientX,clientY,pointerId);
+    resizeSketchDraftLayer();
+    beginSketchStroke(sketchDraftLayer,null,clientX,clientY,pointerId);
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────────
@@ -4256,6 +4346,7 @@ document.addEventListener('pointercancel',e=>{
 },{passive:false,capture:true});
 viewport.addEventListener('pointerdown',e=>{
     if(!sketchModeActive||currentSpace!=='space1') return;
+    if(e.pointerType==='touch') return;
     if(e.button!==0) return;
     if(e.target!==viewport&&e.target!==canvas) return;
     e.preventDefault();
