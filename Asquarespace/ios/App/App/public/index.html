@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Light.otf" as="font" type="font/otf">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Black.otf" as="font" type="font/otf">
-    <link rel="stylesheet" href="css/style.css?v=20260429-110">
+    <link rel="stylesheet" href="css/style.css?v=20260429-111">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -514,6 +514,31 @@
         <i data-lucide="sticky-note" aria-hidden="true"></i>
         Note
       </button>
+      <div class="bar-ctrl-wrapper sketch-wrapper" id="sketch-wrapper" style="position:relative">
+        <button id="bar-sketch-btn" class="bar-ctrl-btn" title="Sketch">
+          <i data-lucide="pen-tool" aria-hidden="true"></i>
+          <span>Sketch</span>
+        </button>
+        <div id="sketch-menu" class="sketch-menu hidden" role="menu" aria-label="Sketch tools">
+          <button class="sketch-tool-btn active" data-tool="brush" title="Brush" aria-label="Brush">
+            <i data-lucide="brush" aria-hidden="true"></i>
+          </button>
+          <button class="sketch-tool-btn" data-tool="eraser" title="Eraser" aria-label="Eraser">
+            <i data-lucide="eraser" aria-hidden="true"></i>
+          </button>
+          <div class="sketch-size-stack" aria-label="Brush size">
+            <button class="sketch-size-btn active" data-size="4" title="Small">
+              <span class="sketch-size-dot size-sm" aria-hidden="true"></span>
+            </button>
+            <button class="sketch-size-btn" data-size="8" title="Medium">
+              <span class="sketch-size-dot size-md" aria-hidden="true"></span>
+            </button>
+            <button class="sketch-size-btn" data-size="13" title="Large">
+              <span class="sketch-size-dot size-lg" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+      </div>
       <!-- Upload -->
       <button id="bar-upload-btn">
         <i data-lucide="upload" aria-hidden="true"></i>
@@ -638,6 +663,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/lucide.min.js"></script>
 <script src="js/CSInterface.js"></script>
-<script src="js/main.js?v=20260429-109"></script>
+<script src="js/main.js?v=20260429-111"></script>
 </body>
 </html>

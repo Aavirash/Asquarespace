@@ -81,6 +81,10 @@ const sizeBtn     = document.getElementById('size-btn');
 const sizeLabel   = document.getElementById('size-label');
 const sizeDD      = document.getElementById('size-dropdown');
 const fileInput   = document.getElementById('file-input');
+const barSketchBtn = document.getElementById('bar-sketch-btn');
+const sketchMenu = document.getElementById('sketch-menu');
+const sketchToolBtns = [...document.querySelectorAll('.sketch-tool-btn')];
+const sketchSizeBtns = [...document.querySelectorAll('.sketch-size-btn')];
 const themeToggle = document.getElementById('theme-toggle');
 const barExtraBtn = document.getElementById('bar-extra-btn');
 const barExtraMenu= document.getElementById('bar-extra-menu');
@@ -222,6 +226,12 @@ let drag        = null;
 let activeCanvasPointerId = null;
 let lastNoteTap = { node: null, time: 0, pointerType: '' };
 let interactionDirty=false;
+let sketchModeActive=false;
+let sketchTool='brush';
+let sketchSize=4;
+let sketchStroke={pointerId:null,canvas:null,node:null,lastPoint:null};
+let sketchMouseStroke=false;
+let suppressNextViewportMouseDown=false;
 let genW=1024, genH=1024;
 let currentModel='flux';
 let isDark=(localStorage.getItem('asq.theme')||'0')==='1';
@@ -3159,6 +3169,18 @@ function serializeNode(n){
         };
     }
 
+    if(n.classList.contains('sketch-card')){
+        const sketchCanvas=inner.querySelector('.sketch-canvas');
+        if(!sketchCanvas) return null;
+        return {
+            ...base,
+            type:'sketch',
+            width:inner.style.width||`${sketchCanvas.width}px`,
+            height:inner.style.height||`${sketchCanvas.height}px`,
+            image:sketchCanvas.toDataURL('image/png')
+        };
+    }
+
     const media=inner.querySelector('img,video,audio');
     if(!media) return null;
     const mediaWrap=inner.querySelector('.media-player');
@@ -3232,6 +3254,30 @@ function restoreNode(item){
         if(st.fontFamily) c.style.fontFamily=st.fontFamily;
         if(st.color) c.style.color=st.color;
         inner.appendChild(c);
+    }else if(item.type==='sketch'){
+        node.classList.add('sketch-card');
+        const w=parseInt(item.width,10)||320;
+        const h=parseInt(item.height,10)||220;
+        inner.style.width=`${w}px`;
+        inner.style.height=`${h}px`;
+        const sketchCanvas=document.createElement('canvas');
+        sketchCanvas.className='sketch-canvas';
+        sketchCanvas.width=Math.max(1,w);
+        sketchCanvas.height=Math.max(1,h);
+        sketchCanvas.style.width=`${w}px`;
+        sketchCanvas.style.height=`${h}px`;
+        const sctx=sketchCanvas.getContext('2d');
+        if(sctx){
+            sctx.clearRect(0,0,sketchCanvas.width,sketchCanvas.height);
+            sctx.lineCap='round';
+            sctx.lineJoin='round';
+        }
+        if(item.image){
+            const img=new Image();
+            img.onload=()=>{try{sctx&&sctx.drawImage(img,0,0,w,h);}catch{}};
+            img.src=item.image;
+        }
+        inner.appendChild(sketchCanvas);
     }else if(item.type==='video'){
         const vsrc=item.filePath?`file://${item.filePath.replace(/\\/g,'/')}`:(item.src||'');
         const w=parseInt(item.width,10)||360;
@@ -4004,6 +4050,149 @@ document.querySelectorAll('.color-swatch').forEach(sw=>{
     sw.addEventListener('click',e=>{e.stopPropagation();const col=sw.dataset.color;ntColorSwatch.style.background=col;document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));sw.classList.add('selected');if(selectedNote){const inner=selectedNote.querySelector('.node-inner');if(inner){inner.style.background=col;const c=selectedNote.querySelector('.note-content');if(c)c.style.color=col==='#2d2d2d'?'#f0f0f0':'#3a3a3a';}}colorPopup.classList.add('hidden');});
 });
 
+function updateSketchControlsUI(){
+    if(barSketchBtn) barSketchBtn.classList.toggle('active',sketchModeActive);
+    sketchToolBtns.forEach(btn=>btn.classList.toggle('active',btn.dataset.tool===sketchTool));
+    sketchSizeBtns.forEach(btn=>btn.classList.toggle('active',Number(btn.dataset.size)===Number(sketchSize)));
+    if(document.body) document.body.classList.toggle('sketch-mode',sketchModeActive);
+}
+
+function setSketchMode(active,{keepMenu=false}={}){
+    sketchModeActive=!!active;
+    if(!sketchModeActive){
+        sketchMouseStroke=false;
+        sketchStroke={pointerId:null,canvas:null,node:null,lastPoint:null};
+        if(sketchMenu&&!keepMenu) sketchMenu.classList.add('hidden');
+    }
+    updateSketchControlsUI();
+}
+
+function getSketchStrokeColor(){
+    const t=getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+    return t|| (isDark?'#f5f6fb':'#111111');
+}
+
+function getSketchCanvasPoint(canvasEl,clientX,clientY){
+    const r=canvasEl.getBoundingClientRect();
+    return {
+        x:Math.max(0,Math.min(r.width,clientX-r.left)),
+        y:Math.max(0,Math.min(r.height,clientY-r.top))
+    };
+}
+
+function drawSketchSegment(canvasEl,from,to){
+    if(!canvasEl) return;
+    const ctx=canvasEl.getContext('2d');
+    if(!ctx) return;
+    const erasing=sketchTool==='eraser';
+    ctx.save();
+    ctx.globalCompositeOperation=erasing?'destination-out':'source-over';
+    ctx.strokeStyle=erasing?'rgba(0,0,0,1)':getSketchStrokeColor();
+    ctx.fillStyle=erasing?'rgba(0,0,0,1)':getSketchStrokeColor();
+    ctx.lineWidth=sketchSize;
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    ctx.beginPath();
+    ctx.moveTo(from.x,from.y);
+    ctx.lineTo(to.x,to.y);
+    ctx.stroke();
+    if(Math.abs(from.x-to.x)<0.1&&Math.abs(from.y-to.y)<0.1){
+        ctx.beginPath();
+        ctx.arc(to.x,to.y,Math.max(1,sketchSize*0.5),0,Math.PI*2);
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+function beginSketchStroke(canvasEl,node,clientX,clientY,pointerId=null){
+    if(!canvasEl||!node||!sketchModeActive) return;
+    const p=getSketchCanvasPoint(canvasEl,clientX,clientY);
+    sketchStroke={pointerId,canvas:canvasEl,node,lastPoint:p};
+    drawSketchSegment(canvasEl,p,p);
+    interactionDirty=true;
+}
+
+function continueSketchStroke(clientX,clientY,pointerId=null){
+    if(!sketchStroke.canvas||!sketchStroke.lastPoint) return;
+    if(sketchStroke.pointerId!==null&&pointerId!==null&&pointerId!==sketchStroke.pointerId) return;
+    const next=getSketchCanvasPoint(sketchStroke.canvas,clientX,clientY);
+    drawSketchSegment(sketchStroke.canvas,sketchStroke.lastPoint,next);
+    sketchStroke.lastPoint=next;
+    interactionDirty=true;
+}
+
+function endSketchStroke(pointerId=null){
+    if(sketchStroke.pointerId!==null&&pointerId!==null&&pointerId!==sketchStroke.pointerId) return;
+    if(interactionDirty){
+        schedulePersist(120);
+        scheduleHistoryCapture(120);
+        interactionDirty=false;
+    }
+    sketchStroke={pointerId:null,canvas:null,node:null,lastPoint:null};
+    sketchMouseStroke=false;
+}
+
+function bindSketchCanvasEvents(node,canvasEl){
+    if(!canvasEl||canvasEl.__asqSketchBound) return;
+    canvasEl.addEventListener('pointerdown',e=>{
+        if(!sketchModeActive) return;
+        if(e.button!==0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        beginSketchStroke(canvasEl,node,e.clientX,e.clientY,e.pointerId);
+        try{canvasEl.setPointerCapture(e.pointerId);}catch{}
+    },{passive:false});
+    canvasEl.addEventListener('mousedown',e=>{
+        if(!sketchModeActive) return;
+        if(e.button!==0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        sketchMouseStroke=true;
+        beginSketchStroke(canvasEl,node,e.clientX,e.clientY,null);
+    });
+    canvasEl.__asqSketchBound=true;
+}
+
+function createSketchNodeAt(cx,cy,w=320,h=220,dataUrl=''){
+    const node=makeNode(cx,cy);
+    node.classList.add('sketch-card');
+    const inner=document.createElement('div');
+    inner.className='node-inner';
+    inner.style.width=`${w}px`;
+    inner.style.height=`${h}px`;
+    const sketchCanvas=document.createElement('canvas');
+    sketchCanvas.className='sketch-canvas';
+    sketchCanvas.width=Math.max(1,Math.round(w));
+    sketchCanvas.height=Math.max(1,Math.round(h));
+    sketchCanvas.style.width=`${w}px`;
+    sketchCanvas.style.height=`${h}px`;
+    const sctx=sketchCanvas.getContext('2d');
+    if(sctx){
+        sctx.clearRect(0,0,sketchCanvas.width,sketchCanvas.height);
+        sctx.lineCap='round';
+        sctx.lineJoin='round';
+    }
+    if(dataUrl){
+        const img=new Image();
+        img.onload=()=>{try{sctx&&sctx.drawImage(img,0,0,w,h);}catch{}};
+        img.src=dataUrl;
+    }
+    inner.appendChild(sketchCanvas);
+    finishNode(node,inner,true);
+    bindSketchCanvasEvents(node,sketchCanvas);
+    return {node,canvas:sketchCanvas};
+}
+
+function startSketchFromViewport(clientX,clientY,pointerId=null){
+    if(!sketchModeActive||currentSpace!=='space1') return;
+    if(sketchTool==='eraser') return;
+    const p=vToC(clientX,clientY);
+    const width=320;
+    const height=220;
+    const created=createSketchNodeAt(p.x-width/2,p.y-height/2,width,height,'');
+    beginSketchStroke(created.canvas,created.node,clientX,clientY,pointerId);
+}
+
 // ── Navigation ─────────────────────────────────────────────────────────────
 // Left-click drag on empty canvas = marquee selection
 // Cmd/Ctrl + left drag (or middle drag) = pan
@@ -4036,6 +4225,7 @@ document.addEventListener('pointerdown',e=>{
     const canvasTarget=isCanvasInputTarget(target);
     const captureTarget=isSpace2CaptureTarget(target);
     if(!canvasTarget&&!captureTarget) return;
+    if(sketchModeActive&&currentSpace==='space1'&&canvasTarget) return;
     if(e.pointerType==='touch'&&!e.isPrimary) return;
     e.preventDefault();
     syntheticPointerBridge.id=e.pointerId;
@@ -4064,7 +4254,27 @@ document.addEventListener('pointercancel',e=>{
     e.preventDefault();
     releaseSyntheticPointerBridge();
 },{passive:false,capture:true});
+viewport.addEventListener('pointerdown',e=>{
+    if(!sketchModeActive||currentSpace!=='space1') return;
+    if(e.button!==0) return;
+    if(e.target!==viewport&&e.target!==canvas) return;
+    e.preventDefault();
+    suppressNextViewportMouseDown=true;
+    startSketchFromViewport(e.clientX,e.clientY,e.pointerId);
+    try{viewport.setPointerCapture(e.pointerId);}catch{}
+},{passive:false});
 viewport.addEventListener('mousedown',e=>{
+    if(suppressNextViewportMouseDown){
+        suppressNextViewportMouseDown=false;
+        e.preventDefault();
+        return;
+    }
+    if(sketchModeActive&&currentSpace==='space1'&&e.button===0&&!e.altKey&&!e.metaKey&&!e.ctrlKey&&(e.target===viewport||e.target===canvas)){
+        e.preventDefault();
+        sketchMouseStroke=true;
+        startSketchFromViewport(e.clientX,e.clientY,null);
+        return;
+    }
     const navModifier=e.altKey||e.metaKey||e.ctrlKey||e.button===1;
     if(e.target!==viewport&&e.target!==canvas&&!navModifier) return;
     closeAllDD();
@@ -4108,20 +4318,39 @@ viewport.addEventListener('mousedown',e=>{
 viewport.addEventListener('contextmenu',e=>e.preventDefault());
 
 window.addEventListener('mousemove',e=>{
+    if(sketchMouseStroke){
+        continueSketchStroke(e.clientX,e.clientY,null);
+        return;
+    }
     updateCanvasInteraction(e.clientX,e.clientY);
 });
 
 window.addEventListener('mouseup',()=>{
+    if(sketchMouseStroke){
+        endSketchStroke(null);
+        return;
+    }
     finishCanvasInteraction();
 });
 
 window.addEventListener('pointermove',e=>{
+    if(sketchStroke.pointerId!==null&&e.pointerId===sketchStroke.pointerId){
+        e.preventDefault();
+        continueSketchStroke(e.clientX,e.clientY,e.pointerId);
+        return;
+    }
     if(e.pointerType==='mouse'||activeCanvasPointerId===null||e.pointerId!==activeCanvasPointerId) return;
     e.preventDefault();
     updateCanvasInteraction(e.clientX,e.clientY);
 },{passive:false});
 
 window.addEventListener('pointerup',e=>{
+    if(sketchStroke.pointerId!==null&&e.pointerId===sketchStroke.pointerId){
+        e.preventDefault();
+        endSketchStroke(e.pointerId);
+        try{e.target&&e.target.releasePointerCapture&&e.target.releasePointerCapture(e.pointerId);}catch{}
+        return;
+    }
     if(e.pointerType==='mouse'||activeCanvasPointerId===null||e.pointerId!==activeCanvasPointerId) return;
     e.preventDefault();
     finishCanvasInteraction();
@@ -4129,6 +4358,11 @@ window.addEventListener('pointerup',e=>{
 },{passive:false});
 
 window.addEventListener('pointercancel',e=>{
+    if(sketchStroke.pointerId!==null&&e.pointerId===sketchStroke.pointerId){
+        e.preventDefault();
+        endSketchStroke(e.pointerId);
+        return;
+    }
     if(e.pointerType==='mouse'||activeCanvasPointerId===null||e.pointerId!==activeCanvasPointerId) return;
     e.preventDefault();
     finishCanvasInteraction();
@@ -4219,6 +4453,35 @@ viewport.addEventListener('drop',e=>{e.preventDefault();viewport.classList.remov
 
 // ── File & Note ────────────────────────────────────────────────────────────
 document.getElementById('bar-upload-btn').addEventListener('click',()=>fileInput.click());
+if(barSketchBtn){
+    barSketchBtn.addEventListener('click',e=>{
+        e.stopPropagation();
+        if(currentSpace==='space2') setSpace('space1');
+        const next=!sketchModeActive;
+        setSketchMode(next,{keepMenu:false});
+        if(sketchMenu) sketchMenu.classList.toggle('hidden',!next);
+    });
+}
+if(sketchMenu) sketchMenu.addEventListener('click',e=>e.stopPropagation());
+sketchToolBtns.forEach(btn=>{
+    btn.addEventListener('click',e=>{
+        e.stopPropagation();
+        sketchTool=btn.dataset.tool==='eraser'?'eraser':'brush';
+        if(!sketchModeActive) setSketchMode(true,{keepMenu:true});
+        updateSketchControlsUI();
+    });
+});
+sketchSizeBtns.forEach(btn=>{
+    btn.addEventListener('click',e=>{
+        e.stopPropagation();
+        const parsed=Number(btn.dataset.size);
+        if(Number.isFinite(parsed)&&parsed>0) sketchSize=parsed;
+        if(!sketchModeActive) setSketchMode(true,{keepMenu:true});
+        updateSketchControlsUI();
+        if(sketchMenu) sketchMenu.classList.add('hidden');
+    });
+});
+updateSketchControlsUI();
 fileInput.addEventListener('change',e=>{resetGrid();handleFiles(e.target.files);fileInput.value='';});
 async function maybeConvertVideo(file){
     const fp=file.path||'';
@@ -4552,6 +4815,9 @@ function finishNode(node,inner,autoSelect=false){
 
 // ── Handles ───────────────────────────────────────────────────────────────
 function addHandles(node,inner){
+    const sketchCanvas=inner.querySelector('.sketch-canvas');
+    if(sketchCanvas) bindSketchCanvasEvents(node,sketchCanvas);
+
     // Scale corner handles
     ['tl','tr','bl','br'].forEach(pos=>{
         const h=document.createElement('div');h.className=`scale-handle ${pos}`;
@@ -4777,6 +5043,7 @@ function updateSpaceSlider({animate=true}={}){
 
 function setSpace(space,{animateToggle=true}={}){
     currentSpace=space==='space2'?'space2':'space1';
+    if(currentSpace!=='space1'&&sketchModeActive) setSketchMode(false);
     updateSpaceSlider({animate:animateToggle});
     if(currentSpace==='space2'){
         document.body.classList.add('space-2');
@@ -5036,6 +5303,7 @@ function closeAllDD(){
     barExtraMenu.classList.add('hidden');
     modelDD.classList.add('hidden');
     sizeDD.classList.add('hidden');
+    if(sketchMenu) sketchMenu.classList.add('hidden');
     colorPopup.classList.add('hidden');
     if(space2AiModelDropdown) space2AiModelDropdown.classList.add('hidden');
     closeBoardPanel();
