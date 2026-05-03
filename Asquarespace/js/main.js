@@ -323,6 +323,8 @@ let space2BackgroundSyncTimer=null;
 let space2SyncLastRunAt=0;
 let space2StartupAutoSyncDone=false;
 let space2StartupAutoSyncRequested=false;
+let space2RenderScheduled=false;
+let space2RenderPendingDataHash=null;
 const DISCOVER_PAGE_SIZE = 18;
 const SPACE2_AI_CHAT_HISTORY_KEY='asq.space2.ai.chat.v1';
 const SPACE2_AI_CHAT_HISTORY_LIMIT=40;
@@ -1132,8 +1134,8 @@ async function restoreStateFromSupabase(){
     if(boardData&&boardData.canvas_state&&Array.isArray(boardData.canvas_state.nodes)) loadBoardState(currentProjectKey,currentBoardId);
     if(space2Data&&space2Data.space2_state){
         loadSpace2State(currentProjectKey,currentBoardId);
-        await refreshSpace2SignedUrls();
-        renderSpace2Grid();
+        // loadSpace2State already triggers renderSpace2Grid synchronously at the end,
+        // plus async renders for pending items and signed URL refresh. No extra render needed.
     }
     const boardNodeCount=Array.isArray(boardData&&boardData.canvas_state&&boardData.canvas_state.nodes)
         ? boardData.canvas_state.nodes.length
@@ -1748,7 +1750,9 @@ function updateSpace2GridCardMeta(item){
     scheduleSpace2GridLayout();
 }
 
-function renderSpace2Grid(){
+function _renderSpace2GridImpl(){
+    space2RenderScheduled=false;
+    space2RenderPendingDataHash=null;
     if(!space2Grid) return;
     space2Grid.classList.toggle('feed-mode',space2LayoutMode==='feed');
     const list=getFilteredSpace2Items();
@@ -1779,16 +1783,48 @@ function renderSpace2Grid(){
         space2Grid.style.setProperty('--space2-grid-content-height','0px');
         return;
     }
-    space2Grid.innerHTML='';
+    // DOM diffing: reuse existing cards when item set is identical
+    const existingCards=space2Grid.querySelectorAll('.space2-item');
+    const existingMap=new Map();
+    existingCards.forEach(c=>{const id=c.dataset.itemId;if(id) existingMap.set(id,c);});
+    const desiredIds=new Set(list.map(i=>i.id));
+    // Remove cards for items no longer in the list
+    existingMap.forEach((card,id)=>{
+        if(!desiredIds.has(id)) card.remove();
+    });
+    // Build ordered list of cards — reuse existing, create new
+    const fragment=document.createDocumentFragment();
     list.forEach(item=>{
         const thumbSrc=String(item.src||'').trim();
+        if(existingMap.has(item.id)){
+            const card=existingMap.get(item.id);
+            // Update src if signed URL changed (cache key stays as item.id so blob cache still hits)
+            const img=card.querySelector('.space2-thumb');
+            if(img&&img.dataset.src!==thumbSrc){
+                img.dataset.src=thumbSrc;
+                // If already loaded from blob cache, keep showing; observer will handle any new fetch
+                if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth){
+                    card.classList.remove('img-pending');
+                    card.classList.add('img-loaded');
+                }else{
+                    card.classList.add('img-pending');
+                    card.classList.remove('img-loaded');
+                    // Re-observe to trigger reload with new URL
+                    if(space2LazyImageObserver) space2LazyImageObserver.unobserve(img);
+                    img.dataset.loaded='0';
+                    observeSpace2LazyImage(img);
+                }
+            }
+            fragment.appendChild(card);
+            return;
+        }
         const card=document.createElement('button');
         card.type='button';
         card.className='space2-item img-pending';
         card.dataset.itemId=item.id||'';
         card.innerHTML=`
             <div class="space2-thumb-shell">
-                <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id||thumbSrc)}" alt="" loading="lazy" decoding="async">
+                <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">
                 <div class="space2-thumb-skeleton" aria-hidden="true"></div>
             </div>
             <div class="space2-card-action-left">
@@ -1854,10 +1890,25 @@ function renderSpace2Grid(){
                 await autoGenerateSpace2Metadata(item,{force:true});
             });
         }
-        space2Grid.appendChild(card);
+        fragment.appendChild(card);
     });
-    layoutSpace2Grid();         // sync pass: cards at correct positions from frame 0
-    scheduleSpace2GridLayout(); // RAF pass: re-measures after browser layout pass
+    space2Grid.innerHTML='';
+    space2Grid.appendChild(fragment);
+    layoutSpace2Grid();
+    scheduleSpace2GridLayout();
+}
+
+function renderSpace2Grid(){
+    // Compute a lightweight hash of current filtered items to detect real changes
+    const list=getFilteredSpace2Items();
+    const hash=list.map(i=>`${i.id}:${i.src||''}`).join('|');
+    // Collapse rapid-fire calls: if same data already scheduled, skip
+    if(space2RenderScheduled&&space2RenderPendingDataHash===hash) return;
+    space2RenderPendingDataHash=hash;
+    if(!space2RenderScheduled){
+        space2RenderScheduled=true;
+        queueMicrotask(()=>_renderSpace2GridImpl());
+    }
 }
 
 function getSpace2GridColumnCount(){
@@ -2481,7 +2532,8 @@ async function runSpace2ManualSync({background=false,source='manual'}={}){
         saveSpace2State(undefined,undefined,{skipCloudSync:true});
         const syncReason=source==='startup'?'startup':'manual';
         await syncStateToSupabase({reason:syncReason});
-        await restoreStateFromSupabase();
+        // No second restore — syncStateToSupabase just pushed our merged state.
+        // A second restore would re-fetch the same data and trigger another full re-render.
         await refreshSpace2SignedUrls();
         renderSpace2Grid();
 
