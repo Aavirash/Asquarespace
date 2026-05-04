@@ -613,9 +613,38 @@ async function extractVideoThumbnail(videoFile){
 
 async function fetchUrlMetadata(url){
     try{
-        const resp=await fetch(url,{mode:'cors',signal:AbortSignal.timeout(8000)});
-        if(!resp.ok) return null;
-        const html=await resp.text();
+        let html='';
+        // Try CORS proxy to fetch page HTML
+        const proxies=[
+            `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        ];
+        for(const proxyUrl of proxies){
+            try{
+                const resp=await fetch(proxyUrl,{signal:AbortSignal.timeout(10000)});
+                if(resp.ok){
+                    const data=await resp.json();
+                    html=data.contents||'';
+                    if(html) break;
+                }
+            }catch{}
+        }
+        if(!html){
+            const rawProxies=[
+                `https://corsproxy.io/?${encodeURIComponent(url)}`,
+            ];
+            for(const proxyUrl of rawProxies){
+                try{
+                    const resp=await fetch(proxyUrl,{signal:AbortSignal.timeout(10000)});
+                    if(resp.ok){html=await resp.text();break;}
+                }catch{}
+            }
+        }
+        if(!html){
+            // Last resort: try direct fetch (might work for CORS-enabled sites)
+            const resp=await fetch(url,{mode:'cors',signal:AbortSignal.timeout(8000)});
+            if(resp.ok) html=await resp.text();
+        }
         const doc=new DOMParser().parseFromString(html,'text/html');
         const getMeta=(name)=>{
             const el=doc.querySelector(`meta[property="${name}"],meta[name="${name}"]`);
@@ -627,12 +656,119 @@ async function fetchUrlMetadata(url){
         if(ogImage&&!/^https?:\/\//i.test(ogImage)){
             try{ogImage=new URL(ogImage,new URL(url).origin).href;}catch{ogImage=null;}
         }
+        // Check for og:video or twitter:player:stream for video detection
+        let ogVideo=getMeta('og:video')||getMeta('og:video:url')||getMeta('twitter:player:stream');
+        if(ogVideo&&!/^https?:\/\//i.test(ogVideo)){
+            try{ogVideo=new URL(ogVideo,new URL(url).origin).href;}catch{ogVideo=null;}
+        }
+        // Also check for video tags in page content
+        if(!ogVideo){
+            const videoEl=doc.querySelector('video source[src],video[src]');
+            if(videoEl){
+                ogVideo=videoEl.getAttribute('src')||videoEl.parentElement.getAttribute('src');
+            }
+        }
+        const mediaType=ogVideo?'video':(ogImage?'image':'url');
         const faviconUrl=`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`;
-        return {title,description,ogImage,thumbnailUrl:ogImage||faviconUrl,pageUrl:url};
+        return {title,description,ogImage,ogVideo,thumbnailUrl:ogVideo||ogImage||faviconUrl,mediaType,pageUrl:url};
     }catch(e){
         console.warn('fetchUrlMetadata failed:',e);
         try{
-            return {title:new URL(url).hostname,description:'',ogImage:null,thumbnailUrl:`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`,pageUrl:url};
+            return {title:new URL(url).hostname,description:'',ogImage:null,ogVideo:null,thumbnailUrl:`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`,mediaType:'url',pageUrl:url};
+        }catch{return null;}
+    }
+}
+        // Try to find og:video or twitter:player for video links
+        const ogVideo=getMeta('og:video')||getMeta('og:video:url')||getMeta('twitter:player:stream');
+        const faviconUrl=`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`;
+        // If we have ogImage, use it as thumbnail; for video pages, prefer ogVideo
+        const thumbnailUrl=ogVideo||ogImage||faviconUrl;
+        const mediaType=ogVideo?'video':(ogImage?'image':'url');
+        return {title,description,ogImage,ogVideo,thumbnailUrl,mediaType,pageUrl:url};
+    }catch(e){
+        console.warn('fetchUrlMetadata failed (CORS likely), trying alternative:',e);
+        try{
+            // Try using a CORS proxy for common sites
+            const proxyUrl=`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            const resp2=await fetch(proxyUrl,{signal:AbortSignal.timeout(10000)});
+            if(resp2.ok){
+                const html=await resp2.text();
+                const doc=new DOMParser().parseFromString(html,'text/html');
+                const getMeta=(name)=>{
+                    const el=doc.querySelector(`meta[property="${name}"],meta[name="${name}"]`);
+                    return el?el.getAttribute('content'):null;
+                };
+                const title=getMeta('og:title')||doc.title||new URL(url).hostname;
+                const description=getMeta('og:description')||getMeta('description')||'';
+                let ogImage=getMeta('og:image');
+                if(ogImage&&!/^https?:\/\//i.test(ogImage)){
+                    try{ogImage=new URL(ogImage,new URL(url).origin).href;}catch{ogImage=null;}
+                }
+                const ogVideo=getMeta('og:video')||getMeta('og:video:url')||getMeta('twitter:player:stream');
+                const thumbnailUrl=ogVideo||ogImage||'';
+                const mediaType=ogVideo?'video':(ogImage?'image':'url');
+                return {title,description,ogImage,ogVideo,thumbnailUrl,mediaType,pageUrl:url};
+            }
+        }catch(e2){
+            console.warn('fetchUrlMetadata proxy also failed:',e2);
+        }
+        try{
+            return {title:new URL(url).hostname,description:'',ogImage:null,ogVideo:null,thumbnailUrl:`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`,mediaType:'url',pageUrl:url};
+        }catch{return null;}
+    }
+}
+        }catch{}
+        if(!html){
+            try{
+                const proxyUrl=`https://corsproxy.io/?${encodeURIComponent(url)}`;
+                const resp=await fetch(proxyUrl,{signal:AbortSignal.timeout(12000)});
+                if(resp.ok) html=await resp.text();
+            }catch{}
+        }
+        if(!html) return null;
+        const doc=new DOMParser().parseFromString(html,'text/html');
+        const getMeta=(name)=>{
+            const el=doc.querySelector(`meta[property="${name}"],meta[name="${name}"]`);
+            return el?el.getAttribute('content'):null;
+        };
+        const title=getMeta('og:title')||doc.title||new URL(url).hostname;
+        const description=getMeta('og:description')||getMeta('description')||'';
+        let ogImage=getMeta('og:image');
+        if(ogImage&&!/^https?:\/\//i.test(ogImage)){
+            try{ogImage=new URL(ogImage,new URL(url).origin).href;}catch{ogImage=null;}
+        }
+        // Check for og:video or video tags
+        let ogVideo=getMeta('og:video')||getMeta('og:video:url');
+        if(ogVideo&&!/^https?:\/\//i.test(ogVideo)){
+            try{ogVideo=new URL(ogVideo,new URL(url).origin).href;}catch{ogVideo=null;}
+        }
+        // Fallback: find largest image on page
+        if(!ogImage){
+            const allImgs=[...doc.querySelectorAll('img')].filter(img=>{
+                const src=img.getAttribute('src')||img.getAttribute('data-src')||'';
+                return src&&/^https?:\/\//i.test(src)&&!/sprite|icon|logo|avatar|pixel|tracking|analytics|beacon/i.test(src);
+            });
+            if(allImgs.length){
+                allImgs.sort((a,b)=>{
+                    const aSize=(parseInt(a.getAttribute('width')||'0',10)||200)*(parseInt(a.getAttribute('height')||'0',10)||200);
+                    const bSize=(parseInt(b.getAttribute('width')||'0',10)||200)*(parseInt(b.getAttribute('height')||'0',10)||200);
+                    return bSize-aSize;
+                });
+                ogImage=allImgs[0].getAttribute('src')||allImgs[0].getAttribute('data-src');
+            }
+        }
+        const hasVideo=!!ogVideo;
+        const faviconUrl=`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`;
+        return {
+            title,description,ogImage,ogVideo,
+            thumbnailUrl:hasVideo?ogVideo:(ogImage||faviconUrl),
+            mediaType:hasVideo?'video':'url',
+            pageUrl:url
+        };
+    }catch(e){
+        console.warn('fetchUrlMetadata failed:',e);
+        try{
+            return {title:new URL(url).hostname,description:'',ogImage:null,ogVideo:null,thumbnailUrl:`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`,mediaType:'url',pageUrl:url};
         }catch{return null;}
     }
 }
@@ -2331,11 +2467,20 @@ async function openSpace2Item(itemId){
         });
     }
     if(space2ItemModal) space2ItemModal.classList.remove('hidden');
+    document.addEventListener('keydown',handleSpace2ItemKeydown);
 }
 
 function closeSpace2Item(){
     space2ActiveItemId='';
     if(space2ItemModal) space2ItemModal.classList.add('hidden');
+    document.removeEventListener('keydown',handleSpace2ItemKeydown);
+}
+
+function handleSpace2ItemKeydown(e){
+    if(e.key==='Escape'&&space2ItemModal&&!space2ItemModal.classList.contains('hidden')){
+        e.preventDefault();
+        closeSpace2Item();
+    }
 }
 
 async function saveSpace2Item(){
@@ -2510,25 +2655,28 @@ async function importUrlToSpace2(url){
     const isDirectVideo=/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
     const isDirectGif=/\.gif(\?|#|$)/i.test(url);
     const isDirectAudio=/\.(mp3|wav|m4a|ogg)(\?|#|$)/i.test(url);
-    const mediaType=isDirectVideo?'video':isDirectAudio?'audio':isDirectGif?'gif':isDirectImage?'image':'url';
+    const directMediaType=isDirectVideo?'video':isDirectAudio?'audio':isDirectGif?'gif':isDirectImage?'image':null;
+    let mediaType='';
     let thumbnailUrl='';
     let title=url;
     let description='';
-    if(mediaType==='url'){
+    let pageUrl='';
+    if(directMediaType){
+        mediaType=directMediaType;
+        thumbnailUrl=url;
+        title=title.split('/').pop().split('?')[0]||'Media';
+    }else{
         const meta=await fetchUrlMetadata(url);
         if(meta){
             title=meta.title;
             description=meta.description||'';
             thumbnailUrl=meta.thumbnailUrl||'';
+            pageUrl=meta.pageUrl||url;
+            mediaType=meta.mediaType||'url';
+            if(meta.ogVideo) mediaType='video';
+        }else{
+            mediaType='url';
         }
-    }else if(mediaType==='image'||mediaType==='gif'){
-        thumbnailUrl=url;
-        title=title.split('/').pop().split('?')[0]||'Image';
-    }else if(mediaType==='video'){
-        thumbnailUrl=url;
-        title=title.split('/').pop().split('?')[0]||'Video';
-    }else if(mediaType==='audio'){
-        title=title.split('/').pop().split('?')[0]||'Audio';
     }
     const now=Date.now();
     const item={
@@ -2540,7 +2688,7 @@ async function importUrlToSpace2(url){
         signedUrlExpiresAt:0,
         mediaType,
         thumbnailUrl,
-        pageUrl:mediaType==='url'?url:'',
+        pageUrl,
         title,
         description,
         collectionIds:[],
@@ -5889,9 +6037,11 @@ if(space2CameraBtn && space2CameraInput) space2CameraBtn.addEventListener('click
 if(space2UploadBtn) space2UploadBtn.addEventListener('click',()=>{
     if(space2UploadUrl) space2UploadUrl.value='';
     if(space2UploadModal) space2UploadModal.classList.remove('hidden');
+    setTimeout(()=>{if(space2UploadUrl) space2UploadUrl.focus(); refreshLucideIcons();},50);
 });
 if(space2UploadBrowse&&space2FileInput) space2UploadBrowse.addEventListener('click',()=>{ space2FileInput.click(); });
 if(space2UploadCancel&&space2UploadModal) space2UploadCancel.addEventListener('click',()=>{ space2UploadModal.classList.add('hidden'); });
+if(space2UploadModal) space2UploadModal.addEventListener('click',e=>{if(e.target===space2UploadModal) space2UploadModal.classList.add('hidden');});
 function saveUrlFromUploadModal(){
     if(!space2UploadUrl) return;
     const url=space2UploadUrl.value.trim();

@@ -243,7 +243,7 @@ body.sketch-mode #sketch-draft-layer{display:block;cursor:crosshair;}
 .space2-card-action svg{width:14px;height:14px;fill:currentColor;}
 .space2-card-action:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg);border-color:color-mix(in srgb,var(--accent) 38%,var(--border));}
 .space2-thumb-shell{position:relative;width:100%;min-height:160px;border-radius:12px;overflow:hidden;background:color-mix(in srgb,var(--surface-2) 92%,transparent);}
-.space2-media-badge{position:absolute;top:8px;right:8px;z-index:3;width:28px;height:28px;border-radius:8px;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;line-height:1;}
+.space2-media-badge{position:absolute;bottom:8px;left:8px;z-index:3;width:28px;height:28px;border-radius:8px;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;line-height:1;}
 .space2-media-badge svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;}
 .space2-badge-gif{font-size:10px;font-weight:800;letter-spacing:.5px;}
 .space2-video-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
