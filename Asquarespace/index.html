@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Light.otf" as="font" type="font/otf">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Black.otf" as="font" type="font/otf">
-    <link rel="stylesheet" href="css/style.css?v=20260503-001">
+    <link rel="stylesheet" href="css/style.css?v=20260504-001">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -260,8 +260,9 @@
   </div>
 
   <div id="space2-panel" class="space2-panel hidden">
-    <input type="file" id="space2-camera-input" hidden accept="image/*" capture="environment">
-    <input type="file" id="space2-file-input" hidden multiple accept="image/*">
+    <input type="file" id="space2-camera-input" hidden accept="image/*,video/*,audio/*" capture="environment">
+    <input type="file" id="space2-file-input" hidden multiple accept="image/*,video/*,audio/*">
+    <input type="url" id="space2-url-input" hidden>
     <div class="space2-body">
       <aside id="space2-sidebar" class="space2-sidebar">
         <div class="space2-head space2-sidebar-head">
@@ -317,9 +318,13 @@
       <main id="space2-grid" class="space2-grid"></main>
       <div id="space2-ai-hub" class="space2-ai-hub hidden">
         <div id="space2-mode-dock" class="space2-mode-dock" aria-label="Space 2 dock">
-          <button id="space2-upload-btn" class="space2-mode-btn" title="Upload images" aria-label="Upload images">
+          <button id="space2-upload-btn" class="space2-mode-btn" title="Upload files" aria-label="Upload files">
             <i data-lucide="upload" aria-hidden="true"></i>
             <span>Upload</span>
+          </button>
+          <button id="space2-url-btn" class="space2-mode-btn" title="Save from URL" aria-label="Save from URL">
+            <i data-lucide="link" aria-hidden="true"></i>
+            <span>URL</span>
           </button>
           <button id="space2-camera-btn" class="space2-mode-btn space2-mode-btn-camera" title="Capture from camera" aria-label="Capture from camera">
             <i data-lucide="camera" aria-hidden="true"></i>
@@ -663,6 +668,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/lucide.min.js"></script>
 <script src="js/CSInterface.js"></script>
-<script src="js/main.js?v=20260503-001"></script>
+<script src="js/main.js?v=20260504-001"></script>
 </body>
 </html>

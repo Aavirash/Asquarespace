@@ -138,6 +138,7 @@ const space2TopSearch = null;
 const space2NewCollection = document.getElementById('space2-new-collection');
 const space2CameraBtn = document.getElementById('space2-camera-btn');
 const space2UploadBtn = document.getElementById('space2-upload-btn');
+const space2UrlBtn = document.getElementById('space2-url-btn');
 const space2CameraInput = document.getElementById('space2-camera-input');
 const space2FileInput = document.getElementById('space2-file-input');
 const space2ViewToggle = document.getElementById('space2-view-toggle');
@@ -522,10 +523,15 @@ function _compressImageBlob(blob, {maxPx=IMG_COMPRESS_MAX_PX, quality=IMG_COMPRE
     });
 }
 
-async function uploadBlobToSupabase(blob,{folder='uploads',nameHint='image'}={}){
+async function uploadBlobToSupabase(blob,{folder='uploads',nameHint='image',skipCompression=false}={}){
     const client=initSupabaseClient();
     if(!client||!currentSupabaseUser||!blob) return null;
-    blob=await _compressImageBlob(blob).catch(()=>blob);
+    const isVideo=blob.type&&blob.type.startsWith('video/');
+    const isAudio=blob.type&&blob.type.startsWith('audio/');
+    const isGif=blob.type==='image/gif';
+    if(!skipCompression&&!isVideo&&!isAudio&&!isGif){
+        blob=await _compressImageBlob(blob).catch(()=>blob);
+    }
     const ext=extFromMime(blob.type||'image/png');
     const cleanHint=(nameHint||'image').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28)||'image';
     const path=`${currentSupabaseUser.id}/${folder}/${Date.now()}_${Math.floor(Math.random()*100000)}_${cleanHint}.${ext}`;
@@ -543,6 +549,88 @@ async function uploadBlobToSupabase(blob,{folder='uploads',nameHint='image'}={})
         return {path,url:'',expiresAt:0};
     }
     return {path,url:signed.data?.signedUrl||'',expiresAt:nowEpochSec()+SPACE2_SIGNED_URL_TTL_SEC};
+}
+
+function detectMediaType(fileOrMime){
+    const mime=typeof fileOrMime==='string'?fileOrMime:(fileOrMime&&fileOrMime.type)||'';
+    if(mime.startsWith('video/')) return 'video';
+    if(mime.startsWith('audio/')) return 'audio';
+    if(mime==='image/gif') return 'gif';
+    if(mime.startsWith('image/')) return 'image';
+    return null;
+}
+
+async function extractVideoThumbnail(videoFile){
+    return new Promise((resolve)=>{
+        const video=document.createElement('video');
+        const canvas=document.createElement('canvas');
+        video.preload='metadata';
+        video.muted=true;
+        video.playsInline=true;
+        video.src=URL.createObjectURL(videoFile);
+        const cleanup=()=>{URL.revokeObjectURL(video.src);};
+        video.addEventListener('loadeddata',()=>{
+            try{
+                const seekTime=Math.min(1,video.duration*0.1);
+                video.currentTime=seekTime;
+            }catch{
+                canvas.width=video.videoWidth||640;
+                canvas.height=video.videoHeight||360;
+                video.pause();
+                cleanup();
+                resolve(null);
+            }
+        });
+        video.addEventListener('seeked',()=>{
+            try{
+                canvas.width=video.videoWidth||640;
+                canvas.height=video.videoHeight||360;
+                const ctx=canvas.getContext('2d');
+                ctx.drawImage(video,0,0,canvas.width,canvas.height);
+                canvas.toBlob((blob)=>{
+                    video.pause();
+                    cleanup();
+                    resolve(blob);
+                },'image/jpeg',0.82);
+            }catch{
+                video.pause();
+                cleanup();
+                resolve(null);
+            }
+        },{once:true});
+        video.addEventListener('error',()=>{
+            video.pause();
+            cleanup();
+            resolve(null);
+        },{once:true});
+        setTimeout(()=>{video.pause();cleanup();resolve(null);},10000);
+    });
+}
+
+async function fetchUrlMetadata(url){
+    try{
+        const resp=await fetch(url,{mode:'cors',signal:AbortSignal.timeout(8000)});
+        if(!resp.ok) return null;
+        const html=await resp.text();
+        const doc=new DOMParser().parseFromString(html,'text/html');
+        const getMeta=(name)=>{
+            const el=doc.querySelector(`meta[property="${name}"],meta[name="${name}"]`);
+            return el?el.getAttribute('content'):null;
+        };
+        const title=getMeta('og:title')||doc.title||new URL(url).hostname;
+        const description=getMeta('og:description')||getMeta('description')||'';
+        let ogImage=getMeta('og:image');
+        if(ogImage&&!/^https?:\/\//i.test(ogImage)){
+            try{ogImage=new URL(ogImage,new URL(url).origin).href;}catch{ogImage=null;}
+        }
+        const faviconUrl=`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`;
+        return {title,description,ogImage,thumbnailUrl:ogImage||faviconUrl,pageUrl:url};
+    }catch(e){
+        console.warn('fetchUrlMetadata failed:',e);
+        try{
+            return {title:new URL(url).hostname,description:'',ogImage:null,thumbnailUrl:`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`,pageUrl:url};
+        }catch{return null;}
+    }
 }
 
 async function refreshSpace2SignedUrls(){
@@ -565,7 +653,7 @@ async function syncPendingSpace2LocalItems(){
         if(!item||item.cloudPath) return false;
         const src=String(item.src||'').trim();
         if(parseSpace2LocalBlobRef(src)) return true;
-        if(/^data:image\//i.test(src)) return true;
+        if(/^data:(image|video|audio)\//i.test(src)) return true;
         if(/^file:\/\//i.test(src)) return true;
         if(item.filePath) return true;
         return false;
@@ -1733,7 +1821,9 @@ function getSpace2MetaMarkup(item){
         `;
     }
     const safeTitle=(item&&item.title?item.title:'Untitled').replace(/</g,'&lt;');
-    const safeDesc=((item&&item.description?item.description:'').replace(/</g,'&lt;')||'Image');
+    const mt=item&&item.mediaType||'image';
+    const defaultDesc=mt==='audio'?'Audio':mt==='video'?'Video':mt==='gif'?'GIF':mt==='url'?'Link':'Image';
+    const safeDesc=((item&&item.description?item.description:'').replace(/</g,'&lt;')||defaultDesc);
     return `
         <div class="space2-name">${safeTitle}</div>
         <div class="space2-desc">${safeDesc}</div>
@@ -1788,45 +1878,81 @@ function _renderSpace2GridImpl(){
     const existingMap=new Map();
     existingCards.forEach(c=>{const id=c.dataset.itemId;if(id) existingMap.set(id,c);});
     const desiredIds=new Set(list.map(i=>i.id));
-    // Remove cards for items no longer in the list
     existingMap.forEach((card,id)=>{
         if(!desiredIds.has(id)) card.remove();
     });
-    // Build ordered list of cards — reuse existing, create new
     const fragment=document.createDocumentFragment();
     list.forEach(item=>{
-        const thumbSrc=String(item.src||'').trim();
+        const mt=item.mediaType||'image';
+        // Determine display source for thumbnail
+        let thumbSrc='';
+        if(mt==='video'){
+            thumbSrc=String(item.thumbnailUrl||item.src||'').trim();
+        }else if(mt==='url'){
+            thumbSrc=String(item.thumbnailUrl||item.src||'').trim();
+        }else if(mt==='audio'){
+            thumbSrc=''; // no image, use icon
+        }else if(mt==='gif'){
+            thumbSrc=String(item.src||'').trim();
+        }else{
+            thumbSrc=String(item.src||'').trim();
+        }
         if(existingMap.has(item.id)){
             const card=existingMap.get(item.id);
-            // Update src if signed URL changed (cache key stays as item.id so blob cache still hits)
-            const img=card.querySelector('.space2-thumb');
-            if(img&&img.dataset.src!==thumbSrc){
-                img.dataset.src=thumbSrc;
-                // If already loaded from blob cache, keep showing; observer will handle any new fetch
-                if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth){
-                    card.classList.remove('img-pending');
-                    card.classList.add('img-loaded');
-                }else{
-                    card.classList.add('img-pending');
-                    card.classList.remove('img-loaded');
-                    // Re-observe to trigger reload with new URL
-                    if(space2LazyImageObserver) space2LazyImageObserver.unobserve(img);
-                    img.dataset.loaded='0';
-                    observeSpace2LazyImage(img);
+            // Update mediaType badge if changed
+            const mtBadge=card.querySelector('.space2-media-badge');
+            const newBadgeHtml=mt!=='image'?`<span class="space2-media-badge">${mt==='video'?'▶':mt==='audio'?'♫':mt==='gif'?'GIF':'🔗'}</span>`:'';
+            if(mtBadge){
+                if(mt==='image') mtBadge.remove();
+                else mtBadge.innerHTML=newBadgeHtml;
+            }else if(newBadgeHtml){
+                const shell=card.querySelector('.space2-thumb-shell');
+                if(shell){
+                    const badge=document.createElement('div');
+                    badge.className='space2-media-badge';
+                    badge.innerHTML=mt==='video'?'▶':mt==='audio'?'♫':mt==='gif'?'GIF':'🔗';
+                    shell.appendChild(badge);
+                }
+            }
+            // Update src for image/gif/url cards
+            if(mt!=='audio'){
+                const img=card.querySelector('.space2-thumb');
+                if(img&&img.dataset.src!==thumbSrc){
+                    img.dataset.src=thumbSrc;
+                    if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth){
+                        card.classList.remove('img-pending');
+                        card.classList.add('img-loaded');
+                    }else{
+                        card.classList.add('img-pending');
+                        card.classList.remove('img-loaded');
+                        if(space2LazyImageObserver) space2LazyImageObserver.unobserve(img);
+                        img.dataset.loaded='0';
+                        observeSpace2LazyImage(img);
+                    }
                 }
             }
             fragment.appendChild(card);
             return;
         }
-        const card=document.createElement('button');
-        card.type='button';
-        card.className='space2-item img-pending';
-        card.dataset.itemId=item.id||'';
-        card.innerHTML=`
-            <div class="space2-thumb-shell">
+        // Build card markup per media type
+        const isAudio=mt==='audio';
+        const mediaBadge=mt==='video'?'<span class="space2-media-badge">▶</span>':
+                         mt==='audio'?'<span class="space2-media-badge">♫</span>':
+                         mt==='gif'?'<span class="space2-media-badge">GIF</span>':
+                         mt==='url'?'<span class="space2-media-badge">🔗</span>':'';
+        const thumbHtml=isAudio
+            ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon">♫</div></div>`
+            :`<div class="space2-thumb-shell">
                 <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">
                 <div class="space2-thumb-skeleton" aria-hidden="true"></div>
-            </div>
+                ${mediaBadge}
+              </div>`;
+        const card=document.createElement('button');
+        card.type='button';
+        card.className=`space2-item img-pending${isAudio?' space2-audio-card':''}`;
+        card.dataset.itemId=item.id||'';
+        card.innerHTML=`
+            ${thumbHtml}
             <div class="space2-card-action-left">
                 <button class="space2-card-action" data-action="meta" title="Regenerate metadata" aria-label="Regenerate metadata">
                     <span class="space2-card-action-dot" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span>
@@ -1844,27 +1970,41 @@ function _renderSpace2GridImpl(){
                 ${getSpace2MetaMarkup(item)}
             </div>
         `;
-        const img=card.querySelector('.space2-thumb');
-        const desc=card.querySelector('.space2-desc');
-        if(img){
-            const onLoaded=()=>{
-                card.classList.remove('img-pending');
-                card.classList.add('img-loaded');
-                if(desc&&!item.description&&item.aiMetaState!=='loading'&&img.naturalWidth&&img.naturalHeight){
-                    desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
+        // For image/gif/url: lazy-load the thumbnail
+        if(!isAudio){
+            const img=card.querySelector('.space2-thumb');
+            const desc=card.querySelector('.space2-desc');
+            if(img){
+                const onLoaded=()=>{
+                    card.classList.remove('img-pending');
+                    card.classList.add('img-loaded');
+                    if(desc&&!item.description&&item.aiMetaState!=='loading'&&img.naturalWidth&&img.naturalHeight){
+                        desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
+                    }
+                    scheduleSpace2GridLayout();
+                };
+                // For GIFs: set src directly to preserve animation (skip blob cache)
+                if(mt==='gif'&&thumbSrc){
+                    img.src=thumbSrc;
+                    img.dataset.loaded='1';
+                    if(img.complete&&img.naturalWidth) onLoaded();
+                    else img.addEventListener('load',onLoaded,{once:true});
+                }else if(thumbSrc){
+                    if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth) onLoaded();
+                    else img.addEventListener('load',onLoaded,{once:true});
+                    observeSpace2LazyImage(img);
                 }
-                scheduleSpace2GridLayout();
-            };
-            if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth) onLoaded();
-            else img.addEventListener('load',onLoaded,{once:true});
-        refreshLucideIcons();
-            img.addEventListener('error',()=>{
-                card.classList.remove('img-pending');
-                card.classList.add('img-loaded');
-                scheduleSpace2GridLayout();
-            },{once:true});
-            observeSpace2LazyImage(img);
+                img.addEventListener('error',()=>{
+                    card.classList.remove('img-pending');
+                    card.classList.add('img-loaded');
+                    scheduleSpace2GridLayout();
+                },{once:true});
+            }
+        }else{
+            card.classList.remove('img-pending');
+            card.classList.add('img-loaded');
         }
+        refreshLucideIcons();
         card.addEventListener('click',()=>openSpace2Item(item.id));
         const collectionBtn=card.querySelector('[data-action="collection"]');
         if(collectionBtn){
@@ -2102,8 +2242,29 @@ async function openSpace2Item(itemId){
     const item=space2State.items.find(i=>i.id===itemId);
     if(!item) return;
     space2ActiveItemId=itemId;
+    const mt=item.mediaType||'image';
     const previewSrc=await resolveSpace2ItemDisplaySource(item);
-    if(space2ItemPreview) space2ItemPreview.innerHTML=`<img src="${previewSrc}" alt="">`;
+    const previewEl=space2ItemPreview;
+    if(previewEl){
+        if(mt==='video'){
+            const src=previewSrc||item.src;
+            previewEl.innerHTML=`<video src="${src}" controls playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;"></video>`;
+        }else if(mt==='audio'){
+            previewEl.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;padding:24px;">
+                <div style="font-size:48px;opacity:0.6;">🎵</div>
+                <div style="font-size:13px;opacity:0.5;text-align:center;">${escapeHtml(item.title||'Audio')}</div>
+                <audio src="${previewSrc||item.src}" controls preload="metadata" style="width:100%;max-width:320px;"></audio>
+            </div>`;
+        }else if(mt==='url'){
+            const pageUrl=item.pageUrl||item.src;
+            previewEl.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:24px;">
+                <img src="${item.thumbnailUrl||previewSrc}" alt="" style="max-width:100%;max-height:60%;object-fit:contain;border-radius:8px;">
+                <a href="${escapeHtml(pageUrl)}" target="_blank" rel="noopener" style="font-size:13px;color:#8b8bff;text-decoration:none;">${escapeHtml(pageUrl)}</a>
+            </div>`;
+        }else{
+            previewEl.innerHTML=`<img src="${previewSrc}" alt="">`;
+        }
+    }
     if(space2ItemTitle) space2ItemTitle.value=item.title||'';
     if(space2ItemDesc) space2ItemDesc.value=item.description||'';
     if(space2AssignList){
@@ -2198,6 +2359,9 @@ function insertSpace2Item(item,{collectionIds}={}){
         cloudPath,
         browserBlobKey,
         signedUrlExpiresAt,
+        mediaType:item.mediaType||'image',
+        thumbnailUrl:item.thumbnailUrl||'',
+        pageUrl:item.pageUrl||'',
         title:item.title||(filePath?filePath.split('/').pop():'Untitled'),
         description:item.description||'',
         collectionIds:normalizedCollectionIds,
@@ -2222,7 +2386,8 @@ function upsertSpace2Items(items,{openEditor=false}={}){
         if(inserted.added){
             added++;
             if(!firstAddedItemId&&inserted.item&&inserted.item.id) firstAddedItemId=inserted.item.id;
-            if(space2AutoMetaEnabled&&inserted.item){
+            const mt=inserted.item.mediaType||'image';
+            if(space2AutoMetaEnabled&&inserted.item&&(mt==='image'||mt==='gif')){
                 autoMetaQueue.push({item:inserted.item,analysisBlob:item.analysisBlob||null});
             }
         }
@@ -2291,8 +2456,59 @@ function importSelectionToSpace2(silent=false){
     return upsertSpace2Items(items);
 }
 
+async function importUrlToSpace2(url){
+    const isDirectImage=/\.(png|jpg|jpeg|webp|gif|svg|bmp)(\?|#|$)/i.test(url);
+    const isDirectVideo=/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
+    const isDirectGif=/\.gif(\?|#|$)/i.test(url);
+    const isDirectAudio=/\.(mp3|wav|m4a|ogg)(\?|#|$)/i.test(url);
+    const mediaType=isDirectVideo?'video':isDirectAudio?'audio':isDirectGif?'gif':isDirectImage?'image':'url';
+    let thumbnailUrl='';
+    let title=url;
+    let description='';
+    if(mediaType==='url'){
+        const meta=await fetchUrlMetadata(url);
+        if(meta){
+            title=meta.title;
+            description=meta.description||'';
+            thumbnailUrl=meta.thumbnailUrl||'';
+        }
+    }else if(mediaType==='image'||mediaType==='gif'){
+        thumbnailUrl=url;
+        title=title.split('/').pop().split('?')[0]||'Image';
+    }else if(mediaType==='video'){
+        thumbnailUrl=url;
+        title=title.split('/').pop().split('?')[0]||'Video';
+    }else if(mediaType==='audio'){
+        title=title.split('/').pop().split('?')[0]||'Audio';
+    }
+    const now=Date.now();
+    const item={
+        id:`item-${now}-${Math.floor(Math.random()*99999)}`,
+        src:url,
+        filePath:'',
+        cloudPath:'',
+        browserBlobKey:'',
+        signedUrlExpiresAt:0,
+        mediaType,
+        thumbnailUrl,
+        pageUrl:mediaType==='url'?url:'',
+        title,
+        description,
+        collectionIds:[],
+        createdAt:now,
+        updatedAt:now
+    };
+    space2State.items.unshift(item);
+    saveSpace2State(undefined,undefined,{skipCloudSync:true});
+    renderSpace2Collections();
+    renderSpace2Grid();
+    syncSpace2StateToSupabase({force:true,reason:'manual'}).catch(err=>console.warn('space2 url sync failed',err));
+    setSpace2AutoMetaStatus(`Saved: ${title}`);
+    setTimeout(()=>setSpace2AutoMetaStatus(''),3000);
+}
+
 async function importFilesToSpace2(files,{openEditor=false}={}){
-    const list=[...(files||[])].filter(f=>f&&f.type&&f.type.startsWith('image/'));
+    const list=[...(files||[])].filter(f=>f&&(f.type.startsWith('image/')||f.type.startsWith('video/')||f.type.startsWith('audio/')));
     if(!list.length) return;
     const items=[];
     let hadLocalFallback=false;
@@ -2303,9 +2519,26 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
         let cloudPath='';
         let browserBlobKey='';
         let signedUrlExpiresAt=0;
+        const mediaType=detectMediaType(f);
+        let thumbnailUrl='';
+        let thumbnailCloudPath='';
+        // For video: extract thumbnail frame client-side
+        if(mediaType==='video'&&currentSupabaseUser){
+            try{
+                const thumbBlob=await extractVideoThumbnail(f);
+                if(thumbBlob){
+                    const thumbUpload=await uploadBlobToSupabase(thumbBlob,{folder:'space2/thumbs',nameHint:f.name||'thumb',skipCompression:true});
+                    if(thumbUpload&&thumbUpload.path){
+                        thumbnailCloudPath=thumbUpload.path;
+                        thumbnailUrl=thumbUpload.url;
+                    }
+                }
+            }catch(e){console.warn('video thumbnail extraction failed:',e);}
+        }
         if(currentSupabaseUser){
             try{
-                const uploaded=await uploadBlobToSupabase(f,{folder:'space2',nameHint:f.name||'capture'});
+                const skipComp=mediaType==='video'||mediaType==='audio'||mediaType==='gif';
+                const uploaded=await uploadBlobToSupabase(f,{folder:'space2',nameHint:f.name||'capture',skipCompression:skipComp});
                 if(uploaded&&uploaded.path){
                     cloudPath=uploaded.path;
                     if(uploaded.url) src=uploaded.url;
@@ -2345,7 +2578,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
             }
         }
         if(!src) continue;
-        items.push({src,filePath,title:f.name||'Upload',cloudPath,browserBlobKey,signedUrlExpiresAt,analysisBlob:f});
+        items.push({src,filePath,title:f.name||'Upload',cloudPath,browserBlobKey,signedUrlExpiresAt,mediaType,thumbnailUrl,thumbnailCloudPath,pageUrl:'',analysisBlob:f});
     }
     const added=upsertSpace2Items(items,{openEditor});
     if(added){
@@ -2355,7 +2588,7 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
         const msg=`${failedCloudUploads} upload${failedCloudUploads>1?'s':''} failed cloud save and were not added.`;
         setSpace2AutoMetaStatus('⚠️ '+msg,true);
         if(failedCloudUploads===list.length){
-            setTimeout(()=>alert('⚠️ Cloud upload failed for all selected images.\nImages were not added to avoid data loss on reopen.\nCheck Supabase Storage policies and auth session.'),120);
+            setTimeout(()=>alert('⚠️ Cloud upload failed for all selected files.\nFiles were not added to avoid data loss on reopen.\nCheck Supabase Storage policies and auth session.'),120);
         }
     }
     if(hadLocalFallback){
@@ -5613,6 +5846,14 @@ if(space2CameraInput) space2CameraInput.addEventListener('change',async e=>{
     await importFilesToSpace2(e.target.files,{openEditor:true});
     e.target.value='';
 });
+if(space2UrlBtn){
+    space2UrlBtn.addEventListener('click',()=>{
+        const url=prompt('Paste a URL to save (image, video, audio, or any webpage):');
+        if(url&&url.trim()){
+            importUrlToSpace2(url.trim());
+        }
+    });
+}
 if(space2AiInput){
     space2AiInput.addEventListener('input',()=>{
         space2AiInput.style.height='24px';
