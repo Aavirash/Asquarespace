@@ -6416,47 +6416,149 @@ async function fetchOGData(url) {
     const now = Date.now();
     if(cache[url] && (now - cache[url].ts) < 86400000) return cache[url];
     const host = (() => { try { return new URL(url).hostname.replace('www.',''); } catch { return 'link'; }})();
-    const candidates = [
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-        url,
+
+    // MULTI-PROXY CHAIN: same as fetchUrlMetadata
+    let html = '';
+    const jsonProxies = [
+        `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
     ];
-    for(const endpoint of candidates){
-        try {
-            const res = await fetch(endpoint);
-            if(!res.ok) continue;
-            const text = await res.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, 'text/html');
-            const meta = (prop) => {
-                const el = doc.querySelector(`meta[property="${prop}"],meta[name="${prop}"]`);
-                return el ? el.getAttribute('content') : '';
-            };
-            const image = resolveDiscoverUrl(
-                meta('og:image') ||
-                meta('og:image:url') ||
-                meta('twitter:image') ||
-                meta('thumbnail') ||
-                doc.querySelector('link[rel="image_src"]')?.getAttribute('href') ||
-                getFirstJsonLdImage(doc, url) ||
-                doc.querySelector('article img, main img, img[src]')?.getAttribute('src') ||
-                '',
-                url,
-            );
-            if(!image) continue;
-            const data = {
-                url,
-                image,
-                title: meta('og:title') || meta('twitter:title') || doc.title || host,
-                desc: meta('og:description') || meta('twitter:description') || '',
-                ts: now,
-            };
-            const c = getDiscoverCache();
-            c[url] = data;
-            setDiscoverCache(c);
-            return data;
-        } catch {}
+    for(const proxyUrl of jsonProxies){
+        try{
+            const resp = await fetch(proxyUrl, {signal: AbortSignal.timeout(10000)});
+            if(resp.ok){
+                const data = await resp.json();
+                html = data.contents || data.content || '';
+                if(html.length > 100) break;
+            }
+        }catch{}
     }
-    return null;
+    if(!html){
+        const rawProxies = [
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        ];
+        for(const proxyUrl of rawProxies){
+            try{
+                const resp = await fetch(proxyUrl, {signal: AbortSignal.timeout(10000)});
+                if(resp.ok){ html = await resp.text(); if(html.length > 100) break; }
+            }catch{}
+        }
+    }
+    if(!html){
+        try{
+            const resp = await fetch(url, {mode:'cors', signal: AbortSignal.timeout(8000)});
+            if(resp.ok) html = await resp.text();
+        }catch{}
+    }
+    if(!html) return null;
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const meta = (prop) => {
+        const el = doc.querySelector(`meta[property="${prop}"],meta[name="${prop}"]`);
+        return el ? el.getAttribute('content') : '';
+    };
+
+    // 1. Check OG/video tags first (quick win)
+    let image = meta('og:image') || meta('og:image:url') || meta('twitter:image') || meta('thumbnail') || doc.querySelector('link[rel="image_src"]')?.getAttribute('href') || getFirstJsonLdImage(doc, url) || '';
+    if(image && !/^https?:\/\//i.test(image)){
+        try { image = new URL(image, url).href; } catch { image = ''; }
+    }
+
+    // 2. If no og:image, aggressive scan of ALL images on page (Pinterest-style)
+    if(!image){
+        image = _discoverExtractBestImage(doc, url);
+    }
+
+    // 3. Process srcset for highest-res variant
+    if(image){
+        const bestSrc = _discoverGetBestSrcsetFor(image, doc, url);
+        if(bestSrc) image = bestSrc;
+    }
+
+    if(!image) return null;
+
+    const data = {
+        url,
+        image,
+        title: meta('og:title') || meta('twitter:title') || doc.title || host,
+        desc: meta('og:description') || meta('twitter:description') || '',
+        ts: now,
+    };
+    const c = getDiscoverCache();
+    c[url] = data;
+    setDiscoverCache(c);
+    return data;
+}
+
+function _discoverGetBestSrcsetFor(currentSrc, doc, baseUrl){
+    // Find the img whose src matches currentSrc, check its srcset
+    const allImgs = doc.querySelectorAll('img[src], img[data-src]');
+    for(const img of allImgs){
+        const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+        if(src && currentSrc.includes(src.substring(src.lastIndexOf('/')+1))){
+            const srcset = img.getAttribute('srcset');
+            if(srcset){
+                const candidates = srcset.split(',').map(s => {
+                    const parts = s.trim().split(/\s+/);
+                    const width = parseInt(parts[1]) || 0;
+                    try { return {url: new URL(parts[0], baseUrl).href, width}; } catch { return null; }
+                }).filter(Boolean);
+                if(candidates.length){
+                    candidates.sort((a, b) => b.width - a.width);
+                    return candidates[0].url;
+                }
+            }
+        }
+    }
+    return '';
+}
+
+function _discoverExtractBestImage(doc, baseUrl){
+    const allImgs = [...doc.querySelectorAll('img[src], img[data-src], img[data-lazy-src], img[data-original]')];
+    const scored = allImgs.map(img => {
+        let src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || img.getAttribute('data-original') || img.getAttribute('src') || '';
+        if(!src) return null;
+        try { src = new URL(src, baseUrl).href; } catch { return null; }
+        // Filter noise
+        if(/sprite|icon|logo|avatar|emoji|pixel|tracking|analytics|beacon|badge|button|separator|divider|spacer|ad|ads|banner/i.test(src)) return null;
+        // Check class/id for noise
+        const cls = (img.getAttribute('class') || '') + ' ' + (img.getAttribute('id') || '');
+        if(/hidden|invisible|sprite|icon|logo|avatar/i.test(cls)) return null;
+        // Check inline style for hidden
+        const style = img.getAttribute('style') || '';
+        if(/display\s*:\s*none|visibility\s*:\s*hidden/i.test(style)) return null;
+        // Get dimensions
+        let w = parseInt(img.getAttribute('width') || img.getAttribute('data-width') || '0', 10) || 0;
+        let h = parseInt(img.getAttribute('height') || img.getAttribute('data-height') || '0', 10) || 0;
+        // Context scoring: is it inside article/main/content vs sidebar/header?
+        let parent = img.parentElement;
+        let depth = 0;
+        let contextScore = 0;
+        while(parent && depth < 5){
+            const tag = parent.tagName.toLowerCase();
+            const pcls = (parent.getAttribute('class') || '').toLowerCase();
+            if(tag === 'article' || tag === 'main') contextScore += 50;
+            if(tag === 'figure' || tag === 'picture') contextScore += 30;
+            if(/content|post|article|entry/i.test(pcls)) contextScore += 40;
+            if(/sidebar|widget|footer|nav|header/i.test(pcls)) contextScore -= 20;
+            parent = parent.parentElement;
+            depth++;
+        }
+        const area = w * h || 10000; // assume at least 100x100 if no dimensions
+        const hasSrcset = !!img.getAttribute('srcset');
+        const alt = img.getAttribute('alt') || '';
+        const hasGoodAlt = alt.length > 10;
+        const score = area + (contextScore * 100) + (hasGoodAlt ? 5000 : 0) + (hasSrcset ? 3000 : 0);
+        return {src, score, area};
+    }).filter(Boolean);
+    scored.sort((a, b) => b.score - a.score);
+    // Pick first with area >= 10000 (100x100)
+    for(const s of scored){
+        if(s.area >= 10000) return s.src;
+    }
+    return scored.length ? scored[0].src : '';
 }
 
 async function fetchRSSItems(feedUrl) {
