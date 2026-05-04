@@ -138,9 +138,12 @@ const space2TopSearch = null;
 const space2NewCollection = document.getElementById('space2-new-collection');
 const space2CameraBtn = document.getElementById('space2-camera-btn');
 const space2UploadBtn = document.getElementById('space2-upload-btn');
-const space2UrlBtn = document.getElementById('space2-url-btn');
 const space2CameraInput = document.getElementById('space2-camera-input');
 const space2FileInput = document.getElementById('space2-file-input');
+const space2UploadModal = document.getElementById('space2-upload-modal');
+const space2UploadUrl = document.getElementById('space2-upload-url');
+const space2UploadBrowse = document.getElementById('space2-upload-browse');
+const space2UploadCancel = document.getElementById('space2-upload-cancel');
 const space2ViewToggle = document.getElementById('space2-view-toggle');
 const space2GridAdd = document.getElementById('space2-grid-add');
 const space2DiscoverPanel = document.getElementById('space2-discover');
@@ -1901,7 +1904,7 @@ function _renderSpace2GridImpl(){
             const card=existingMap.get(item.id);
             // Update mediaType badge if changed
             const mtBadge=card.querySelector('.space2-media-badge');
-            const newBadgeHtml=mt!=='image'?`<span class="space2-media-badge">${mt==='video'?'▶':mt==='audio'?'♫':mt==='gif'?'GIF':'🔗'}</span>`:'';
+            const newBadgeHtml=mt!=='image'?`<span class="space2-media-badge">${mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':'<i data-lucide="link" aria-hidden="true"></i>'}</span>`:'';
             if(mtBadge){
                 if(mt==='image') mtBadge.remove();
                 else mtBadge.innerHTML=newBadgeHtml;
@@ -1910,24 +1913,32 @@ function _renderSpace2GridImpl(){
                 if(shell){
                     const badge=document.createElement('div');
                     badge.className='space2-media-badge';
-                    badge.innerHTML=mt==='video'?'▶':mt==='audio'?'♫':mt==='gif'?'GIF':'🔗';
+                    badge.innerHTML=mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':'<i data-lucide="link" aria-hidden="true"></i>';
                     shell.appendChild(badge);
                 }
             }
-            // Update src for image/gif/url cards
+            // Update src for image/gif/url cards or video src
             if(mt!=='audio'){
-                const img=card.querySelector('.space2-thumb');
-                if(img&&img.dataset.src!==thumbSrc){
-                    img.dataset.src=thumbSrc;
-                    if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth){
-                        card.classList.remove('img-pending');
-                        card.classList.add('img-loaded');
-                    }else{
-                        card.classList.add('img-pending');
-                        card.classList.remove('img-loaded');
-                        if(space2LazyImageObserver) space2LazyImageObserver.unobserve(img);
-                        img.dataset.loaded='0';
-                        observeSpace2LazyImage(img);
+                if(mt==='video'){
+                    const video=card.querySelector('.space2-video-thumb');
+                    if(video&&video.src!==thumbSrc){
+                        video.src=thumbSrc;
+                        video.play().catch(()=>{});
+                    }
+                }else{
+                    const img=card.querySelector('.space2-thumb');
+                    if(img&&img.dataset.src!==thumbSrc){
+                        img.dataset.src=thumbSrc;
+                        if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth){
+                            card.classList.remove('img-pending');
+                            card.classList.add('img-loaded');
+                        }else{
+                            card.classList.add('img-pending');
+                            card.classList.remove('img-loaded');
+                            if(space2LazyImageObserver) space2LazyImageObserver.unobserve(img);
+                            img.dataset.loaded='0';
+                            observeSpace2LazyImage(img);
+                        }
                     }
                 }
             }
@@ -1936,14 +1947,18 @@ function _renderSpace2GridImpl(){
         }
         // Build card markup per media type
         const isAudio=mt==='audio';
-        const mediaBadge=mt==='video'?'<span class="space2-media-badge">▶</span>':
-                         mt==='audio'?'<span class="space2-media-badge">♫</span>':
-                         mt==='gif'?'<span class="space2-media-badge">GIF</span>':
-                         mt==='url'?'<span class="space2-media-badge">🔗</span>':'';
+        const isVideo=mt==='video';
+        const mediaBadge=mt==='video'?'<span class="space2-media-badge"><i data-lucide="play" aria-hidden="true"></i></span>':
+                         mt==='audio'?'<span class="space2-media-badge"><i data-lucide="music" aria-hidden="true"></i></span>':
+                         mt==='gif'?'<span class="space2-media-badge space2-badge-gif">GIF</span>':
+                         mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':'';
         const thumbHtml=isAudio
-            ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon">♫</div></div>`
+            ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon"><i data-lucide="music" aria-hidden="true"></i></div></div>`
             :`<div class="space2-thumb-shell">
-                <img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">
+                ${isVideo
+                    ?`<video class="space2-video-thumb" src="${escapeHtml(thumbSrc)}" muted loop playsinline preload="metadata" autoplay></video>`
+                    :`<img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
+                }
                 <div class="space2-thumb-skeleton" aria-hidden="true"></div>
                 ${mediaBadge}
               </div>`;
@@ -1971,7 +1986,7 @@ function _renderSpace2GridImpl(){
             </div>
         `;
         // For image/gif/url: lazy-load the thumbnail
-        if(!isAudio){
+        if(!isAudio&&!isVideo){
             const img=card.querySelector('.space2-thumb');
             const desc=card.querySelector('.space2-desc');
             if(img){
@@ -1999,6 +2014,27 @@ function _renderSpace2GridImpl(){
                     card.classList.add('img-loaded');
                     scheduleSpace2GridLayout();
                 },{once:true});
+            }
+        }else if(isVideo){
+            const video=card.querySelector('.space2-video-thumb');
+            const desc=card.querySelector('.space2-desc');
+            if(video){
+                video.addEventListener('loadeddata',()=>{
+                    card.classList.remove('img-pending');
+                    card.classList.add('img-loaded');
+                    if(desc){
+                        const w=video.videoWidth||0;
+                        const h=video.videoHeight||0;
+                        if(w&&h) desc.textContent=`${w} x ${h}`;
+                    }
+                    scheduleSpace2GridLayout();
+                },{once:true});
+                video.addEventListener('error',()=>{
+                    card.classList.remove('img-pending');
+                    card.classList.add('img-loaded');
+                    scheduleSpace2GridLayout();
+                },{once:true});
+                video.play().catch(()=>{});
             }
         }else{
             card.classList.remove('img-pending');
@@ -2251,7 +2287,7 @@ async function openSpace2Item(itemId){
             previewEl.innerHTML=`<video src="${src}" controls playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;"></video>`;
         }else if(mt==='audio'){
             previewEl.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;padding:24px;">
-                <div style="font-size:48px;opacity:0.6;">🎵</div>
+                <i data-lucide="music" aria-hidden="true" style="width:48px;height:48px;opacity:0.6;stroke:currentColor;fill:none;stroke-width:1.5;"></i>
                 <div style="font-size:13px;opacity:0.5;text-align:center;">${escapeHtml(item.title||'Audio')}</div>
                 <audio src="${previewSrc||item.src}" controls preload="metadata" style="width:100%;max-width:320px;"></audio>
             </div>`;
@@ -2263,6 +2299,18 @@ async function openSpace2Item(itemId){
             </div>`;
         }else{
             previewEl.innerHTML=`<img src="${previewSrc}" alt="">`;
+        }
+    }
+    if(space2ItemDownload){
+        if(mt==='url'){
+            space2ItemDownload.textContent='Visit';
+            space2ItemDownload.onclick=()=>{
+                const pageUrl=item.pageUrl||item.src;
+                if(pageUrl) window.open(pageUrl,'_blank','noopener');
+            };
+        }else{
+            space2ItemDownload.textContent='Download';
+            space2ItemDownload.onclick=()=>{downloadSpace2ActiveItem().catch(err=>console.warn('space2 download failed',err));};
         }
     }
     if(space2ItemTitle) space2ItemTitle.value=item.title||'';
@@ -5837,23 +5885,31 @@ if(space2Search) space2Search.addEventListener('input',()=>{
     else renderSpace2Grid();
 });
 if(space2CameraBtn && space2CameraInput) space2CameraBtn.addEventListener('click',()=>{ if(space2CameraInput) space2CameraInput.click(); });
-if(space2UploadBtn) space2UploadBtn.addEventListener('click',()=>{ if(space2FileInput) space2FileInput.click(); });
+if(space2UploadBtn) space2UploadBtn.addEventListener('click',()=>{
+    if(space2UploadUrl) space2UploadUrl.value='';
+    if(space2UploadModal) space2UploadModal.classList.remove('hidden');
+});
+if(space2UploadBrowse&&space2FileInput) space2UploadBrowse.addEventListener('click',()=>{ space2FileInput.click(); });
+if(space2UploadCancel&&space2UploadModal) space2UploadCancel.addEventListener('click',()=>{ space2UploadModal.classList.add('hidden'); });
+if(space2UploadUrl) space2UploadUrl.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){
+        e.preventDefault();
+        const url=space2UploadUrl.value.trim();
+        if(url){
+            importUrlToSpace2(url);
+            space2UploadModal.classList.add('hidden');
+        }
+    }
+});
 if(space2FileInput) space2FileInput.addEventListener('change',async e=>{
     await importFilesToSpace2(e.target.files);
     e.target.value='';
+    if(space2UploadModal) space2UploadModal.classList.add('hidden');
 });
 if(space2CameraInput) space2CameraInput.addEventListener('change',async e=>{
     await importFilesToSpace2(e.target.files,{openEditor:true});
     e.target.value='';
 });
-if(space2UrlBtn){
-    space2UrlBtn.addEventListener('click',()=>{
-        const url=prompt('Paste a URL to save (image, video, audio, or any webpage):');
-        if(url&&url.trim()){
-            importUrlToSpace2(url.trim());
-        }
-    });
-}
 if(space2AiInput){
     space2AiInput.addEventListener('input',()=>{
         space2AiInput.style.height='24px';
@@ -6110,7 +6166,6 @@ if(space2NewCollection) space2NewCollection.addEventListener('click',()=>createS
 if(space2ItemCancel) space2ItemCancel.addEventListener('click',closeSpace2Item);
 if(space2ItemSave) space2ItemSave.addEventListener('click',saveSpace2Item);
 if(space2ItemDelete) space2ItemDelete.addEventListener('click',deleteSpace2Item);
-if(space2ItemDownload) space2ItemDownload.addEventListener('click',()=>{downloadSpace2ActiveItem().catch(err=>console.warn('space2 download failed',err));});
 if(space2ItemModal) space2ItemModal.addEventListener('click',e=>{if(e.target===space2ItemModal) closeSpace2Item();});
 if(space2CollectionCancel) space2CollectionCancel.addEventListener('click',closeCollectionModal);
 if(space2CollectionSave) space2CollectionSave.addEventListener('click',saveCollectionModal);
