@@ -3980,6 +3980,10 @@ async function initAuthGate(){
         startSpace2BackgroundSyncLoop({immediate:false});
     }else{
         setSpace2SyncIndicator('offline');
+        // No active session — show auth screen so user can re-login
+        setAuthStatus('No active session. Enter your passcode to continue.');
+        showAuthStep('passcode');
+        if(authPasscodeInput) authPasscodeInput.focus();
     }
 }
 
