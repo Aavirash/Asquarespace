@@ -614,7 +614,7 @@ async function extractVideoThumbnail(videoFile){
 async function fetchUrlMetadata(url){
     try{
         let html='';
-        // Try CORS proxy to fetch page HTML
+        // Try CORS proxies to fetch page HTML
         const proxies=[
             `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
             `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
@@ -641,10 +641,10 @@ async function fetchUrlMetadata(url){
             }
         }
         if(!html){
-            // Last resort: try direct fetch (might work for CORS-enabled sites)
             const resp=await fetch(url,{mode:'cors',signal:AbortSignal.timeout(8000)});
             if(resp.ok) html=await resp.text();
         }
+        if(!html) throw new Error('No HTML fetched');
         const doc=new DOMParser().parseFromString(html,'text/html');
         const getMeta=(name)=>{
             const el=doc.querySelector(`meta[property="${name}"],meta[name="${name}"]`);
@@ -656,25 +656,60 @@ async function fetchUrlMetadata(url){
         if(ogImage&&!/^https?:\/\//i.test(ogImage)){
             try{ogImage=new URL(ogImage,new URL(url).origin).href;}catch{ogImage=null;}
         }
-        // Check for og:video or twitter:player:stream for video detection
+        // Check for og:video or twitter:player:stream
         let ogVideo=getMeta('og:video')||getMeta('og:video:url')||getMeta('twitter:player:stream');
         if(ogVideo&&!/^https?:\/\//i.test(ogVideo)){
             try{ogVideo=new URL(ogVideo,new URL(url).origin).href;}catch{ogVideo=null;}
         }
-        // Also check for video tags in page content
         if(!ogVideo){
             const videoEl=doc.querySelector('video source[src],video[src]');
-            if(videoEl){
-                ogVideo=videoEl.getAttribute('src')||videoEl.parentElement.getAttribute('src');
-            }
+            if(videoEl) ogVideo=videoEl.getAttribute('src')||videoEl.parentElement.getAttribute('src');
         }
-        const mediaType=ogVideo?'video':(ogImage?'image':'url');
+        // AGGRESSIVE IMAGE EXTRACTION: Pinterest-style — find largest image on page
+        // This is what Google/Pinterest do: scan all images, filter noise, pick the main one
+        let extractedImage='';
+        if(!ogImage){
+            const allImgs=[...doc.querySelectorAll('img[src],img[data-src],img[data-lazy-src]')];
+            const scored=allImgs.map(img=>{
+                let src=img.getAttribute('data-src')||img.getAttribute('data-lazy-src')||img.getAttribute('src')||'';
+                if(!src) return null;
+                // Resolve relative URLs
+                try{src=new URL(src,url).href;}catch{return null;}
+                // Filter out noise: icons, avatars, tracking, logos, emojis
+                if(/sprite|icon|logo|avatar|emoji|pixel|tracking|analytics|beacon|badge|button|separator|divider|spacer|ad|ads|banner/i.test(src)) return null;
+                // Prefer images with size attributes
+                const w=parseInt(img.getAttribute('width')||img.getAttribute('data-width')||'0',10)||0;
+                const h=parseInt(img.getAttribute('height')||img.getAttribute('data-height')||'0',10)||0;
+                const area=w*h;
+                // Check srcset for higher-res variants
+                const srcset=img.getAttribute('srcset');
+                return {src,area,w,h,hasSrcset:!!srcset};
+            }).filter(Boolean);
+            // Sort by area (largest first), prefer images with srcset
+            scored.sort((a,b)=>{
+                if(b.area&&a.area) return b.area-a.area;
+                if(b.hasSrcset&&!a.hasSrcset) return 1;
+                if(a.hasSrcset&&!b.hasSrcset) return -1;
+                return 0;
+            });
+            // Pick the first image that meets minimum size threshold
+            for(const s of scored){
+                if(s.area>=10000){ // at least 100x100px
+                    extractedImage=s.src;
+                    break;
+                }
+            }
+            // If nothing large enough, take the first valid image
+            if(!extractedImage&&scored.length) extractedImage=scored[0].src;
+        }
+        const mediaType=ogVideo?'video':(ogImage||extractedImage?'image':'url');
         const faviconUrl=`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`;
-        return {title,description,ogImage,ogVideo,thumbnailUrl:ogVideo||ogImage||faviconUrl,mediaType,pageUrl:url};
+        const thumbnailUrl=ogVideo||ogImage||extractedImage||faviconUrl;
+        return {title,description,ogImage,ogVideo,extractedImage,thumbnailUrl,mediaType,pageUrl:url};
     }catch(e){
         console.warn('fetchUrlMetadata failed:',e);
         try{
-            return {title:new URL(url).hostname,description:'',ogImage:null,ogVideo:null,thumbnailUrl:`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`,mediaType:'url',pageUrl:url};
+            return {title:new URL(url).hostname,description:'',ogImage:null,ogVideo:null,extractedImage:'',thumbnailUrl:`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(new URL(url).origin)}`,mediaType:'url',pageUrl:url};
         }catch{return null;}
     }
 }
