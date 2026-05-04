@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Light.otf" as="font" type="font/otf">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Black.otf" as="font" type="font/otf">
-    <link rel="stylesheet" href="css/style.css?v=20260504-002">
+    <link rel="stylesheet" href="css/style.css?v=20260504-003">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -428,7 +428,12 @@
     <div class="settings-card space2-upload-card">
       <div class="settings-title">Upload</div>
       <label class="settings-label" for="space2-upload-url">Paste URL</label>
-      <input id="space2-upload-url" class="settings-input" type="text" placeholder="https://example.com/image.jpg or any link">
+      <div class="settings-inline-row">
+        <input id="space2-upload-url" class="settings-input" type="text" placeholder="https://example.com/image.jpg or any link">
+        <button id="space2-upload-save" class="settings-btn primary" style="width:42px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="arrow-right" aria-hidden="true" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
       <div style="text-align:center;margin:16px 0 12px;font-size:12px;color:var(--text-mid);">or</div>
       <button id="space2-upload-browse" class="settings-btn" style="width:100%;height:40px;font-size:14px;">
         <i data-lucide="folder-open" aria-hidden="true" style="width:16px;height:16px;margin-right:8px;"></i>
@@ -680,6 +685,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/lucide.min.js"></script>
 <script src="js/CSInterface.js"></script>
-<script src="js/main.js?v=20260504-002"></script>
+<script src="js/main.js?v=20260504-003"></script>
 </body>
 </html>

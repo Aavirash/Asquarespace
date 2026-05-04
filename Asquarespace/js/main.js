@@ -144,6 +144,7 @@ const space2UploadModal = document.getElementById('space2-upload-modal');
 const space2UploadUrl = document.getElementById('space2-upload-url');
 const space2UploadBrowse = document.getElementById('space2-upload-browse');
 const space2UploadCancel = document.getElementById('space2-upload-cancel');
+const space2UploadSave = document.getElementById('space2-upload-save');
 const space2ViewToggle = document.getElementById('space2-view-toggle');
 const space2GridAdd = document.getElementById('space2-grid-add');
 const space2DiscoverPanel = document.getElementById('space2-discover');
@@ -5891,14 +5892,19 @@ if(space2UploadBtn) space2UploadBtn.addEventListener('click',()=>{
 });
 if(space2UploadBrowse&&space2FileInput) space2UploadBrowse.addEventListener('click',()=>{ space2FileInput.click(); });
 if(space2UploadCancel&&space2UploadModal) space2UploadCancel.addEventListener('click',()=>{ space2UploadModal.classList.add('hidden'); });
+function saveUrlFromUploadModal(){
+    if(!space2UploadUrl) return;
+    const url=space2UploadUrl.value.trim();
+    if(!url) return;
+    importUrlToSpace2(url);
+    space2UploadUrl.value='';
+    if(space2UploadModal) space2UploadModal.classList.add('hidden');
+}
+if(space2UploadSave) space2UploadSave.addEventListener('click',saveUrlFromUploadModal);
 if(space2UploadUrl) space2UploadUrl.addEventListener('keydown',e=>{
     if(e.key==='Enter'){
         e.preventDefault();
-        const url=space2UploadUrl.value.trim();
-        if(url){
-            importUrlToSpace2(url);
-            space2UploadModal.classList.add('hidden');
-        }
+        saveUrlFromUploadModal();
     }
 });
 if(space2FileInput) space2FileInput.addEventListener('change',async e=>{
