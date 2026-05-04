@@ -3938,6 +3938,8 @@ async function initAuthGate(){
     if(!client){
         setAuthStatus('Auth unavailable. Running local mode only.',true);
         setSpace2SyncIndicator('offline','Local mode');
+        // Still allow local access
+        unlockAppAfterAuth();
         return;
     }
 
@@ -3966,9 +3968,29 @@ async function initAuthGate(){
         }
     });
 
-    const {data,error}=await client.auth.getSession();
+    let sessionData;
+    let sessionError;
+    try{
+        const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('session timeout')),8000));
+        sessionData=await Promise.race([client.auth.getSession(),timeout]);
+    }catch(e){
+        sessionError=e;
+    }
+    if(sessionError){
+        console.warn('Auth session check failed:',sessionError);
+        setSpace2SyncIndicator('offline');
+        setAuthStatus('Session check failed. Enter your passcode to continue.');
+        showAuthStep('passcode');
+        if(authPasscodeInput) authPasscodeInput.focus();
+        return;
+    }
+    const {data,error}=sessionData;
     if(error){
-        setAuthStatus('Could not check existing session. Continue manually.',true);
+        console.warn('Auth session error:',error);
+        setSpace2SyncIndicator('offline');
+        setAuthStatus('Session check failed. Enter your passcode to continue.');
+        showAuthStep('passcode');
+        if(authPasscodeInput) authPasscodeInput.focus();
         return;
     }
     if(data&&data.session&&data.session.user){
