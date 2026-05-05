@@ -218,7 +218,7 @@
       };
       chrome.runtime.sendMessage({
         action: 'supabaseRequest',
-        endpoint: '/rest/v1/user_workspace_state',
+        endpoint: '/rest/v1/user_workspace_state?on_conflict=user_id,board_key',
         options: {
           method: 'POST',
           body: JSON.stringify({
