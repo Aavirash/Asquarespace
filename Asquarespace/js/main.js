@@ -2045,9 +2045,10 @@ function _renderSpace2GridImpl(){
                                     scheduleSpace2GridLayout();
                                     requestAnimationFrame(()=>{
                                         playPixelationLoad(pxCanvas,img,()=>{
-                                            pxCanvas.style.display='none';
-                                            img.style.opacity='1';
                                             img.style.transition='none';
+                                            img.style.opacity='1';
+                                            void img.offsetHeight;
+                                            pxCanvas.style.display='none';
                                             card.classList.remove('has-px-canvas');
                                             card.classList.remove('img-pending');
                                             card.classList.add('img-loaded');
@@ -2155,9 +2156,10 @@ function _renderSpace2GridImpl(){
                             scheduleSpace2GridLayout();
                             requestAnimationFrame(()=>{
                                 playPixelationLoad(pxCanvas,img,()=>{
-                                    pxCanvas.style.display='none';
-                                    img.style.opacity='1';
                                     img.style.transition='none';
+                                    img.style.opacity='1';
+                                    void img.offsetHeight;
+                                    pxCanvas.style.display='none';
                                     card.classList.remove('has-px-canvas');
                                     card.classList.remove('img-pending');
                                     card.classList.add('img-loaded');
@@ -2166,9 +2168,10 @@ function _renderSpace2GridImpl(){
                             // Fallback timeout
                             setTimeout(()=>{
                                 if(!card.classList.contains('img-loaded')){
-                                    pxCanvas.style.display='none';
-                                    img.style.opacity='1';
                                     img.style.transition='none';
+                                    img.style.opacity='1';
+                                    void img.offsetHeight;
+                                    pxCanvas.style.display='none';
                                     card.classList.remove('has-px-canvas');
                                     card.classList.remove('img-pending');
                                     card.classList.add('img-loaded');
@@ -2303,7 +2306,7 @@ function playPixelationLoad(canvas,imgEl,onDone){
     const cw=canvas.width||canvas.offsetWidth;
     const ch=canvas.height||canvas.offsetHeight;
     if(!cw||!ch) return;
-    const factors=[1,2,4,9,100];
+    const factors=[1,2,4,9];
     let idx=0;
     function step(){
         if(idx>=factors.length){
@@ -2311,8 +2314,7 @@ function playPixelationLoad(canvas,imgEl,onDone){
             return;
         }
         const pct=factors[idx]*0.01;
-        const isFinal=factors[idx]===100;
-        ctx.imageSmoothingEnabled=isFinal;
+        ctx.imageSmoothingEnabled=false;
         ctx.clearRect(0,0,cw,ch);
         ctx.drawImage(imgEl,0,0,cw*pct,ch*pct);
         ctx.drawImage(canvas,0,0,cw*pct,ch*pct,0,0,cw,ch);
