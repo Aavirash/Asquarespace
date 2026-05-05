@@ -119,13 +119,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function supabaseFetch(endpoint, options = {}) {
   const { asq_token, asq_refresh_token } = await new Promise(r => chrome.storage.local.get(['asq_token', 'asq_refresh_token'], r));
-  if (!asq_token) throw new Error('No auth token');
   const headers = {
     'Content-Type': 'application/json',
     'apikey': SUPABASE_ANON_KEY,
-    'Authorization': `Bearer ${asq_token}`,
     ...(options.headers || {}),
   };
+  // Only add auth header if we have a token (auth endpoints don't need it)
+  if (asq_token) {
+    headers['Authorization'] = `Bearer ${asq_token}`;
+  }
   if (options.method === 'POST') {
     headers['Prefer'] = 'resolution=merge-duplicates,return=minimal';
   }
