@@ -2113,12 +2113,14 @@ function _renderSpace2GridImpl(){
                             pxCanvas.height=shell.offsetHeight;
                         }
                         if(pxCanvas.width&&pxCanvas.height){
+                            card.classList.add('has-px-canvas');
                             pxCanvas.style.display='block';
                             img.style.opacity='0';
                             img.style.transition='opacity 0.3s ease';
                             playPixelationLoad(pxCanvas,img,()=>{
                                 img.style.opacity='1';
                                 pxCanvas.style.display='none';
+                                card.classList.remove('has-px-canvas');
                                 card.classList.remove('img-pending');
                                 card.classList.add('img-loaded');
                                 scheduleSpace2GridLayout();
@@ -2128,6 +2130,7 @@ function _renderSpace2GridImpl(){
                                 if(!card.classList.contains('img-loaded')){
                                     img.style.opacity='1';
                                     pxCanvas.style.display='none';
+                                    card.classList.remove('has-px-canvas');
                                     card.classList.remove('img-pending');
                                     card.classList.add('img-loaded');
                                     scheduleSpace2GridLayout();
