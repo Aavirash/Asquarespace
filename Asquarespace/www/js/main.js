@@ -2115,8 +2115,13 @@ function _renderSpace2GridImpl(){
                 ${getSpace2MetaMarkup(item)}
             </div>
         `;
+        // YouTube: mark loaded immediately, thumbnail has src set directly
+        if(isYouTube){
+            card.classList.remove('img-pending');
+            card.classList.add('img-loaded');
+        }
         // For image/gif/url: lazy-load the thumbnail
-        if(!isAudio&&!isVideo){
+        if(!isAudio&&!isVideo&&!isYouTube){
             const img=card.querySelector('.space2-thumb');
             const pxCanvas=card.querySelector('.space2-px-canvas');
             const desc=card.querySelector('.space2-desc');
