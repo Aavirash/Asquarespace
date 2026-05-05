@@ -2045,13 +2045,10 @@ function _renderSpace2GridImpl(){
                                     scheduleSpace2GridLayout();
                                     requestAnimationFrame(()=>{
                                         playPixelationLoad(pxCanvas,img,()=>{
-                                            img.style.transition='none';
-                                            img.style.opacity='1';
-                                            void img.offsetHeight;
-                                            pxCanvas.style.display='none';
-                                            card.classList.remove('has-px-canvas');
                                             card.classList.remove('img-pending');
                                             card.classList.add('img-loaded');
+                                            pxCanvas.style.display='none';
+                                            img.style.opacity='1';
                                         });
                                     });
                                 }
@@ -2160,25 +2157,19 @@ function _renderSpace2GridImpl(){
                             scheduleSpace2GridLayout();
                             requestAnimationFrame(()=>{
                                 playPixelationLoad(pxCanvas,img,()=>{
-                                    img.style.transition='none';
-                                    img.style.opacity='1';
-                                    void img.offsetHeight;
-                                    pxCanvas.style.display='none';
-                                    card.classList.remove('has-px-canvas');
                                     card.classList.remove('img-pending');
                                     card.classList.add('img-loaded');
+                                    pxCanvas.style.display='none';
+                                    img.style.opacity='1';
                                 });
                             });
                             // Fallback timeout
                             setTimeout(()=>{
                                 if(!card.classList.contains('img-loaded')){
-                                    img.style.transition='none';
-                                    img.style.opacity='1';
-                                    void img.offsetHeight;
-                                    pxCanvas.style.display='none';
-                                    card.classList.remove('has-px-canvas');
                                     card.classList.remove('img-pending');
                                     card.classList.add('img-loaded');
+                                    pxCanvas.style.display='none';
+                                    img.style.opacity='1';
                                 }
                             },1200);
                         } else {
@@ -2269,27 +2260,6 @@ function _renderSpace2GridImpl(){
                 playBtn.addEventListener('click',e=>{
                     e.stopPropagation();
                     startPlayer();
-                });
-                shell.addEventListener('mouseenter',()=>{
-                    if(isPlaying){
-                        let pauseBtn=shell.querySelector('.space2-yt-pause-btn');
-                        if(!pauseBtn){
-                            pauseBtn=document.createElement('button');
-                            pauseBtn.className='space2-yt-pause-btn';
-                            pauseBtn.setAttribute('aria-label','Pause video');
-                            pauseBtn.innerHTML='<i data-lucide="pause" aria-hidden="true"></i>';
-                            pauseBtn.addEventListener('click',e=>{
-                                e.stopPropagation();
-                                stopPlayer();
-                            });
-                            shell.appendChild(pauseBtn);
-                            refreshLucideIcons();
-                        }
-                    }
-                });
-                shell.addEventListener('mouseleave',()=>{
-                    const pauseBtn=shell.querySelector('.space2-yt-pause-btn');
-                    if(pauseBtn) pauseBtn.remove();
                 });
             }
             card.classList.remove('img-pending');
@@ -4789,8 +4759,8 @@ window.addEventListener('keydown',e=>{
     const hasModifier=e.metaKey||e.ctrlKey;
     const isTextTarget=isTextEditingTarget(e.target);
 
-    // Cmd+S: toggle Space2 sidebar
-    if(e.ctrlKey&&key==='s'){
+    // Ctrl+X: toggle Space2 sidebar
+    if(e.ctrlKey&&key==='x'){
         e.preventDefault();
         if(currentSpace==='space2'){
             setSpace2CollectionsOpen(!space2CollectionsOpen);
