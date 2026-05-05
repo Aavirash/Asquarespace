@@ -225,6 +225,7 @@
             user_id: userId,
             board_key: space2Key,
             board_id: 'space2-global',
+            project_key: '',
             canvas_state: {},
             space2_state: updatedState,
             updated_at: new Date().toISOString(),
