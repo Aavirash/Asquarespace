@@ -33,96 +33,6 @@ const SPACE2_SIGNED_URL_REFRESH_GRACE_SEC = 60 * 60 * 6;
 const SPACE2_LAZY_ROOT_MARGIN_PX = 220;
 const SPACE2_LOCAL_BLOB_PREFIX = 'idb://space2/';
 
-// ── Pixelate loading effect ─────────────────────────────────────
-// Reusable: progressively resolves a pixelated image from blocky → clear.
-// Returns { canvas, start(src, onDone), stop(), done() }.
-function createPixelateLoader(container, initialWidth, initialHeight) {
-    const canvas = document.createElement('canvas');
-    canvas.className = 'space2-pixelate';
-    canvas.style.width = '100%';
-    canvas.style.height = 'auto';
-    canvas.style.display = 'block';
-    canvas.style.imageRendering = 'pixelated';
-    container.appendChild(canvas);
-
-    let animId = null;
-    let fullImg = null;
-    let resolved = false;
-    let aspectRatio = initialWidth && initialHeight ? initialHeight / initialWidth : null;
-    const STEPS = [4, 6, 8, 12, 18, 28, 42, 64, 96, 0]; // 0 = full res
-
-    function _drawStep(step) {
-        if (!fullImg || resolved) return;
-        const ctx = canvas.getContext('2d');
-        const imgW = fullImg.naturalWidth || fullImg.width;
-        const imgH = fullImg.naturalHeight || fullImg.height;
-        if (!imgW || !imgH) return;
-
-        canvas.width = imgW;
-        canvas.height = imgH;
-
-        let drawW, drawH;
-        if (step === 0) {
-            drawW = imgW; drawH = imgH;
-        } else {
-            const scale = step / Math.max(imgW, imgH);
-            drawW = Math.max(1, Math.round(imgW * scale));
-            drawH = Math.max(1, Math.round(imgH * scale));
-        }
-
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(fullImg, 0, 0, drawW, drawH, 0, 0, imgW, imgH);
-
-        if (step === 0) {
-            resolved = true;
-            if (animId) cancelAnimationFrame(animId);
-            animId = null;
-            canvas.style.imageRendering = 'auto';
-        }
-    }
-
-    function _nextStep(idx) {
-        if (idx >= STEPS.length || resolved) return;
-        _drawStep(STEPS[idx]);
-        const delay = idx < 3 ? 180 : idx < 6 ? 120 : 80;
-        animId = setTimeout(() => _nextStep(idx + 1), delay);
-    }
-
-    return {
-        canvas,
-        setAspectRatio(r) { aspectRatio = r; },
-        getAspectRatio() { return aspectRatio; },
-        start(src, onDone) {
-            this.stop();
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-                fullImg = img;
-                const imgW = img.naturalWidth || 300;
-                const imgH = img.naturalHeight || 200;
-                aspectRatio = imgH / imgW;
-                _nextStep(0);
-                if (onDone) onDone(imgW, imgH);
-            };
-            img.onerror = () => {
-                resolved = true;
-                if (animId) { clearTimeout(animId); animId = null; }
-                if (onDone) onDone(0, 0);
-            };
-            img.src = src;
-        },
-        stop() {
-            if (animId) { clearTimeout(animId); cancelAnimationFrame(animId); animId = null; }
-            fullImg = null;
-            resolved = false;
-        },
-        destroy() {
-            this.stop();
-            canvas.remove();
-        }
-    };
-}
-
 // ── Rotation cursor SVGs (curved arrow, rotated for each corner) ────────────
 // The SVG is a curved rotate arrow (Asquarespace branded in #ef4027).
 // We encode 4 variants: br (base), bl (flip-h), tl (flip-h+v), tr (flip-v)
@@ -2050,10 +1960,7 @@ function _renderSpace2GridImpl(){
     existingCards.forEach(c=>{const id=c.dataset.itemId;if(id) existingMap.set(id,c);});
     const desiredIds=new Set(list.map(i=>i.id));
     existingMap.forEach((card,id)=>{
-        if(!desiredIds.has(id)){
-            if(card._pixelate) card._pixelate.destroy();
-            card.remove();
-        }
+        if(!desiredIds.has(id)) card.remove();
     });
     const fragment=document.createDocumentFragment();
     list.forEach(item=>{
@@ -2097,23 +2004,19 @@ function _renderSpace2GridImpl(){
                         video.play().catch(()=>{});
                     }
                 }else{
-                    const shell=card.querySelector('.space2-thumb-shell');
-                    const canvas=card.querySelector('.space2-pixelate-canvas');
-                    if(shell&&canvas&&shell.dataset.pixelateSrc!==thumbSrc){
-                        shell.dataset.pixelateSrc=thumbSrc;
-                        if(card._pixelate){
-                            card._pixelate.stop();
-                        }
-                        card.classList.add('img-pending');
-                        card.classList.remove('img-loaded');
-                        const px=createPixelateLoader(shell, item.naturalWidth, item.naturalHeight);
-                        card._pixelate=px;
-                        px.start(thumbSrc,(w,h)=>{
+                    const img=card.querySelector('.space2-thumb');
+                    if(img&&img.dataset.src!==thumbSrc){
+                        img.dataset.src=thumbSrc;
+                        if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth){
                             card.classList.remove('img-pending');
                             card.classList.add('img-loaded');
-                            if(w&&h) shell.style.aspectRatio=`${w}/${h}`;
-                            scheduleSpace2GridLayout();
-                        });
+                        }else{
+                            card.classList.add('img-pending');
+                            card.classList.remove('img-loaded');
+                            if(space2LazyImageObserver) space2LazyImageObserver.unobserve(img);
+                            img.dataset.loaded='0';
+                            observeSpace2LazyImage(img);
+                        }
                     }
                 }
             }
@@ -2129,10 +2032,10 @@ function _renderSpace2GridImpl(){
                          mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':'';
         const thumbHtml=isAudio
             ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon"><i data-lucide="music" aria-hidden="true"></i></div></div>`
-            :`<div class="space2-thumb-shell" data-pixelate-src="${escapeHtml(thumbSrc)}">
+            :`<div class="space2-thumb-shell">
                 ${isVideo
                     ?`<video class="space2-video-thumb" src="${escapeHtml(thumbSrc)}" muted loop playsinline preload="metadata" autoplay></video>`
-                    :`<canvas class="space2-pixelate-canvas" style="width:100%;height:auto;display:block;"></canvas>`
+                    :`<img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
                 }
                 <div class="space2-thumb-skeleton" aria-hidden="true"></div>
                 ${mediaBadge}
@@ -2160,33 +2063,35 @@ function _renderSpace2GridImpl(){
                 ${getSpace2MetaMarkup(item)}
             </div>
         `;
-        // For image/gif/url: use pixelate effect
+        // For image/gif/url: lazy-load the thumbnail
         if(!isAudio&&!isVideo){
-            const shell=card.querySelector('.space2-thumb-shell');
+            const img=card.querySelector('.space2-thumb');
             const desc=card.querySelector('.space2-desc');
-            const canvas=card.querySelector('.space2-pixelate-canvas');
-            if(canvas&&thumbSrc){
-                const px=createPixelateLoader(shell, item.naturalWidth, item.naturalHeight);
-                card._pixelate=px;
-                const startPixelate=()=>{
-                    px.start(thumbSrc,(w,h)=>{
-                        card.classList.remove('img-pending');
-                        card.classList.add('img-loaded');
-                        shell.style.aspectRatio=`${w}/${h}`;
-                        if(desc&&!item.description&&item.aiMetaState!=='loading'&&w&&h){
-                            desc.textContent=`${w} x ${h}`;
-                        }
-                        scheduleSpace2GridLayout();
-                    });
+            if(img){
+                const onLoaded=()=>{
+                    card.classList.remove('img-pending');
+                    card.classList.add('img-loaded');
+                    if(desc&&!item.description&&item.aiMetaState!=='loading'&&img.naturalWidth&&img.naturalHeight){
+                        desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
+                    }
+                    scheduleSpace2GridLayout();
                 };
-                // Lazy: only start when near viewport
-                if(space2LazyImageObserver){
-                    space2LazyImageObserver.observe(canvas);
-                    canvas._startPixelate=startPixelate;
-                    canvas._pixelateSrc=thumbSrc;
-                }else{
-                    startPixelate();
+                // For GIFs: set src directly to preserve animation (skip blob cache)
+                if(mt==='gif'&&thumbSrc){
+                    img.src=thumbSrc;
+                    img.dataset.loaded='1';
+                    if(img.complete&&img.naturalWidth) onLoaded();
+                    else img.addEventListener('load',onLoaded,{once:true});
+                }else if(thumbSrc){
+                    if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth) onLoaded();
+                    else img.addEventListener('load',onLoaded,{once:true});
+                    observeSpace2LazyImage(img);
                 }
+                img.addEventListener('error',()=>{
+                    card.classList.remove('img-pending');
+                    card.classList.add('img-loaded');
+                    scheduleSpace2GridLayout();
+                },{once:true});
             }
         }else if(isVideo){
             const video=card.querySelector('.space2-video-thumb');
@@ -2407,18 +2312,14 @@ function ensureSpace2LazyImageObserver(){
     space2LazyImageObserver=new IntersectionObserver(entries=>{
         entries.forEach(entry=>{
             if(!entry.isIntersecting) return;
-            const el=entry.target;
-            // Pixelate canvas
-            if(el._startPixelate){
-                el._startPixelate();
+            const img=entry.target;
+            const src=(img&&img.dataset&&img.dataset.src||'').trim();
+            if(src&&img.dataset.loaded!=='1'){
+                img.dataset.loaded='1';
+                const cacheKey=img.dataset.cacheKey||src;
+                _loadImgWithBlobCache(img,src,cacheKey).catch(()=>{img.src=src;});
             }
-            // Legacy <img> fallback
-            else if(el.dataset&&el.dataset.src&&el.dataset.loaded!=='1'){
-                el.dataset.loaded='1';
-                const cacheKey=el.dataset.cacheKey||el.dataset.src;
-                _loadImgWithBlobCache(el,el.dataset.src,cacheKey).catch(()=>{el.src=el.dataset.src;});
-            }
-            space2LazyImageObserver.unobserve(el);
+            space2LazyImageObserver.unobserve(img);
         });
     },{
         root:space2Grid||null,
@@ -2427,14 +2328,18 @@ function ensureSpace2LazyImageObserver(){
     });
 }
 
-function observeSpace2LazyImage(el){
-    if(!el) return;
+function observeSpace2LazyImage(img){
+    if(!img) return;
+    const src=(img.dataset&&img.dataset.src||'').trim();
+    if(!src) return;
     if(typeof IntersectionObserver==='undefined'){
-        if(el._startPixelate) el._startPixelate();
+        img.dataset.loaded='1';
+        const cacheKey=img.dataset.cacheKey||src;
+        _loadImgWithBlobCache(img,src,cacheKey).catch(()=>{img.src=src;});
         return;
     }
     ensureSpace2LazyImageObserver();
-    if(space2LazyImageObserver) space2LazyImageObserver.observe(el);
+    if(space2LazyImageObserver) space2LazyImageObserver.observe(img);
 }
 
 async function resolveSpace2ItemDisplaySource(item){
@@ -2694,7 +2599,7 @@ async function importUrlToSpace2(url){
     const directMediaType=isDirectVideo?'video':isDirectAudio?'audio':isDirectGif?'gif':isDirectImage?'image':null;
     const now=Date.now();
 
-    // Create placeholder item immediately so the grid cell appears right away
+    // Create placeholder immediately so the grid cell appears right away
     const item={
         id:`item-${now}-${Math.floor(Math.random()*99999)}`,
         src:url,
@@ -2719,7 +2624,6 @@ async function importUrlToSpace2(url){
     setSpace2AutoMetaStatus('Saving...');
 
     if(directMediaType){
-        // Direct media: already have src, just sync
         syncSpace2StateToSupabase({force:true,reason:'manual'}).catch(err=>console.warn('space2 url sync failed',err));
         setSpace2AutoMetaStatus(`Saved: ${item.title}`);
         setTimeout(()=>setSpace2AutoMetaStatus(''),3000);
@@ -2740,30 +2644,8 @@ async function importUrlToSpace2(url){
             item.updatedAt=Date.now();
             saveSpace2State(undefined,undefined,{skipCloudSync:true});
             updateSpace2GridCardMeta(item);
-            // Re-render the card's thumbnail if we got a new one
-            if(item.thumbnailUrl){
-                const card=space2Grid?.querySelector(`.space2-item[data-item-id="${item.id}"]`);
-                if(card){
-                    const shell=card.querySelector('.space2-thumb-shell');
-                    if(shell){
-                        shell.dataset.pixelateSrc='';
-                        const canvas=card.querySelector('.space2-pixelate-canvas');
-                        if(canvas&&card._pixelate){
-                            card._pixelate.stop();
-                            card.classList.add('img-pending');
-                            card.classList.remove('img-loaded');
-                            const px=createPixelateLoader(shell);
-                            card._pixelate=px;
-                            px.start(item.thumbnailUrl,(w,h)=>{
-                                card.classList.remove('img-pending');
-                                card.classList.add('img-loaded');
-                                if(w&&h) shell.style.aspectRatio=`${w}/${h}`;
-                                scheduleSpace2GridLayout();
-                            });
-                        }
-                    }
-                }
-            }
+            // Re-render grid to update thumbnail
+            renderSpace2Grid();
         }
     }catch(e){
         console.warn('URL metadata fetch failed:',e);
