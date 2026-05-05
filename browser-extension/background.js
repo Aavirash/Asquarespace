@@ -97,8 +97,62 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 .then((data) => sendResponse(data))
                 .catch((err2) => sendResponse({ error: err2.message }));
               return;
-            }
-          }
+  }
+}
+
+async function importXBookmarks(urls, authState) {
+  const APP_URL = 'https://asquarespace.com';
+  const BATCH_SIZE = 5;
+
+  try {
+    let appTab = null;
+    const tabs = await chrome.tabs.query({ url: APP_URL + '/*' });
+    if (tabs.length > 0) {
+      appTab = tabs[0];
+      await chrome.tabs.update(appTab.id, { active: true });
+    } else {
+      appTab = await chrome.tabs.create({ url: APP_URL, active: true });
+    }
+
+    await new Promise((resolve) => {
+      const listener = (tabId, info) => {
+        if (tabId === appTab.id && info.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }, 10000);
+    });
+
+    // Inject URLs via window.postMessage
+    let imported = 0;
+    for (let i = 0; i < urls.length; i += BATCH_SIZE) {
+      const batch = urls.slice(i, i + BATCH_SIZE);
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: appTab.id },
+          func: (urls) => {
+            window.postMessage({ source: 'asq-extension', action: 'importXBookmarks', urls }, '*');
+          },
+          args: [batch],
+        });
+        imported += batch.length;
+        await new Promise(r => setTimeout(r, 500));
+      } catch (e) {
+        console.warn('Batch import failed:', e);
+      }
+    }
+
+    return { success: true, count: imported };
+  } catch (err) {
+    console.error('importXBookmarks error:', err);
+    return { success: false, error: err.message };
+  }
+}
           sendResponse({ error: err.message });
         });
       return true;
@@ -108,6 +162,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         chrome.tabs.sendMessage(sender.tab.id, { action: 'showToast', message: msg.message });
       } catch (e) {}
       sendResponse({ ok: true });
+      return true;
+    }
+    if (msg.action === 'importXBookmarks') {
+      importXBookmarks(msg.urls, msg.authState)
+        .then((result) => sendResponse(result))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
       return true;
     }
   } catch (e) {

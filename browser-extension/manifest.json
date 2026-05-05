@@ -10,7 +10,11 @@
     "scripting"
   ],
   "host_permissions": [
-    "https://*.supabase.co/*"
+    "https://*.supabase.co/*",
+    "https://*.x.com/*",
+    "https://*.twitter.com/*",
+    "https://asquarespace.com/*",
+    "http://localhost/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -29,6 +33,11 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["x-bookmarks.js"],
       "run_at": "document_idle"
     }
   ],

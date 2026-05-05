@@ -12,6 +12,8 @@
     pageTitle: document.getElementById('page-title'), pageHost: document.getElementById('page-host'),
     saveBtn: document.getElementById('save-page-btn'), collectionsList: document.getElementById('collections-list'),
     newColBtn: document.getElementById('new-collection-btn'),
+    xBookmarksSection: document.getElementById('x-bookmarks-section'), syncXBtn: document.getElementById('sync-x-btn'),
+    syncXStatus: document.getElementById('sync-x-status'),
   };
 
   let authState = null;
@@ -79,6 +81,10 @@
           els.pageHost.textContent = url.hostname;
           els.pageThumb.src = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`;
           els.pageThumb.style.display = 'block';
+          const isX = /(x\.com|twitter\.com)$/i.test(url.hostname);
+          if (isX) {
+            els.xBookmarksSection.classList.remove('hidden');
+          }
         } catch {
           els.pageHost.textContent = tabs[0].url;
         }
@@ -105,6 +111,7 @@
     els.passcode.addEventListener('keydown', (e) => { if (e.key === 'Enter') handlePasscode(); });
     els.email.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleEmail(); });
     els.otp.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleOtp(); });
+    els.syncXBtn.addEventListener('click', handleSyncXBookmarks);
   }
 
   // ── Auth ──────────────────────────────────────────────────────
@@ -252,6 +259,51 @@
 
   function escHtml(s) {
     const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+  }
+
+  // ── X Bookmarks Sync ──────────────────────────────────────────
+  function handleSyncXBookmarks() {
+    if (!authState?.token) {
+      els.syncXStatus.textContent = 'Sign in first to sync bookmarks';
+      return;
+    }
+    els.syncXBtn.disabled = true;
+    els.syncXStatus.textContent = 'Starting sync...';
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs[0] || !tabs[0].id) {
+        els.syncXStatus.textContent = 'No active tab found';
+        els.syncXBtn.disabled = false;
+        return;
+      }
+      chrome.tabs.sendMessage(tabs[0].id, { action: 'syncXBookmarks' }, (response) => {
+        if (chrome.runtime.lastError) {
+          els.syncXStatus.textContent = 'Content script not ready. Reload the page and try again.';
+          els.syncXBtn.disabled = false;
+          return;
+        }
+        if (response && response.urls) {
+          const urls = response.urls;
+          if (urls.length === 0) {
+            els.syncXStatus.textContent = 'No bookmarks found';
+            els.syncXBtn.disabled = false;
+            return;
+          }
+          els.syncXStatus.textContent = `Found ${urls.length} bookmarks — sending to app...`;
+          chrome.runtime.sendMessage({ action: 'importXBookmarks', urls, authState }, (result) => {
+            if (result?.success) {
+              els.syncXStatus.textContent = `${result.count} bookmarks synced! Open the app to view.`;
+            } else {
+              els.syncXStatus.textContent = 'Sync failed: ' + (result?.error || 'Unknown error');
+            }
+            els.syncXBtn.disabled = false;
+          });
+        } else {
+          els.syncXStatus.textContent = 'Sync failed. Try again.';
+          els.syncXBtn.disabled = false;
+        }
+      });
+    });
   }
 
   // ── Save ──────────────────────────────────────────────────────
