@@ -2005,14 +2005,39 @@ function _renderSpace2GridImpl(){
                     }
                 }else{
                     const img=card.querySelector('.space2-thumb');
+                    const pxCanvas=card.querySelector('.space2-px-canvas');
                     if(img&&img.dataset.src!==thumbSrc){
                         img.dataset.src=thumbSrc;
                         if(img.dataset.loaded==='1'&&img.complete&&img.naturalWidth){
-                            card.classList.remove('img-pending');
-                            card.classList.add('img-loaded');
+                            // Already loaded but different src — play pixelation
+                            if(mt!=='gif'&&pxCanvas){
+                                const shell=img.closest('.space2-thumb-shell');
+                                if(shell){
+                                    pxCanvas.width=shell.offsetWidth;
+                                    pxCanvas.height=shell.offsetHeight;
+                                }
+                                if(pxCanvas.width&&pxCanvas.height){
+                                    card.classList.remove('img-loaded');
+                                    card.classList.add('img-pending');
+                                    pxCanvas.style.display='block';
+                                    img.style.opacity='0';
+                                    img.style.transition='opacity 0.3s ease';
+                                    playPixelationLoad(pxCanvas,img,()=>{
+                                        img.style.opacity='1';
+                                        pxCanvas.style.display='none';
+                                        card.classList.remove('img-pending');
+                                        card.classList.add('img-loaded');
+                                        scheduleSpace2GridLayout();
+                                    });
+                                }
+                            } else {
+                                card.classList.remove('img-pending');
+                                card.classList.add('img-loaded');
+                            }
                         }else{
                             card.classList.add('img-pending');
                             card.classList.remove('img-loaded');
+                            if(pxCanvas) pxCanvas.style.display='none';
                             if(space2LazyImageObserver) space2LazyImageObserver.unobserve(img);
                             img.dataset.loaded='0';
                             observeSpace2LazyImage(img);
@@ -2035,7 +2060,7 @@ function _renderSpace2GridImpl(){
             :`<div class="space2-thumb-shell"${item&&item.width&&item.height?` style="aspect-ratio:${item.width}/${item.height}"`:''}>
                 ${isVideo
                     ?`<video class="space2-video-thumb" src="${escapeHtml(thumbSrc)}" muted loop playsinline preload="metadata" autoplay></video>`
-                    :`<img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
+                    :`<canvas class="space2-px-canvas"></canvas><img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
                 }
                 <div class="space2-thumb-skeleton" aria-hidden="true"></div>
                 ${mediaBadge}
@@ -2066,17 +2091,59 @@ function _renderSpace2GridImpl(){
         // For image/gif/url: lazy-load the thumbnail
         if(!isAudio&&!isVideo){
             const img=card.querySelector('.space2-thumb');
+            const pxCanvas=card.querySelector('.space2-px-canvas');
             const desc=card.querySelector('.space2-desc');
             if(img){
                 const onLoaded=()=>{
-                    card.classList.remove('img-pending');
-                    card.classList.add('img-loaded');
                     if(desc&&!item.description&&item.aiMetaState!=='loading'&&img.naturalWidth&&img.naturalHeight){
                         desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
                     }
-                    scheduleSpace2GridLayout();
+                    // For GIFs: skip pixelation, show directly
+                    if(mt==='gif'){
+                        card.classList.remove('img-pending');
+                        card.classList.add('img-loaded');
+                        scheduleSpace2GridLayout();
+                        return;
+                    }
+                    // Pixelation loading effect
+                    if(pxCanvas&&img.complete&&img.naturalWidth){
+                        const shell=img.closest('.space2-thumb-shell');
+                        if(shell){
+                            pxCanvas.width=shell.offsetWidth;
+                            pxCanvas.height=shell.offsetHeight;
+                        }
+                        if(pxCanvas.width&&pxCanvas.height){
+                            pxCanvas.style.display='block';
+                            img.style.opacity='0';
+                            img.style.transition='opacity 0.3s ease';
+                            playPixelationLoad(pxCanvas,img,()=>{
+                                img.style.opacity='1';
+                                pxCanvas.style.display='none';
+                                card.classList.remove('img-pending');
+                                card.classList.add('img-loaded');
+                                scheduleSpace2GridLayout();
+                            });
+                            // Fallback timeout
+                            setTimeout(()=>{
+                                if(!card.classList.contains('img-loaded')){
+                                    img.style.opacity='1';
+                                    pxCanvas.style.display='none';
+                                    card.classList.remove('img-pending');
+                                    card.classList.add('img-loaded');
+                                    scheduleSpace2GridLayout();
+                                }
+                            },1200);
+                        } else {
+                            card.classList.remove('img-pending');
+                            card.classList.add('img-loaded');
+                            scheduleSpace2GridLayout();
+                        }
+                    } else {
+                        card.classList.remove('img-pending');
+                        card.classList.add('img-loaded');
+                        scheduleSpace2GridLayout();
+                    }
                 };
-                // For GIFs: set src directly to preserve animation (skip blob cache)
                 if(mt==='gif'&&thumbSrc){
                     img.src=thumbSrc;
                     img.dataset.loaded='1';
@@ -2185,6 +2252,33 @@ function scheduleSpace2GridLayout(){
         space2LayoutFrame=0;
         layoutSpace2Grid();
     });
+}
+
+// ── Pixelation loading effect ─────────────────────────────────
+function playPixelationLoad(canvas,imgEl,onDone){
+    if(!canvas||!imgEl||!imgEl.complete||!imgEl.naturalWidth) return;
+    const ctx=canvas.getContext('2d');
+    if(!ctx) return;
+    const cw=canvas.width||canvas.offsetWidth;
+    const ch=canvas.height||canvas.offsetHeight;
+    if(!cw||!ch) return;
+    const factors=[1,2,4,9,100];
+    let idx=0;
+    function step(){
+        if(idx>=factors.length){
+            if(onDone) onDone();
+            return;
+        }
+        const pct=factors[idx]*0.01;
+        const isFinal=factors[idx]===100;
+        ctx.imageSmoothingEnabled=isFinal;
+        ctx.clearRect(0,0,cw,ch);
+        ctx.drawImage(imgEl,0,0,cw*pct,ch*pct);
+        ctx.drawImage(canvas,0,0,cw*pct,ch*pct,0,0,cw,ch);
+        idx++;
+        setTimeout(step,idx===1?300:80);
+    }
+    step();
 }
 
 function layoutSpace2Grid(){
@@ -3896,11 +3990,15 @@ function initSpace2RealtimeSubscription(){
     if(!client||!currentSupabaseUser||space2RealtimeChannel) return;
     space2RealtimeChannel=client
         .channel('space2-state-watcher')
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'user_workspace_state',filter:`user_id=eq.${currentSupabaseUser.id}`},async()=>{
+            console.log('[realtime] space2 row inserted');
+            await restoreStateFromSupabase();
+        })
         .on('postgres_changes',{event:'UPDATE',schema:'public',table:'user_workspace_state',filter:`user_id=eq.${currentSupabaseUser.id}`},async(payload)=>{
-            console.log('[realtime] space2 state changed',payload);
+            console.log('[realtime] space2 state updated',payload);
             try{
                 await restoreStateFromSupabase();
-                setSpace2AutoMetaStatus('Synced from web');
+                setSpace2AutoMetaStatus('Synced from extension');
                 setTimeout(()=>setSpace2AutoMetaStatus(''),2500);
             }catch(e){
                 console.warn('[realtime] restore failed',e);
