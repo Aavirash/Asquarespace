@@ -1994,10 +1994,10 @@ function _renderSpace2GridImpl(){
             const card=existingMap.get(item.id);
             // Update mediaType badge if changed
             const mtBadge=card.querySelector('.space2-media-badge');
-            const iconHtml=mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':mt==='youtube'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='url'?'<i data-lucide="link" aria-hidden="true"></i>':'';
+            const iconHtml=mt==='gif'?'GIF':mt==='url'?'<i data-lucide="link" aria-hidden="true"></i>':'';
             if(mtBadge){
-                if(mt==='image'||mt==='video') mtBadge.remove();
-                else mtBadge.innerHTML=iconHtml;
+                if(mt==='image'||mt==='video'||mt==='youtube') mtBadge.remove();
+                else if(iconHtml) mtBadge.innerHTML=iconHtml;
             }else if(iconHtml){
                 const shell=card.querySelector('.space2-thumb-shell');
                 if(shell){
@@ -2074,10 +2074,8 @@ function _renderSpace2GridImpl(){
         const isAudio=mt==='audio';
         const isVideo=mt==='video';
         const isYouTube=mt==='youtube';
-        const mediaBadge=mt==='audio'?'<span class="space2-media-badge"><i data-lucide="music" aria-hidden="true"></i></span>':
-                         mt==='gif'?'<span class="space2-media-badge space2-badge-gif">GIF</span>':
-                         mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':
-                         mt==='youtube'?'<span class="space2-media-badge space2-badge-yt"><i data-lucide="play" aria-hidden="true"></i></span>':'';
+        const mediaBadge=mt==='gif'?'<span class="space2-media-badge space2-badge-gif">GIF</span>':
+                         mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':'';
         const thumbHtml=isAudio
             ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon"><i data-lucide="music" aria-hidden="true"></i></div></div>`
             :`<div class="space2-thumb-shell${item&&item.width&&item.height?' shell-ratio':''}"${item&&item.width&&item.height?` style="--shell-ar:${item.width}/${item.height};aspect-ratio:${item.width}/${item.height}"`:''}>

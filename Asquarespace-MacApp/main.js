@@ -37,6 +37,13 @@ function createWindow() {
   appUrl.searchParams.set('app', 'mac');
   mainWindow.loadURL(appUrl.toString());
 
+  // YouTube requires a Chrome-like user-agent for embeds
+  const currentUA = mainWindow.webContents.userAgent;
+  const chromeVersion = currentUA.match(/Chrome\/([\d]+)/);
+  if (chromeVersion) {
+    mainWindow.webContents.setUserAgent(currentUA.replace(/\sElectron\/[\d.]+/, ''));
+  }
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
