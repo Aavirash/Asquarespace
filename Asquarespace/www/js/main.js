@@ -2057,7 +2057,7 @@ function _renderSpace2GridImpl(){
                          mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':'';
         const thumbHtml=isAudio
             ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon"><i data-lucide="music" aria-hidden="true"></i></div></div>`
-            :`<div class="space2-thumb-shell"${item&&item.width&&item.height?` style="aspect-ratio:${item.width}/${item.height}"`:''}>
+            :`<div class="space2-thumb-shell${item&&item.width&&item.height?' shell-ratio':''}"${item&&item.width&&item.height?` style="aspect-ratio:${item.width}/${item.height}"`:''}>
                 ${isVideo
                     ?`<video class="space2-video-thumb" src="${escapeHtml(thumbSrc)}" muted loop playsinline preload="metadata" autoplay></video>`
                     :`<canvas class="space2-px-canvas"></canvas><img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
@@ -2693,7 +2693,22 @@ async function importUrlToSpace2(url){
     const directMediaType=isDirectVideo?'video':isDirectAudio?'audio':isDirectGif?'gif':isDirectImage?'image':null;
     const now=Date.now();
 
-    // Create placeholder immediately so the grid cell appears right away
+    // Try to get image dimensions upfront
+    let imgWidth=0, imgHeight=0;
+    if(directMediaType==='image'){
+        try{
+            const img=new Image();
+            img.src=url;
+            await new Promise((resolve,reject)=>{
+                img.onload=()=>resolve();
+                img.onerror=reject;
+                setTimeout(resolve,3000);
+            });
+            if(img.naturalWidth) imgWidth=img.naturalWidth;
+            if(img.naturalHeight) imgHeight=img.naturalHeight;
+        }catch{}
+    }
+
     const item={
         id:`item-${now}-${Math.floor(Math.random()*99999)}`,
         src:url,
@@ -2709,6 +2724,8 @@ async function importUrlToSpace2(url){
         collectionIds:[],
         createdAt:now,
         updatedAt:now,
+        width:imgWidth||0,
+        height:imgHeight||0,
         aiMetaState:directMediaType?'':'loading'
     };
     space2State.items.unshift(item);
@@ -2823,7 +2840,32 @@ async function importFilesToSpace2(files,{openEditor=false}={}){
             }
         }
         if(!src) continue;
-        items.push({src,filePath,title:f.name||'Upload',cloudPath,browserBlobKey,signedUrlExpiresAt,mediaType,thumbnailUrl,thumbnailCloudPath,pageUrl:'',analysisBlob:f});
+        // Capture dimensions for images and videos
+        let itemWidth=0, itemHeight=0;
+        if(mediaType==='image'){
+            try{
+                const bitmap=await createImageBitmap(f);
+                itemWidth=bitmap.width;
+                itemHeight=bitmap.height;
+                bitmap.close();
+            }catch{}
+        } else if(mediaType==='video'){
+            try{
+                const video=document.createElement('video');
+                video.preload='metadata';
+                video.muted=true;
+                video.src=URL.createObjectURL(f);
+                await new Promise((resolve,reject)=>{
+                    video.onloadedmetadata=resolve;
+                    video.onerror=reject;
+                    setTimeout(resolve,3000);
+                });
+                itemWidth=video.videoWidth||0;
+                itemHeight=video.videoHeight||0;
+                URL.revokeObjectURL(video.src);
+            }catch{}
+        }
+        items.push({src,filePath,title:f.name||'Upload',cloudPath,browserBlobKey,signedUrlExpiresAt,mediaType,thumbnailUrl,thumbnailCloudPath,pageUrl:'',analysisBlob:f,width:itemWidth,height:itemHeight});
     }
     const added=upsertSpace2Items(items,{openEditor});
     if(added){
