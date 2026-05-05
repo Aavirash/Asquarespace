@@ -2019,12 +2019,16 @@ function _renderSpace2GridImpl(){
                                 if(pxCanvas.width&&pxCanvas.height){
                                     card.classList.remove('img-loaded');
                                     card.classList.add('img-pending');
+                                    card.classList.add('has-px-canvas');
                                     pxCanvas.style.display='block';
+                                    pxCanvas.style.opacity='1';
+                                    pxCanvas.style.transition='opacity 0.6s ease';
                                     img.style.opacity='0';
-                                    img.style.transition='opacity 0.3s ease';
+                                    img.style.transition='opacity 0.6s ease';
                                     playPixelationLoad(pxCanvas,img,()=>{
+                                        pxCanvas.style.opacity='0';
                                         img.style.opacity='1';
-                                        pxCanvas.style.display='none';
+                                        card.classList.remove('has-px-canvas');
                                         card.classList.remove('img-pending');
                                         card.classList.add('img-loaded');
                                         scheduleSpace2GridLayout();
@@ -2115,11 +2119,14 @@ function _renderSpace2GridImpl(){
                         if(pxCanvas.width&&pxCanvas.height){
                             card.classList.add('has-px-canvas');
                             pxCanvas.style.display='block';
+                            pxCanvas.style.opacity='1';
+                            pxCanvas.style.transition='opacity 0.6s ease';
                             img.style.opacity='0';
-                            img.style.transition='opacity 0.3s ease';
+                            img.style.transition='opacity 0.6s ease';
                             playPixelationLoad(pxCanvas,img,()=>{
+                                // Crossfade: canvas out, img in
+                                pxCanvas.style.opacity='0';
                                 img.style.opacity='1';
-                                pxCanvas.style.display='none';
                                 card.classList.remove('has-px-canvas');
                                 card.classList.remove('img-pending');
                                 card.classList.add('img-loaded');
@@ -2128,8 +2135,8 @@ function _renderSpace2GridImpl(){
                             // Fallback timeout
                             setTimeout(()=>{
                                 if(!card.classList.contains('img-loaded')){
+                                    pxCanvas.style.opacity='0';
                                     img.style.opacity='1';
-                                    pxCanvas.style.display='none';
                                     card.classList.remove('has-px-canvas');
                                     card.classList.remove('img-pending');
                                     card.classList.add('img-loaded');
