@@ -1994,11 +1994,11 @@ function _renderSpace2GridImpl(){
             const card=existingMap.get(item.id);
             // Update mediaType badge if changed
             const mtBadge=card.querySelector('.space2-media-badge');
-            const iconHtml=mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':mt==='youtube'?'<i data-lucide="play" aria-hidden="true"></i>':'<i data-lucide="link" aria-hidden="true"></i>';
+            const iconHtml=mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':mt==='youtube'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='url'?'<i data-lucide="link" aria-hidden="true"></i>':'';
             if(mtBadge){
-                if(mt==='image') mtBadge.remove();
+                if(mt==='image'||mt==='video') mtBadge.remove();
                 else mtBadge.innerHTML=iconHtml;
-            }else if(mt!=='image'){
+            }else if(iconHtml){
                 const shell=card.querySelector('.space2-thumb-shell');
                 if(shell){
                     const badge=document.createElement('div');
@@ -2074,8 +2074,7 @@ function _renderSpace2GridImpl(){
         const isAudio=mt==='audio';
         const isVideo=mt==='video';
         const isYouTube=mt==='youtube';
-        const mediaBadge=mt==='video'?'<span class="space2-media-badge"><i data-lucide="play" aria-hidden="true"></i></span>':
-                         mt==='audio'?'<span class="space2-media-badge"><i data-lucide="music" aria-hidden="true"></i></span>':
+        const mediaBadge=mt==='audio'?'<span class="space2-media-badge"><i data-lucide="music" aria-hidden="true"></i></span>':
                          mt==='gif'?'<span class="space2-media-badge space2-badge-gif">GIF</span>':
                          mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':
                          mt==='youtube'?'<span class="space2-media-badge space2-badge-yt"><i data-lucide="play" aria-hidden="true"></i></span>':'';
