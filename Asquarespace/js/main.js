@@ -564,6 +564,15 @@ function detectMediaType(fileOrMime){
     return null;
 }
 
+function isYouTubeUrl(url){
+    return /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)/i.test(url);
+}
+
+function extractYouTubeId(url){
+    const match=url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return match?match[1]:null;
+}
+
 async function extractVideoThumbnail(videoFile){
     return new Promise((resolve)=>{
         const video=document.createElement('video');
@@ -1967,7 +1976,10 @@ function _renderSpace2GridImpl(){
         const mt=item.mediaType||'image';
         // Determine display source for thumbnail
         let thumbSrc='';
-        if(mt==='video'){
+        if(mt==='youtube'){
+            const ytId=extractYouTubeId(item.src||'');
+            thumbSrc=ytId?`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`:String(item.thumbnailUrl||item.src||'');
+        }else if(mt==='video'){
             thumbSrc=String(item.thumbnailUrl||item.src||'').trim();
         }else if(mt==='url'){
             thumbSrc=String(item.thumbnailUrl||item.src||'').trim();
@@ -1982,7 +1994,7 @@ function _renderSpace2GridImpl(){
             const card=existingMap.get(item.id);
             // Update mediaType badge if changed
             const mtBadge=card.querySelector('.space2-media-badge');
-            const newBadgeHtml=mt!=='image'?`<span class="space2-media-badge">${mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':'<i data-lucide="link" aria-hidden="true"></i>'}</span>`:'';
+            const newBadgeHtml=mt!=='image'?`<span class="space2-media-badge">${mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':mt==='youtube'?'<i data-lucide="play" aria-hidden="true"></i>':'<i data-lucide="link" aria-hidden="true"></i>'}</span>`:'';
             if(mtBadge){
                 if(mt==='image') mtBadge.remove();
                 else mtBadge.innerHTML=newBadgeHtml;
@@ -1991,7 +2003,7 @@ function _renderSpace2GridImpl(){
                 if(shell){
                     const badge=document.createElement('div');
                     badge.className='space2-media-badge';
-                    badge.innerHTML=mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':'<i data-lucide="link" aria-hidden="true"></i>';
+                    badge.innerHTML=mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':mt==='youtube'?'<i data-lucide="play" aria-hidden="true"></i>':'<i data-lucide="link" aria-hidden="true"></i>';
                     shell.appendChild(badge);
                 }
             }
@@ -2020,17 +2032,26 @@ function _renderSpace2GridImpl(){
                                     card.classList.remove('img-loaded');
                                     card.classList.add('img-pending');
                                     card.classList.add('has-px-canvas');
+                                    // Draw initial frame immediately
+                                    const ctx2=pxCanvas.getContext('2d');
+                                    ctx2.imageSmoothingEnabled=false;
+                                    ctx2.clearRect(0,0,pxCanvas.width,pxCanvas.height);
+                                    const tiny2=0.01;
+                                    ctx2.drawImage(img,0,0,pxCanvas.width*tiny2,pxCanvas.height*tiny2);
+                                    ctx2.drawImage(pxCanvas,0,0,pxCanvas.width*tiny2,pxCanvas.height*tiny2,0,0,pxCanvas.width,pxCanvas.height);
                                     pxCanvas.style.display='block';
                                     pxCanvas.style.opacity='1';
-                                    pxCanvas.style.transition='none';
                                     img.style.opacity='0';
-                                    playPixelationLoad(pxCanvas,img,()=>{
-                                        pxCanvas.style.display='none';
-                                        img.style.opacity='1';
-                                        img.style.transition='none';
-                                        card.classList.remove('has-px-canvas');
-                                        card.classList.remove('img-pending');
-                                        card.classList.add('img-loaded');
+                                    scheduleSpace2GridLayout();
+                                    requestAnimationFrame(()=>{
+                                        playPixelationLoad(pxCanvas,img,()=>{
+                                            pxCanvas.style.display='none';
+                                            img.style.opacity='1';
+                                            img.style.transition='none';
+                                            card.classList.remove('has-px-canvas');
+                                            card.classList.remove('img-pending');
+                                            card.classList.add('img-loaded');
+                                        });
                                     });
                                 }
                             } else {
@@ -2054,10 +2075,12 @@ function _renderSpace2GridImpl(){
         // Build card markup per media type
         const isAudio=mt==='audio';
         const isVideo=mt==='video';
+        const isYouTube=mt==='youtube';
         const mediaBadge=mt==='video'?'<span class="space2-media-badge"><i data-lucide="play" aria-hidden="true"></i></span>':
                          mt==='audio'?'<span class="space2-media-badge"><i data-lucide="music" aria-hidden="true"></i></span>':
                          mt==='gif'?'<span class="space2-media-badge space2-badge-gif">GIF</span>':
-                         mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':'';
+                         mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':
+                         mt==='youtube'?'<span class="space2-media-badge space2-badge-yt"><i data-lucide="play" aria-hidden="true"></i></span>':'';
         const thumbHtml=isAudio
             ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon"><i data-lucide="music" aria-hidden="true"></i></div></div>`
             :`<div class="space2-thumb-shell${item&&item.width&&item.height?' shell-ratio':''}"${item&&item.width&&item.height?` style="--shell-ar:${item.width}/${item.height};aspect-ratio:${item.width}/${item.height}"`:''}>
@@ -2101,8 +2124,8 @@ function _renderSpace2GridImpl(){
                     if(desc&&!item.description&&item.aiMetaState!=='loading'&&img.naturalWidth&&img.naturalHeight){
                         desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
                     }
-                    // For GIFs: skip pixelation, show directly
-                    if(mt==='gif'){
+                    // For GIFs and YouTube thumbnails: skip pixelation, show directly
+                    if(mt==='gif'||mt==='youtube'){
                         card.classList.remove('img-pending');
                         card.classList.add('img-loaded');
                         scheduleSpace2GridLayout();
@@ -2116,19 +2139,29 @@ function _renderSpace2GridImpl(){
                             pxCanvas.height=shell.offsetHeight;
                         }
                         if(pxCanvas.width&&pxCanvas.height){
+                            // Draw initial pixel frame immediately so user sees preview
+                            const ctx=pxCanvas.getContext('2d');
+                            ctx.imageSmoothingEnabled=false;
+                            ctx.clearRect(0,0,pxCanvas.width,pxCanvas.height);
+                            const tiny=0.01;
+                            ctx.drawImage(img,0,0,pxCanvas.width*tiny,pxCanvas.height*tiny);
+                            ctx.drawImage(pxCanvas,0,0,pxCanvas.width*tiny,pxCanvas.height*tiny,0,0,pxCanvas.width,pxCanvas.height);
+                            // Show the initial frame now
                             card.classList.add('has-px-canvas');
                             pxCanvas.style.display='block';
                             pxCanvas.style.opacity='1';
-                            pxCanvas.style.transition='none';
                             img.style.opacity='0';
-                            playPixelationLoad(pxCanvas,img,()=>{
-                                // Canvas at 100% IS the image - instant swap, no fade
-                                pxCanvas.style.display='none';
-                                img.style.opacity='1';
-                                img.style.transition='none';
-                                card.classList.remove('has-px-canvas');
-                                card.classList.remove('img-pending');
-                                card.classList.add('img-loaded');
+                            // Schedule layout to fix card heights, then start animation after layout catches up
+                            scheduleSpace2GridLayout();
+                            requestAnimationFrame(()=>{
+                                playPixelationLoad(pxCanvas,img,()=>{
+                                    pxCanvas.style.display='none';
+                                    img.style.opacity='1';
+                                    img.style.transition='none';
+                                    card.classList.remove('has-px-canvas');
+                                    card.classList.remove('img-pending');
+                                    card.classList.add('img-loaded');
+                                });
                             });
                             // Fallback timeout
                             setTimeout(()=>{
@@ -2477,12 +2510,15 @@ async function openSpace2Item(itemId){
                 <img src="${item.thumbnailUrl||previewSrc}" alt="" style="max-width:100%;max-height:60%;object-fit:contain;border-radius:8px;">
                 <a href="${escapeHtml(pageUrl)}" target="_blank" rel="noopener" style="font-size:13px;color:#8b8bff;text-decoration:none;">${escapeHtml(pageUrl)}</a>
             </div>`;
+        }else if(mt==='youtube'){
+            const ytId=extractYouTubeId(item.src||'')||'';
+            previewEl.innerHTML=`<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0" frameborder="0" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;border-radius:8px;"></iframe>`;
         }else{
             previewEl.innerHTML=`<img src="${previewSrc}" alt="">`;
         }
     }
     if(space2ItemDownload){
-        if(mt==='url'){
+        if(mt==='url'||mt==='youtube'){
             space2ItemDownload.textContent='Visit';
             space2ItemDownload.onclick=()=>{
                 const pageUrl=item.pageUrl||item.src;
@@ -2698,8 +2734,60 @@ async function importUrlToSpace2(url){
     const isDirectVideo=/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
     const isDirectGif=/\.gif(\?|#|$)/i.test(url);
     const isDirectAudio=/\.(mp3|wav|m4a|ogg)(\?|#|$)/i.test(url);
+    const isYouTube=isYouTubeUrl(url);
     const directMediaType=isDirectVideo?'video':isDirectAudio?'audio':isDirectGif?'gif':isDirectImage?'image':null;
     const now=Date.now();
+
+    // YouTube: extract video ID, set mediaType to 'youtube'
+    if(isYouTube){
+        const ytId=extractYouTubeId(url);
+        if(ytId){
+            const item={
+                id:`item-${now}-${Math.floor(Math.random()*99999)}`,
+                src:url,
+                filePath:'',
+                cloudPath:'',
+                browserBlobKey:'',
+                signedUrlExpiresAt:0,
+                mediaType:'youtube',
+                thumbnailUrl:`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`,
+                pageUrl:url,
+                title:'YouTube Video',
+                description:'',
+                collectionIds:[],
+                createdAt:now,
+                updatedAt:now,
+                width:1280,
+                height:720,
+                aiMetaState:'loading'
+            };
+            space2State.items.unshift(item);
+            saveSpace2State(undefined,undefined,{skipCloudSync:true});
+            renderSpace2Collections();
+            renderSpace2Grid();
+            setSpace2AutoMetaStatus('Saving...');
+            try{
+                const meta=await fetchUrlMetadata(url);
+                if(meta){
+                    item.title=meta.title||'YouTube Video';
+                    item.description=meta.description||'';
+                    item.aiMetaState='done';
+                    item.updatedAt=Date.now();
+                    saveSpace2State(undefined,undefined,{skipCloudSync:true});
+                    updateSpace2GridCardMeta(item);
+                    renderSpace2Grid();
+                }
+            }catch(e){
+                console.warn('YouTube metadata fetch failed:',e);
+                item.aiMetaState='done';
+                item.title='YouTube Video';
+            }
+            syncSpace2StateToSupabase({force:true,reason:'manual'}).catch(err=>console.warn('space2 url sync failed',err));
+            setSpace2AutoMetaStatus(`Saved: ${item.title}`);
+            setTimeout(()=>setSpace2AutoMetaStatus(''),3000);
+            return;
+        }
+    }
 
     // Try to get image dimensions upfront
     let imgWidth=0, imgHeight=0;
@@ -4625,7 +4713,7 @@ window.addEventListener('keydown',e=>{
     const isTextTarget=isTextEditingTarget(e.target);
 
     // Cmd+S: toggle Space2 sidebar
-    if(e.metaKey&&!e.ctrlKey&&key==='s'){
+    if(e.ctrlKey&&key==='s'){
         e.preventDefault();
         if(currentSpace==='space2'){
             setSpace2CollectionsOpen(!space2CollectionsOpen);

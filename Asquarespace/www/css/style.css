@@ -242,8 +242,8 @@ body.sketch-mode #sketch-draft-layer{display:block;cursor:crosshair;}
 .space2-card-action{width:30px;height:30px;border-radius:9px;border:1px solid color-mix(in srgb,var(--accent) 24%,var(--border));background:color-mix(in srgb,var(--surface) 76%,transparent);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(12px);box-shadow:var(--shadow);padding:0;}
 .space2-card-action svg{width:14px;height:14px;fill:currentColor;}
 .space2-card-action:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg);border-color:color-mix(in srgb,var(--accent) 38%,var(--border));}
-.space2-thumb-shell{position:relative;width:100%;border-radius:12px;overflow:hidden;background:color-mix(in srgb,var(--surface-2) 92%,transparent);aspect-ratio:4/3;}
-.space2-thumb-shell.shell-ratio{aspect-ratio:var(--shell-ar, 4/3);}
+.space2-thumb-shell{position:relative;width:100%;min-height:160px;border-radius:12px;overflow:hidden;background:color-mix(in srgb,var(--surface-2) 92%,transparent);}
+.space2-thumb-shell.shell-ratio{min-height:0;aspect-ratio:var(--shell-ar, auto);}
 .space2-media-badge{position:absolute;bottom:8px;left:8px;z-index:3;width:28px;height:28px;border-radius:8px;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;line-height:1;}
 .space2-media-badge svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;}
 .space2-badge-gif{font-size:10px;font-weight:800;letter-spacing:.5px;}
