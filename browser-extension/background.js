@@ -100,17 +100,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function supabaseFetch(endpoint, options = {}) {
   const { asq_token } = await new Promise(r => chrome.storage.local.get(['asq_token'], r));
+  if (!asq_token) throw new Error('No auth token');
   const headers = {
     'Content-Type': 'application/json',
     'apikey': SUPABASE_ANON_KEY,
-    ...(asq_token ? { 'Authorization': `Bearer ${asq_token}` } : {}),
+    'Authorization': `Bearer ${asq_token}`,
     ...(options.headers || {}),
-    'Prefer': options.method === 'POST' ? 'return=minimal' : undefined,
   };
-  // Remove undefined Prefer header
-  if (!headers['Prefer']) delete headers['Prefer'];
+  if (options.method === 'POST') {
+    headers['Prefer'] = 'resolution=merge-duplicates,return=minimal';
+  }
+  console.log(`[supabase] ${options.method} ${endpoint}`);
   const res = await fetch(`${SUPABASE_URL}${endpoint}`, { ...options, headers });
+  console.log(`[supabase] ${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error(`[supabase] Error:`, errText);
+    throw new Error(`HTTP ${res.status}: ${errText || res.statusText}`);
+  }
+  if (res.status === 204) return {};
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${data?.message || res.statusText}`);
   return data;
 }
