@@ -2022,16 +2022,15 @@ function _renderSpace2GridImpl(){
                                     card.classList.add('has-px-canvas');
                                     pxCanvas.style.display='block';
                                     pxCanvas.style.opacity='1';
-                                    pxCanvas.style.transition='opacity 0.6s ease';
+                                    pxCanvas.style.transition='none';
                                     img.style.opacity='0';
-                                    img.style.transition='opacity 0.6s ease';
                                     playPixelationLoad(pxCanvas,img,()=>{
-                                        pxCanvas.style.opacity='0';
+                                        pxCanvas.style.display='none';
                                         img.style.opacity='1';
+                                        img.style.transition='none';
                                         card.classList.remove('has-px-canvas');
                                         card.classList.remove('img-pending');
                                         card.classList.add('img-loaded');
-                                        scheduleSpace2GridLayout();
                                     });
                                 }
                             } else {
@@ -2061,7 +2060,7 @@ function _renderSpace2GridImpl(){
                          mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':'';
         const thumbHtml=isAudio
             ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon"><i data-lucide="music" aria-hidden="true"></i></div></div>`
-            :`<div class="space2-thumb-shell${item&&item.width&&item.height?' shell-ratio':''}"${item&&item.width&&item.height?` style="aspect-ratio:${item.width}/${item.height}"`:''}>
+            :`<div class="space2-thumb-shell${item&&item.width&&item.height?' shell-ratio':''}"${item&&item.width&&item.height?` style="--shell-ar:${item.width}/${item.height};aspect-ratio:${item.width}/${item.height}"`:''}>
                 ${isVideo
                     ?`<video class="space2-video-thumb" src="${escapeHtml(thumbSrc)}" muted loop playsinline preload="metadata" autoplay></video>`
                     :`<canvas class="space2-px-canvas"></canvas><img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
@@ -2120,27 +2119,26 @@ function _renderSpace2GridImpl(){
                             card.classList.add('has-px-canvas');
                             pxCanvas.style.display='block';
                             pxCanvas.style.opacity='1';
-                            pxCanvas.style.transition='opacity 0.6s ease';
+                            pxCanvas.style.transition='none';
                             img.style.opacity='0';
-                            img.style.transition='opacity 0.6s ease';
                             playPixelationLoad(pxCanvas,img,()=>{
-                                // Crossfade: canvas out, img in
-                                pxCanvas.style.opacity='0';
+                                // Canvas at 100% IS the image - instant swap, no fade
+                                pxCanvas.style.display='none';
                                 img.style.opacity='1';
+                                img.style.transition='none';
                                 card.classList.remove('has-px-canvas');
                                 card.classList.remove('img-pending');
                                 card.classList.add('img-loaded');
-                                scheduleSpace2GridLayout();
                             });
                             // Fallback timeout
                             setTimeout(()=>{
                                 if(!card.classList.contains('img-loaded')){
-                                    pxCanvas.style.opacity='0';
+                                    pxCanvas.style.display='none';
                                     img.style.opacity='1';
+                                    img.style.transition='none';
                                     card.classList.remove('has-px-canvas');
                                     card.classList.remove('img-pending');
                                     card.classList.add('img-loaded');
-                                    scheduleSpace2GridLayout();
                                 }
                             },1200);
                         } else {
