@@ -1994,16 +1994,16 @@ function _renderSpace2GridImpl(){
             const card=existingMap.get(item.id);
             // Update mediaType badge if changed
             const mtBadge=card.querySelector('.space2-media-badge');
-            const newBadgeHtml=mt!=='image'?`<span class="space2-media-badge">${mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':mt==='youtube'?'<i data-lucide="play" aria-hidden="true"></i>':'<i data-lucide="link" aria-hidden="true"></i>'}</span>`:'';
+            const iconHtml=mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':mt==='youtube'?'<i data-lucide="play" aria-hidden="true"></i>':'<i data-lucide="link" aria-hidden="true"></i>';
             if(mtBadge){
                 if(mt==='image') mtBadge.remove();
-                else mtBadge.innerHTML=newBadgeHtml;
-            }else if(newBadgeHtml){
+                else mtBadge.innerHTML=iconHtml;
+            }else if(mt!=='image'){
                 const shell=card.querySelector('.space2-thumb-shell');
                 if(shell){
                     const badge=document.createElement('div');
                     badge.className='space2-media-badge';
-                    badge.innerHTML=mt==='video'?'<i data-lucide="play" aria-hidden="true"></i>':mt==='audio'?'<i data-lucide="music" aria-hidden="true"></i>':mt==='gif'?'GIF':mt==='youtube'?'<i data-lucide="play" aria-hidden="true"></i>':'<i data-lucide="link" aria-hidden="true"></i>';
+                    badge.innerHTML=iconHtml;
                     shell.appendChild(badge);
                 }
             }
@@ -2085,7 +2085,11 @@ function _renderSpace2GridImpl(){
         const thumbHtml=isAudio
             ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon"><i data-lucide="music" aria-hidden="true"></i></div></div>`
             :`<div class="space2-thumb-shell${item&&item.width&&item.height?' shell-ratio':''}"${item&&item.width&&item.height?` style="--shell-ar:${item.width}/${item.height};aspect-ratio:${item.width}/${item.height}"`:''}>
-                ${isVideo
+                ${isYouTube
+                    ?`<img class="space2-thumb space2-yt-thumb" src="${escapeHtml(thumbSrc)}" alt="" loading="lazy" decoding="async">
+                      <button class="space2-yt-play-btn" data-yt-action="play" aria-label="Play video"><i data-lucide="play" aria-hidden="true"></i></button>
+                      <div class="space2-yt-player-wrap" style="display:none;"></div>`
+                    :isVideo
                     ?`<video class="space2-video-thumb" src="${escapeHtml(thumbSrc)}" muted loop playsinline preload="metadata" autoplay></video>`
                     :`<canvas class="space2-px-canvas"></canvas><img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
                 }
@@ -2094,7 +2098,7 @@ function _renderSpace2GridImpl(){
               </div>`;
         const card=document.createElement('button');
         card.type='button';
-        card.className=`space2-item img-pending${isAudio?' space2-audio-card':''}`;
+        card.className=`space2-item img-pending${isAudio?' space2-audio-card':''}${isYouTube?' space2-yt-card':''}`;
         card.dataset.itemId=item.id||'';
         card.innerHTML=`
             ${thumbHtml}
@@ -2230,6 +2234,67 @@ function _renderSpace2GridImpl(){
             card.classList.add('img-loaded');
         }
         refreshLucideIcons();
+        // YouTube inline player
+        if(isYouTube){
+            const shell=card.querySelector('.space2-thumb-shell');
+            const playBtn=card.querySelector('.space2-yt-play-btn');
+            const playerWrap=card.querySelector('.space2-yt-player-wrap');
+            const ytId=extractYouTubeId(item.src||'');
+            if(shell&&playBtn&&playerWrap&&ytId){
+                let ytPlayer=null;
+                let isPlaying=false;
+                const startPlayer=()=>{
+                    if(isPlaying) return;
+                    isPlaying=true;
+                    const thumb=card.querySelector('.space2-yt-thumb');
+                    if(thumb) thumb.style.opacity='0';
+                    if(playBtn) playBtn.style.display='none';
+                    playerWrap.style.display='block';
+                    playerWrap.innerHTML=`<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1&controls=1" frameborder="0" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;position:absolute;inset:0;"></iframe>`;
+                    card.classList.add('yt-playing');
+                    card.removeEventListener('click',openSpace2ItemClick);
+                };
+                const stopPlayer=()=>{
+                    if(!isPlaying) return;
+                    isPlaying=false;
+                    playerWrap.innerHTML='';
+                    playerWrap.style.display='none';
+                    const thumb=card.querySelector('.space2-yt-thumb');
+                    if(thumb) thumb.style.opacity='1';
+                    if(playBtn) playBtn.style.display='';
+                    card.classList.remove('yt-playing');
+                    card.addEventListener('click',openSpace2ItemClick);
+                };
+                const openSpace2ItemClick=()=>openSpace2Item(item.id);
+                playBtn.addEventListener('click',e=>{
+                    e.stopPropagation();
+                    startPlayer();
+                });
+                shell.addEventListener('mouseenter',()=>{
+                    if(isPlaying){
+                        let pauseBtn=shell.querySelector('.space2-yt-pause-btn');
+                        if(!pauseBtn){
+                            pauseBtn=document.createElement('button');
+                            pauseBtn.className='space2-yt-pause-btn';
+                            pauseBtn.setAttribute('aria-label','Pause video');
+                            pauseBtn.innerHTML='<i data-lucide="pause" aria-hidden="true"></i>';
+                            pauseBtn.addEventListener('click',e=>{
+                                e.stopPropagation();
+                                stopPlayer();
+                            });
+                            shell.appendChild(pauseBtn);
+                            refreshLucideIcons();
+                        }
+                    }
+                });
+                shell.addEventListener('mouseleave',()=>{
+                    const pauseBtn=shell.querySelector('.space2-yt-pause-btn');
+                    if(pauseBtn) pauseBtn.remove();
+                });
+            }
+            card.classList.remove('img-pending');
+            card.classList.add('img-loaded');
+        }
         card.addEventListener('click',()=>openSpace2Item(item.id));
         const collectionBtn=card.querySelector('[data-action="collection"]');
         if(collectionBtn){
@@ -3194,14 +3259,15 @@ async function requestSpace2CapturePermission({silent=false}={}){
         if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Mobile capture works without system screen recording access.';
         return true;
     }
-    if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
-        if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Screen capture is not available in this environment.';
-        return false;
+    // Browser: DOM capture works without system permission — just confirm it's available
+    if(!IS_MAC_APP){
+        if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Browser capture uses DOM snapshot — no system permission needed.';
+        return true;
     }
+    // Mac app: try to get system Screen Recording permission
     if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Requesting macOS screen capture access...';
 
     const openMacScreenSettings=()=>{
-        if(!IS_MAC_APP) return;
         const deepLink='x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
         try{
             if(electronShell&&typeof electronShell.openExternal==='function'){
@@ -3213,31 +3279,40 @@ async function requestSpace2CapturePermission({silent=false}={}){
     };
 
     try{
-        if(IS_MAC_APP && electronSystemPreferences && typeof electronSystemPreferences.getMediaAccessStatus==='function'){
+        if(electronSystemPreferences && typeof electronSystemPreferences.getMediaAccessStatus==='function'){
             const status=String(electronSystemPreferences.getMediaAccessStatus('screen')||'').toLowerCase();
             if(status==='granted'){
                 if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Access already granted.';
                 return true;
             }
+            // Try to trigger the system permission prompt
+            if(typeof electronSystemPreferences.askForMediaAccess==='function'){
+                const granted=await electronSystemPreferences.askForMediaAccess('screen');
+                if(granted){
+                    if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Access granted.';
+                    return true;
+                }
+            }
         }
     }catch{}
 
-    let stream=null;
+    // Fallback: try getDisplayMedia which also triggers the macOS permission prompt
     try{
-        stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
-        stream.getTracks().forEach(t=>t.stop());
-        if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Access granted. You can now use region capture.';
-        return true;
+        if(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia){
+            const stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
+            stream.getTracks().forEach(t=>t.stop());
+            if(!silent&&space2CaptureStatus) space2CaptureStatus.textContent='Access granted.';
+            return true;
+        }
     }catch(err){
         console.warn('space2 capture permission request failed',err);
-        if(!silent&&space2CaptureStatus){
-            space2CaptureStatus.textContent='Permission denied. Opening macOS Screen Recording settings...';
-        }
-        openMacScreenSettings();
-        return false;
-    }finally{
-        if(stream) stream.getTracks().forEach(t=>t.stop());
     }
+
+    if(!silent&&space2CaptureStatus){
+        space2CaptureStatus.textContent='Permission denied. Opening macOS Screen Recording settings...';
+    }
+    openMacScreenSettings();
+    return false;
 }
 
 function maybeAutoRequestSpace2CapturePermission(){
@@ -8359,7 +8434,8 @@ async function applySpace2MobileCaptureSelection(){
 
 async function captureSpace2ScreenRegion(rect,{preferDomCapture=false}={}){
     if(!rect||rect.width<4||rect.height<4) throw new Error('Capture area too small');
-    if(preferDomCapture||IS_MOBILE_SHELL) return captureSpace2DomRegion(rect);
+    // Prefer DOM capture everywhere (works in browser + mobile without system permission)
+    if(preferDomCapture||IS_MOBILE_SHELL||!IS_MAC_APP) return captureSpace2DomRegion(rect);
     if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
         throw new Error('Screen capture is not available in this environment');
     }
