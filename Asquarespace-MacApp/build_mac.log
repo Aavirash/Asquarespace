@@ -16,8 +16,12 @@ Created /Users/aavirash/Desktop/After Effects Extension + Script Master/Asquares
   • packaging       platform=darwin arch=x64 electron=32.3.3 appOutDir=dist/mac-universal-x64-temp
   • executing @electron/rebuild  electronVersion=32.3.3 arch=arm64 buildFromSource=false appDir=./
   • installing native dependencies  arch=arm64
-  • cancelled by SIGINT
-  ⨯ Rebuilder failed with exit code: null  failedTask=build stackTrace=Error: Rebuilder failed with exit code: null
-    at ChildProcess.<anonymous> (/Users/aavirash/Desktop/After Effects Extension + Script Master/Asquarespace-MacApp/node_modules/app-builder-lib/src/util/rebuild/rebuild.ts:55:32)
-    at ChildProcess.emit (node:events:508:28)
-    at Process.ChildProcess._handle.onexit (node:internal/child_process:293:12)
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=arm64 electron=32.3.3 appOutDir=dist/mac-universal-arm64-temp
+  • packaging       platform=darwin arch=universal electron=32.3.3 appOutDir=dist/mac-universal
+  • skipped macOS code signing  reason=identity explicitly is set to null
+  • building        target=DMG arch=universal file=dist/Asquarespace-1.0.0-universal.dmg
+  • building        target=macOS zip arch=universal file=dist/Asquarespace-1.0.0-universal-mac.zip
+  • Detected arm64 process, HFS+ is unavailable. Creating dmg with APFS - supports Mac OSX 10.12+
+  • building block map  blockMapFile=dist/Asquarespace-1.0.0-universal.dmg.blockmap
+  • building block map  blockMapFile=dist/Asquarespace-1.0.0-universal-mac.zip.blockmap

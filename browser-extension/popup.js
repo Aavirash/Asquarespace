@@ -268,7 +268,7 @@
       return;
     }
     els.syncXBtn.disabled = true;
-    els.syncXStatus.textContent = 'Starting sync...';
+    els.syncXStatus.textContent = 'Collecting bookmarks...';
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs[0] || !tabs[0].id) {
@@ -276,30 +276,34 @@
         els.syncXBtn.disabled = false;
         return;
       }
+      const isBookmarks = tabs[0].url && tabs[0].url.includes('x.com/i/bookmarks');
+      if (!isBookmarks) {
+        els.syncXStatus.textContent = 'Go to x.com/i/bookmarks, then click sync';
+        els.syncXBtn.disabled = false;
+        return;
+      }
+
       chrome.tabs.sendMessage(tabs[0].id, { action: 'syncXBookmarks' }, (response) => {
         if (chrome.runtime.lastError) {
-          els.syncXStatus.textContent = 'Content script not ready. Reload the page and try again.';
+          els.syncXStatus.textContent = 'Reload the page and try again';
           els.syncXBtn.disabled = false;
           return;
         }
-        if (response && response.urls) {
-          const urls = response.urls;
-          if (urls.length === 0) {
-            els.syncXStatus.textContent = 'No bookmarks found';
-            els.syncXBtn.disabled = false;
-            return;
-          }
-          els.syncXStatus.textContent = `Found ${urls.length} bookmarks — sending to app...`;
-          chrome.runtime.sendMessage({ action: 'importXBookmarks', urls, authState }, (result) => {
+        if (response && response.urls && response.urls.length > 0) {
+          els.syncXStatus.textContent = `Found ${response.urls.length} — syncing to your library...`;
+          chrome.runtime.sendMessage({ action: 'importXBookmarks', urls: response.urls, authState }, (result) => {
             if (result?.success) {
-              els.syncXStatus.textContent = `${result.count} bookmarks synced! Open the app to view.`;
+              els.syncXStatus.textContent = result.count === 0 ? 'All already synced' : `${result.count} bookmarks synced!`;
             } else {
               els.syncXStatus.textContent = 'Sync failed: ' + (result?.error || 'Unknown error');
             }
             els.syncXBtn.disabled = false;
           });
+        } else if (response && response.urls && response.urls.length === 0) {
+          els.syncXStatus.textContent = 'No bookmarks found';
+          els.syncXBtn.disabled = false;
         } else {
-          els.syncXStatus.textContent = 'Sync failed. Try again.';
+          els.syncXStatus.textContent = 'Sync failed — try again';
           els.syncXBtn.disabled = false;
         }
       });

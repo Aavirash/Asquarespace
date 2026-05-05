@@ -101,56 +101,143 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 }
 
 async function importXBookmarks(urls, authState) {
-  const APP_URL = 'https://asquarespace.com';
-  const BATCH_SIZE = 5;
+  const STATE_TABLE = 'user_workspace_state';
+  const X_COLLECTION_NAME = 'X Bookmarks';
 
   try {
-    let appTab = null;
-    const tabs = await chrome.tabs.query({ url: APP_URL + '/*' });
-    if (tabs.length > 0) {
-      appTab = tabs[0];
-      await chrome.tabs.update(appTab.id, { active: true });
-    } else {
-      appTab = await chrome.tabs.create({ url: APP_URL, active: true });
+    // 1. Fetch current state from Supabase
+    const stateResp = await supabaseFetch(
+      `/rest/v1/${STATE_TABLE}?select=*&user_id=eq.${encodeURIComponent(authState.user.id)}&board_key=eq.default%3A%3Aspace2-global`,
+      { method: 'GET' }
+    );
+
+    let existingItems = [];
+    let existingCollections = [];
+    if (Array.isArray(stateResp) && stateResp.length > 0 && stateResp[0]?.space2_state) {
+      existingItems = stateResp[0].space2_state.items || [];
+      existingCollections = stateResp[0].space2_state.collections || [];
     }
 
-    await new Promise((resolve) => {
-      const listener = (tabId, info) => {
-        if (tabId === appTab.id && info.status === 'complete') {
-          chrome.tabs.onUpdated.removeListener(listener);
-          resolve();
+    // 2. Ensure "X Bookmarks" collection exists
+    let xCol = existingCollections.find(c => c.name === X_COLLECTION_NAME);
+    if (!xCol) {
+      xCol = { id: `col-${Date.now()}`, name: X_COLLECTION_NAME, itemIds: [] };
+      existingCollections.push(xCol);
+    }
+
+    // 3. Fetch metadata for each URL and create items
+    const existingUrls = new Set(existingItems.map(i => i.src));
+    const newItems = [];
+    const now = Date.now();
+
+    for (const url of urls) {
+      if (existingUrls.has(url)) continue;
+
+      let meta = { title: '', description: '', image: '' };
+      const isYouTube = /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)/i.test(url);
+
+      if (isYouTube) {
+        const ytId = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        if (ytId) {
+          meta.title = 'YouTube Video';
+          meta.image = `https://img.youtube.com/vi/${ytId[1]}/hqdefault.jpg`;
         }
+      } else {
+        try {
+          meta = await fetchUrlMetadataExt(url);
+        } catch (e) {
+          console.warn('Metadata fetch failed for:', url, e);
+        }
+      }
+
+      const itemId = `item-${now}-${Math.floor(Math.random() * 99999)}`;
+      const item = {
+        id: itemId,
+        src: url,
+        filePath: '',
+        cloudPath: '',
+        browserBlobKey: '',
+        signedUrlExpiresAt: 0,
+        mediaType: isYouTube ? 'youtube' : 'url',
+        thumbnailUrl: meta.image || '',
+        pageUrl: url,
+        title: meta.title || url,
+        description: meta.description || '',
+        collectionIds: [xCol.id],
+        createdAt: now,
+        updatedAt: now,
+        aiMetaState: 'done'
       };
-      chrome.tabs.onUpdated.addListener(listener);
-      setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }, 10000);
+
+      newItems.push(item);
+      xCol.itemIds.push(itemId);
+      existingUrls.add(url);
+    }
+
+    if (newItems.length === 0) {
+      return { success: true, count: 0, message: 'All bookmarks already synced' };
+    }
+
+    // 4. Upsert combined state
+    const updatedState = {
+      items: [...newItems, ...existingItems],
+      collections: existingCollections,
+      savedAt: Date.now()
+    };
+
+    await supabaseFetch(`/rest/v1/${STATE_TABLE}?on_conflict=user_id,board_key`, {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: authState.user.id,
+        board_key: 'default::space2-global',
+        board_id: 'space2-global',
+        project_key: '',
+        canvas_state: {},
+        space2_state: updatedState,
+        updated_at: new Date().toISOString()
+      })
     });
 
-    // Inject URLs via window.postMessage
-    let imported = 0;
-    for (let i = 0; i < urls.length; i += BATCH_SIZE) {
-      const batch = urls.slice(i, i + BATCH_SIZE);
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: appTab.id },
-          func: (urls) => {
-            window.postMessage({ source: 'asq-extension', action: 'importXBookmarks', urls }, '*');
-          },
-          args: [batch],
-        });
-        imported += batch.length;
-        await new Promise(r => setTimeout(r, 500));
-      } catch (e) {
-        console.warn('Batch import failed:', e);
-      }
-    }
-
-    return { success: true, count: imported };
+    return { success: true, count: newItems.length };
   } catch (err) {
     console.error('importXBookmarks error:', err);
     return { success: false, error: err.message };
+  }
+}
+
+async function fetchUrlMetadataExt(url) {
+  // For extension: try to fetch OG tags directly (background has no CORS)
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return { title: '', description: '', image: '' };
+
+    const html = await res.text();
+    const titleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+    const descMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
+    const imgMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+
+    return {
+      title: titleMatch ? titleMatch[1] : '',
+      description: descMatch ? descMatch[1] : '',
+      image: imgMatch ? imgMatch[1] : ''
+    };
+  } catch (e) {
+    clearTimeout(timeout);
+    return { title: '', description: '', image: '' };
   }
 }
           sendResponse({ error: err.message });

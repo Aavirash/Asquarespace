@@ -2117,6 +2117,18 @@ function _renderSpace2GridImpl(){
         if(isYouTube){
             card.classList.remove('img-pending');
             card.classList.add('img-loaded');
+            const ytImg=card.querySelector('.space2-yt-thumb');
+            if(ytImg){
+                ytImg.addEventListener('error',()=>{
+                    ytImg.style.display='none';
+                    const shell=ytImg.closest('.space2-thumb-shell');
+                    if(shell){
+                        shell.style.background='linear-gradient(135deg,color-mix(in srgb,var(--surface-2) 95%,transparent),color-mix(in srgb,var(--accent) 8%,transparent))';
+                        shell.innerHTML+='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><i data-lucide="youtube" style="width:36px;height:36px;stroke:currentColor;fill:none;stroke-width:1.5;opacity:.4;"></i></div>';
+                        if(typeof lucide!=='undefined') lucide.createIcons();
+                    }
+                },{once:true});
+            }
         }
         // For image/gif/url: lazy-load the thumbnail
         if(!isAudio&&!isVideo&&!isYouTube){
