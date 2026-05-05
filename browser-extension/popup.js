@@ -16,13 +16,23 @@
 
   // ── Init ──────────────────────────────────────────────────────
   function init() {
-    chrome.runtime.sendMessage({ action: 'getAuth' }, (resp) => {
-      if (resp.user && resp.token) {
-        authState = { user: resp.user, token: resp.token };
-        showMain();
-      } else {
-        showAuth('passcode');
+    // Restore state: check for pending email (waiting for OTP)
+    chrome.runtime.sendMessage({ action: 'getPendingEmail' }, (pending) => {
+      if (pending && pending.email) {
+        els.email.value = pending.email;
+        showAuth('otp');
+        els.authStatus.textContent = 'Check your email for the code';
+        return;
       }
+      // Check full auth
+      chrome.runtime.sendMessage({ action: 'getAuth' }, (resp) => {
+        if (resp.user && resp.token) {
+          authState = { user: resp.user, token: resp.token };
+          showMain();
+        } else {
+          showAuth('passcode');
+        }
+      });
     });
 
     // Current page info
@@ -91,7 +101,11 @@
     }
     showAuth('email');
     els.authStatus.textContent = 'Passcode accepted. Enter your email to continue.';
-    els.email.focus();
+    // Restore last-used email if available
+    chrome.runtime.sendMessage({ action: 'getLastEmail' }, (result) => {
+      if (result?.email) { els.email.value = result.email; }
+      els.email.focus();
+    });
   }
 
   function handleEmail() {
@@ -100,10 +114,12 @@
     els.authStatus.textContent = 'Sending code...';
     supabase('/auth/v1/otp', {
       method: 'POST',
-      body: JSON.stringify({ email, data: { passcode: authState?.user?.passcode }, create_user: false }),
+      body: JSON.stringify({ email, create_user: false }),
     })
       .then(() => {
-        els.authStatus.textContent = 'Check your email';
+        // Persist pending email so popup can restore after close
+        chrome.runtime.sendMessage({ action: 'setPendingEmail', email });
+        els.authStatus.textContent = 'Check your email for the code';
         showAuth('otp');
       })
       .catch(() => { els.authStatus.textContent = 'Failed to send code'; });
@@ -123,8 +139,11 @@
           els.authStatus.textContent = 'Invalid code';
           return;
         }
-        authState = { user: authState.user, token: resp.access_token };
-        chrome.runtime.sendMessage({ action: 'setAuth', user: authState.user, token: authState.token });
+        // User data is in resp.user or we extract from the token response
+        const user = resp.user || { email };
+        authState = { user, token: resp.access_token };
+        chrome.runtime.sendMessage({ action: 'setAuth', user, token: resp.access_token });
+        chrome.runtime.sendMessage({ action: 'clearPending' });
         showMain();
       })
       .catch(() => { els.authStatus.textContent = 'Verification failed'; });
@@ -132,6 +151,7 @@
 
   function handleSignOut() {
     chrome.runtime.sendMessage({ action: 'clearAuth' });
+    chrome.runtime.sendMessage({ action: 'clearPending' });
     authState = null;
     els.passcode.value = '';
     els.email.value = '';

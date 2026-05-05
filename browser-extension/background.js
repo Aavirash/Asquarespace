@@ -48,6 +48,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
+  if (msg.action === 'getPendingEmail') {
+    chrome.storage.local.get(['asq_pending_email'], (result) => {
+      sendResponse({ email: result.asq_pending_email || null });
+    });
+    return true;
+  }
+  if (msg.action === 'setPendingEmail') {
+    chrome.storage.local.set({ asq_pending_email: msg.email, asq_last_email: msg.email }, () => {
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+  if (msg.action === 'getLastEmail') {
+    chrome.storage.local.get(['asq_last_email'], (result) => {
+      sendResponse({ email: result.asq_last_email || null });
+    });
+    return true;
+  }
+  if (msg.action === 'clearPending') {
+    chrome.storage.local.remove(['asq_pending_email'], () => {
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
   if (msg.action === 'supabaseRequest') {
     supabaseFetch(msg.endpoint, msg.options).then(sendResponse).catch(err => {
       sendResponse({ error: err.message });
