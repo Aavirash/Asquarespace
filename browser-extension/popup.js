@@ -20,20 +20,40 @@
 
   // ── Init ──────────────────────────────────────────────────────
   function init() {
-    chrome.runtime.sendMessage({ action: 'getPendingEmail' }, (pending) => {
-      if (pending && pending.email) {
-        els.email.value = pending.email;
-        showAuth('otp');
-        els.authStatus.textContent = 'Check your email for the code';
+    // First check: are we fully authenticated?
+    chrome.runtime.sendMessage({ action: 'getAuth' }, (resp) => {
+      if (resp.token) {
+        // Token exists - try to restore user
+        authState = { user: resp.user || {}, token: resp.token };
+        // If user has id, go straight to main
+        if (resp.user && resp.user.id) {
+          showMain();
+          return;
+        }
+        // If we have token but no user info, fetch it
+        supabase('/auth/v1/user', { method: 'GET' })
+          .then((userData) => {
+            const user = userData || {};
+            authState.user = user;
+            chrome.runtime.sendMessage({ action: 'setAuth', user, token: authState.token });
+            showMain();
+          })
+          .catch(() => {
+            // Token invalid, start fresh
+            chrome.runtime.sendMessage({ action: 'clearAuth' });
+            showAuth('passcode');
+          });
         return;
       }
-      chrome.runtime.sendMessage({ action: 'getAuth' }, (resp) => {
-        if (resp.user && resp.token) {
-          authState = { user: resp.user, token: resp.token };
-          showMain();
-        } else {
-          showAuth('passcode');
+      // No token - check if waiting for OTP
+      chrome.runtime.sendMessage({ action: 'getPendingEmail' }, (pending) => {
+        if (pending && pending.email) {
+          els.email.value = pending.email;
+          showAuth('otp');
+          els.authStatus.textContent = 'Check your email for the code';
+          return;
         }
+        showAuth('passcode');
       });
     });
 
@@ -133,11 +153,27 @@
     supabase('/auth/v1/verify', { method: 'POST', body: JSON.stringify({ email, token, type: 'email' }) })
       .then((resp) => {
         if (resp.error || !resp.access_token) { els.authStatus.textContent = 'Invalid code'; return; }
-        const user = resp.user || { id: resp.user?.id, email };
-        authState = { user, token: resp.access_token };
-        chrome.runtime.sendMessage({ action: 'setAuth', user, token: resp.access_token });
+        authState = { user: {}, token: resp.access_token };
+        chrome.runtime.sendMessage({ action: 'setAuth', user: null, token: resp.access_token });
         chrome.runtime.sendMessage({ action: 'clearPending' });
-        showMain();
+        // Fetch user info with the token
+        supabase('/auth/v1/user', { method: 'GET' })
+          .then((userData) => {
+            if (userData && userData.id) {
+              authState.user = userData;
+              chrome.runtime.sendMessage({ action: 'setAuth', user: userData, token: resp.access_token });
+            } else {
+              // Fallback: store email as user
+              authState.user = { id: 'ext-' + email, email };
+              chrome.runtime.sendMessage({ action: 'setAuth', user: authState.user, token: resp.access_token });
+            }
+            showMain();
+          })
+          .catch(() => {
+            authState.user = { id: 'ext-' + email, email };
+            chrome.runtime.sendMessage({ action: 'setAuth', user: authState.user, token: resp.access_token });
+            showMain();
+          });
       })
       .catch(() => { els.authStatus.textContent = 'Verification failed'; });
   }

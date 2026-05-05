@@ -5,20 +5,20 @@
   display: none;
   position: fixed;
   z-index: 2147483647;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   border: none;
   background: #ef4027;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 10px rgba(239, 64, 39, 0.35);
   cursor: pointer;
   align-items: center;
   justify-content: center;
-  transition: transform 0.12s ease, opacity 0.15s ease;
-  opacity: 0.92;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+  opacity: 0.95;
 }
 .asq-save-btn:hover {
-  transform: scale(1.12);
+  transform: scale(1.15);
   opacity: 1;
 }
 .asq-save-btn:active {
@@ -32,6 +32,7 @@
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+  pointer-events: none;
 }
 
 /* Collection dropdown */

@@ -5,9 +5,7 @@
   let saveBtn = null;
   let hoveredMedia = null;
   let toast = null;
-  let authCache = null;
-  let collectionsCache = null;
-  let collectionsCacheTime = 0;
+  let btnHovered = false;
 
   // ── Hover save button ─────────────────────────────────────────
   function createSaveButton() {
@@ -16,6 +14,8 @@
     saveBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline d="M17 21v-8H7v8"/><polyline d="M7 3v5h8"/></svg>
     `;
+    saveBtn.addEventListener('mouseenter', () => { btnHovered = true; });
+    saveBtn.addEventListener('mouseleave', () => { btnHovered = false; });
     saveBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -44,17 +44,21 @@
       return;
     }
     saveBtn.style.display = 'flex';
-    // Top-right corner of the element
     const btnW = saveBtn.offsetWidth || 32;
     const btnH = saveBtn.offsetHeight || 32;
     let top = rect.top + 8;
     let left = rect.right - btnW - 8;
-    // Clamp to viewport
     if (left < 4) left = rect.left + 8;
     if (top + btnH > window.innerHeight) top = rect.bottom - btnH - 8;
     if (top < 4) top = rect.top + 8;
     saveBtn.style.top = `${top}px`;
     saveBtn.style.left = `${left}px`;
+  }
+
+  function hideSaveButton() {
+    if (!btnHovered) {
+      saveBtn.style.display = 'none';
+    }
   }
 
   // ── Collection dropdown ───────────────────────────────────────
@@ -130,7 +134,6 @@
 
   function loadCollections() {
     return new Promise((resolve) => {
-      // Use cache if fresh (< 30s)
       if (collectionsCache && Date.now() - collectionsCacheTime < 30000) {
         resolve({ auth: authCache, collections: collectionsCache });
         return;
@@ -154,6 +157,10 @@
   }
 
   // ── Save logic ────────────────────────────────────────────────
+  let collectionsCache = null;
+  let collectionsCacheTime = 0;
+  let authCache = null;
+
   function saveItemToCollection(item, collectionId, auth) {
     loadCollections().then(() => {
       const col = collectionsCache.find(c => c.id === collectionId);
@@ -189,8 +196,6 @@
 
   function upsertState(auth, collections, newItem) {
     const space2Key = 'default::space2-global';
-    const existingItems = collectionsCache ? (collectionsCache.reduce((all, c) => all.concat(c.itemIds || []), [])) : [];
-    // We need to get the existing items array from the state
     chrome.runtime.sendMessage({
       action: 'supabaseRequest',
       endpoint: `/rest/v1/user_workspace_state?select=space2_state&user_id=eq.${encodeURIComponent(auth.user.id)}&board_key=eq.${encodeURIComponent(space2Key)}`,
@@ -257,49 +262,44 @@
     }
   });
 
-  // ── Hover detection for images, videos, svgs ──────────────────
+  // ── Hover detection ───────────────────────────────────────────
   createSaveButton();
 
-  document.addEventListener('mouseover', (e) => {
-    const el = e.target.closest('img, video, svg[data-src], [role="img"]');
-    if (el) {
-      let src = '';
-      if (el.tagName === 'IMG') src = el.src || el.dataset.src || '';
-      else if (el.tagName === 'VIDEO') src = el.poster || el.src || (el.querySelector('source') && el.querySelector('source').src) || '';
-      else if (el.tagName === 'SVG') src = el.dataset.src || '';
-      else src = el.src || el.dataset.src || '';
-      if (src && src.startsWith('http')) {
-        hoveredMedia = { el, src };
-        positionSaveButton(el);
-        return;
-      }
+  function findMediaEl(target) {
+    if (!target) return null;
+    const img = target.closest('img');
+    if (img && img.src && img.src.startsWith('http') && img.width >= 50 && img.height >= 50) return img;
+    const video = target.closest('video');
+    if (video) {
+      const src = video.poster || video.src || (video.querySelector('source') && video.querySelector('source').src) || '';
+      if (src && src.startsWith('http')) return video;
     }
-    // Check parent containers with img children
-    const container = e.target.closest('a, figure, .image-container, .media-wrapper');
-    if (container) {
-      const img = container.querySelector('img');
-      if (img && img.src && img.src.startsWith('http')) {
-        hoveredMedia = { el: img, src: img.src };
-        positionSaveButton(img);
-        return;
-      }
-    }
-    // If no match, hide button
-    if (hoveredMedia) {
-      hoveredMedia = null;
-      saveBtn.style.display = 'none';
-    }
-  }, true);
+    return null;
+  }
 
-  window.addEventListener('scroll', () => {
-    if (saveBtn && hoveredMedia) positionSaveButton(hoveredMedia.el);
+  document.addEventListener('mousemove', (e) => {
+    const media = findMediaEl(e.target);
+    if (media) {
+      hoveredMedia = { el: media, src: media.tagName === 'VIDEO' ? (media.poster || media.src) : media.src };
+      positionSaveButton(media);
+    } else {
+      // Check if mouse is on saveBtn - don't hide if so
+      if (!btnHovered) {
+        hoveredMedia = null;
+        saveBtn.style.display = 'none';
+      }
+    }
   }, { passive: true });
 
-  // Also handle dynamically loaded content via MutationObserver
+  window.addEventListener('scroll', () => {
+    if (saveBtn && hoveredMedia && !btnHovered) positionSaveButton(hoveredMedia.el);
+  }, { passive: true });
+
+  // Clean up if media removed
   const observer = new MutationObserver(() => {
     if (hoveredMedia && !document.contains(hoveredMedia.el)) {
       hoveredMedia = null;
-      saveBtn.style.display = 'none';
+      if (!btnHovered) saveBtn.style.display = 'none';
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
