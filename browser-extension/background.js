@@ -37,8 +37,12 @@ function extractFileName(url) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   try {
     if (msg.action === 'getAuth') {
-      chrome.storage.local.get(['asq_user', 'asq_token'], (result) => {
-        sendResponse({ user: result.asq_user || null, token: result.asq_token || null });
+      chrome.storage.local.get(['asq_user', 'asq_token', 'asq_refresh_token'], (result) => {
+        sendResponse({
+          user: result.asq_user || null,
+          token: result.asq_token || null,
+          refreshToken: result.asq_refresh_token || null,
+        });
       });
       return true;
     }
@@ -86,8 +90,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       supabaseFetch(msg.endpoint, msg.options)
         .then((data) => sendResponse(data))
         .catch(async (err) => {
-          // Handle JWT expiry - try refreshing token
-          if (err.message && err.message.includes('JWT expired')) {
+          if (err.message && (err.message.includes('JWT expired') || err.message.includes('401'))) {
             const refreshed = await tryRefreshToken();
             if (refreshed) {
               supabaseFetch(msg.endpoint, msg.options)

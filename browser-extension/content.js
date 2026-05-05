@@ -9,9 +9,17 @@
 
   // ── Hover save button ─────────────────────────────────────────
   function createSaveButton() {
-    saveBtn = document.createElement('div');
-    saveBtn.className = 'asq-save-btn';
-    saveBtn.innerHTML = `<div class="asq-btn-sheen"></div><img src="${chrome.runtime.getURL('assets/icon-32.png')}" alt="Save">`;
+    try {
+      saveBtn = document.createElement('div');
+      saveBtn.className = 'asq-save-btn';
+      saveBtn.innerHTML = `<div class="asq-btn-sheen"></div><img src="${chrome.runtime.getURL('assets/icon-32.png')}" alt="Save">`;
+    } catch (e) {
+      if (e.message && e.message.includes('context invalidated')) {
+        console.warn('[asq] Extension reloaded, content script stale — reload page to reactivate');
+        return;
+      }
+      throw e;
+    }
     saveBtn.addEventListener('mouseenter', () => { btnHovered = true; });
     saveBtn.addEventListener('mouseleave', () => { btnHovered = false; });
     saveBtn.addEventListener('click', (e) => {
@@ -78,7 +86,7 @@
       const loading = dd.querySelector('.asq-dd-loading');
       if (loading) loading.remove();
       if (error) {
-        dd.innerHTML += `<div class="asq-dd-empty" style="color:rgba(239,64,39,0.7)">Error: ${error.substring(0, 60)}...</div>`;
+        dd.innerHTML += `<div class="asq-dd-empty" style="color:rgba(239,64,39,0.7)">${error.includes('JWT') ? 'Session expired — reopen popup to sign in again' : 'Error: ' + error.substring(0, 60)}</div>`;
         return;
       }
       if (!auth || !auth.token) {
@@ -134,6 +142,16 @@
     document.querySelectorAll('.asq-dropdown').forEach(d => d.remove());
   }
 
+  // ── Safe messaging wrapper ─────────────────────────────────────
+  function sendBg(msg, cb) {
+    try {
+      chrome.runtime.sendMessage(msg, cb);
+    } catch (e) {
+      console.warn('[asq] Extension context invalidated:', e.message);
+      cb && cb({ error: 'Extension reloaded — reload page' });
+    }
+  }
+
   // ── BroadcastChannel for cross-tab sync ────────────────────────
   const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('asq-space2-sync') : null;
 
@@ -143,7 +161,7 @@
         resolve({ auth: authCache, collections: collectionsCache });
         return;
       }
-      chrome.runtime.sendMessage({ action: 'getAuth' }, (auth) => {
+      sendBg({ action: 'getAuth' }, (auth) => {
         if (!auth || !auth.token) {
           authCache = auth;
           resolve({ auth, collections: [] });
@@ -152,13 +170,14 @@
         authCache = auth;
         const space2Key = 'default::space2-global';
         const endpoint = `/rest/v1/user_workspace_state?select=space2_state&user_id=eq.${encodeURIComponent(auth.user.id)}&board_key=eq.${encodeURIComponent(space2Key)}`;
-        chrome.runtime.sendMessage({ action: 'supabaseRequest', endpoint, options: { method: 'GET' } }, (resp) => {
+        sendBg({ action: 'supabaseRequest', endpoint, options: { method: 'GET' } }, (resp) => {
           if (resp && resp.error) {
             console.error('loadCollections GET error:', resp);
+            const errMsg = typeof resp.error === 'string' ? resp.error : (resp.error.message || JSON.stringify(resp.error));
             authCache = auth;
             collectionsCache = [];
             collectionsCacheTime = Date.now();
-            resolve({ auth, collections: [], error: resp.error });
+            resolve({ auth, collections: [], error: errMsg });
             return;
           }
           const space2State = (Array.isArray(resp) && resp.length > 0 && resp[0]?.space2_state) ? resp[0].space2_state : null;
@@ -215,7 +234,7 @@
     const space2Key = 'default::space2-global';
 
     // First fetch existing state
-    chrome.runtime.sendMessage({
+    sendBg({
       action: 'supabaseRequest',
       endpoint: `/rest/v1/user_workspace_state?select=space2_state&user_id=eq.${encodeURIComponent(userId)}&board_key=eq.${encodeURIComponent(space2Key)}`,
       options: { method: 'GET' },
@@ -232,7 +251,7 @@
         collections,
         savedAt: Date.now(),
       };
-      chrome.runtime.sendMessage({
+      sendBg({
         action: 'supabaseRequest',
         endpoint: '/rest/v1/user_workspace_state?on_conflict=user_id,board_key',
         options: {
