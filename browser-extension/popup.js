@@ -53,7 +53,7 @@
     els.passcodeBtn.addEventListener('click', handlePasscode);
     els.emailBtn.addEventListener('click', handleEmail);
     els.otpBtn.addEventListener('click', handleOtp);
-    els.changeEmail.addEventListener('click', () => showAuth('passcode'));
+    els.changeEmail.addEventListener('click', () => showAuth('email'));
     els.signOut.addEventListener('click', handleSignOut);
     els.saveBtn.addEventListener('click', handleSavePage);
     els.newColBtn.addEventListener('click', handleNewCollection);
@@ -80,23 +80,18 @@
     loadCollections();
   }
 
+  const APP_PASSCODE = '24176882';
+
   function handlePasscode() {
     const code = els.passcode.value.trim();
     if (!code) return;
-    els.authStatus.textContent = 'Verifying...';
-    supabase('/rest/v1/users?select=*&passcode=eq.' + encodeURIComponent(code), { method: 'GET' })
-      .then((resp) => {
-        if (resp.error || !resp.length) {
-          els.authStatus.textContent = 'Invalid passcode';
-          return;
-        }
-        // Start email OTP flow
-        const user = resp[0];
-        authState = { user };
-        showAuth('email');
-        els.email.value = user.email || '';
-      })
-      .catch((err) => { els.authStatus.textContent = 'Connection error'; });
+    if (code !== APP_PASSCODE) {
+      els.authStatus.textContent = 'Invalid passcode';
+      return;
+    }
+    showAuth('email');
+    els.authStatus.textContent = 'Passcode accepted. Enter your email to continue.';
+    els.email.focus();
   }
 
   function handleEmail() {
