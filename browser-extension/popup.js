@@ -289,17 +289,17 @@
           els.syncXBtn.disabled = false;
           return;
         }
-        if (response && response.urls && response.urls.length > 0) {
-          els.syncXStatus.textContent = `Found ${response.urls.length} — syncing to your library...`;
-          chrome.runtime.sendMessage({ action: 'importXBookmarks', urls: response.urls, authState }, (result) => {
+        if (response && response.tweets && response.tweets.length > 0) {
+          els.syncXStatus.textContent = `Found ${response.tweets.length} — syncing media to your library...`;
+          chrome.runtime.sendMessage({ action: 'importXBookmarks', tweets: response.tweets, authState }, (result) => {
             if (result?.success) {
-              els.syncXStatus.textContent = result.count === 0 ? 'All already synced' : `${result.count} bookmarks synced!`;
+              els.syncXStatus.textContent = result.count === 0 ? 'All already synced' : `${result.count} items synced!`;
             } else {
               els.syncXStatus.textContent = 'Sync failed: ' + (result?.error || 'Unknown error');
             }
             els.syncXBtn.disabled = false;
           });
-        } else if (response && response.urls && response.urls.length === 0) {
+        } else if (response && response.tweets && response.tweets.length === 0) {
           els.syncXStatus.textContent = 'No bookmarks found';
           els.syncXBtn.disabled = false;
         } else {

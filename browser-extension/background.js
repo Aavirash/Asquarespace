@@ -111,7 +111,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
     if (msg.action === 'importXBookmarks') {
-      importXBookmarks(msg.urls, msg.authState)
+      importXBookmarks(msg.tweets, msg.authState)
         .then((result) => sendResponse(result))
         .catch((err) => sendResponse({ success: false, error: err.message }));
       return true;
@@ -199,13 +199,12 @@ async function tryRefreshToken() {
 }
 
 // ── X Bookmarks import ─────────────────────────────────────────────────────
-async function importXBookmarks(urls, authState) {
+async function importXBookmarks(tweets, authState) {
   const STATE_TABLE = 'user_workspace_state';
   const X_COLLECTION_NAME = 'X Bookmarks';
 
   try {
-    // Get user ID from storage (more reliable than popup's authState)
-    const stored = await new Promise(r => chrome.storage.local.get(['asq_user', 'asq_token'], r));
+    const stored = await new Promise(r => chrome.storage.local.get(['asq_user'], r));
     const userId = stored.asq_user?.id || authState?.user?.id;
     if (!userId) return { success: false, error: 'Not signed in' };
 
@@ -229,53 +228,116 @@ async function importXBookmarks(urls, authState) {
       existingCollections.push(xCol);
     }
 
-    // 3. Create items for new URLs
-    const existingUrls = new Set(existingItems.map(i => i.src));
+    // 3. Create items from tweet media
+    const existingSrcs = new Set(existingItems.map(i => i.src));
     const newItems = [];
     const now = Date.now();
 
-    for (const url of urls) {
-      if (existingUrls.has(url)) continue;
+    for (const tweet of tweets) {
+      let itemCount = 0;
 
-      let meta = { title: '', description: '', image: '' };
-      const isYouTube = /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)/i.test(url);
-
-      if (isYouTube) {
-        const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-        if (ytMatch) {
-          meta.title = 'YouTube Video';
-          meta.image = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
-        }
-      } else {
-        try {
-          meta = await fetchUrlMetadataExt(url);
-        } catch (e) {
-          console.warn('Metadata fetch failed for:', url, e);
-        }
+      // Images — each image becomes a separate grid item
+      for (const imgUrl of tweet.images) {
+        if (existingSrcs.has(imgUrl)) continue;
+        const itemId = `ximg-${tweet.id}-${itemCount}-${Math.floor(Math.random() * 9999)}`;
+        newItems.push({
+          id: itemId,
+          src: imgUrl,
+          filePath: '',
+          cloudPath: '',
+          browserBlobKey: '',
+          signedUrlExpiresAt: 0,
+          mediaType: 'image',
+          thumbnailUrl: imgUrl,
+          pageUrl: tweet.tweetLink,
+          title: `${tweet.author} (${tweet.handle})`,
+          description: tweet.text,
+          collectionIds: [xCol.id],
+          createdAt: now - (itemCount * 1000),
+          updatedAt: now - (itemCount * 1000),
+          aiMetaState: 'done'
+        });
+        existingSrcs.add(imgUrl);
+        xCol.itemIds.push(itemId);
+        itemCount++;
       }
 
-      const itemId = `item-${now}-${Math.floor(Math.random() * 99999)}`;
-      const item = {
-        id: itemId,
-        src: url,
-        filePath: '',
-        cloudPath: '',
-        browserBlobKey: '',
-        signedUrlExpiresAt: 0,
-        mediaType: isYouTube ? 'youtube' : 'url',
-        thumbnailUrl: meta.image || '',
-        pageUrl: url,
-        title: meta.title || url,
-        description: meta.description || '',
-        collectionIds: [xCol.id],
-        createdAt: now,
-        updatedAt: now,
-        aiMetaState: 'done'
-      };
+      // Videos
+      for (const videoUrl of tweet.videos) {
+        if (existingSrcs.has(videoUrl)) continue;
+        const itemId = `xvid-${tweet.id}-${itemCount}-${Math.floor(Math.random() * 9999)}`;
+        newItems.push({
+          id: itemId,
+          src: videoUrl,
+          filePath: '',
+          cloudPath: '',
+          browserBlobKey: '',
+          signedUrlExpiresAt: 0,
+          mediaType: 'video',
+          thumbnailUrl: '',
+          pageUrl: tweet.tweetLink,
+          title: `${tweet.author} (${tweet.handle})`,
+          description: tweet.text,
+          collectionIds: [xCol.id],
+          createdAt: now - (itemCount * 1000),
+          updatedAt: now - (itemCount * 1000),
+          aiMetaState: 'done'
+        });
+        existingSrcs.add(videoUrl);
+        xCol.itemIds.push(itemId);
+        itemCount++;
+      }
 
-      newItems.push(item);
-      xCol.itemIds.push(itemId);
-      existingUrls.add(url);
+      // GIFs
+      for (const gifUrl of tweet.gifs) {
+        if (existingSrcs.has(gifUrl)) continue;
+        const itemId = `xgif-${tweet.id}-${itemCount}-${Math.floor(Math.random() * 9999)}`;
+        newItems.push({
+          id: itemId,
+          src: gifUrl,
+          filePath: '',
+          cloudPath: '',
+          browserBlobKey: '',
+          signedUrlExpiresAt: 0,
+          mediaType: 'gif',
+          thumbnailUrl: gifUrl,
+          pageUrl: tweet.tweetLink,
+          title: `${tweet.author} (${tweet.handle})`,
+          description: tweet.text,
+          collectionIds: [xCol.id],
+          createdAt: now - (itemCount * 1000),
+          updatedAt: now - (itemCount * 1000),
+          aiMetaState: 'done'
+        });
+        existingSrcs.add(gifUrl);
+        xCol.itemIds.push(itemId);
+        itemCount++;
+      }
+
+      // If no media at all, create a URL item for the tweet
+      if (itemCount === 0) {
+        if (existingSrcs.has(tweet.tweetLink)) continue;
+        const itemId = `xtweet-${tweet.id}-${Math.floor(Math.random() * 9999)}`;
+        newItems.push({
+          id: itemId,
+          src: tweet.tweetLink,
+          filePath: '',
+          cloudPath: '',
+          browserBlobKey: '',
+          signedUrlExpiresAt: 0,
+          mediaType: 'url',
+          thumbnailUrl: '',
+          pageUrl: tweet.tweetLink,
+          title: `${tweet.author} (${tweet.handle})`,
+          description: tweet.text || tweet.tweetLink,
+          collectionIds: [xCol.id],
+          createdAt: now,
+          updatedAt: now,
+          aiMetaState: 'done'
+        });
+        existingSrcs.add(tweet.tweetLink);
+        xCol.itemIds.push(itemId);
+      }
     }
 
     if (newItems.length === 0) {
@@ -306,34 +368,5 @@ async function importXBookmarks(urls, authState) {
   } catch (err) {
     console.error('importXBookmarks error:', err);
     return { success: false, error: err.message };
-  }
-}
-
-async function fetchUrlMetadataExt(url) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-      signal: controller.signal,
-      redirect: 'follow'
-    });
-    clearTimeout(timeout);
-    if (!res.ok) return { title: '', description: '', image: '' };
-    const html = await res.text();
-    const titleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
-      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
-    const descMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
-      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
-    const imgMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-    return {
-      title: titleMatch ? titleMatch[1] : '',
-      description: descMatch ? descMatch[1] : '',
-      image: imgMatch ? imgMatch[1] : ''
-    };
-  } catch (e) {
-    clearTimeout(timeout);
-    return { title: '', description: '', image: '' };
   }
 }
