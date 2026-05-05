@@ -55,7 +55,16 @@
     els.passcodeBtn.addEventListener('click', handlePasscode);
     els.emailBtn.addEventListener('click', handleEmail);
     els.otpBtn.addEventListener('click', handleOtp);
-    els.changeEmail.addEventListener('click', () => showAuth('email'));
+    els.changeEmail.addEventListener('click', () => {
+      chrome.runtime.sendMessage({ action: 'clearPending' });
+      showAuth('email');
+      els.authStatus.textContent = 'Enter a different email';
+    });
+    const resendBtn = document.getElementById('auth-resend-btn');
+    if (resendBtn) resendBtn.addEventListener('click', () => {
+      const email = els.email.value.trim();
+      if (email) sendOtpCode(email);
+    });
     els.signOut.addEventListener('click', handleSignOut);
     els.saveBtn.addEventListener('click', handleSavePage);
     els.newColBtn.addEventListener('click', handleNewCollection);
@@ -94,14 +103,26 @@
   function handleEmail() {
     const email = els.email.value.trim();
     if (!email) return;
+    // Save pending BEFORE request so reload doesn't lose state
+    chrome.runtime.sendMessage({ action: 'setPendingEmail', email });
+    sendOtpCode(email);
+  }
+
+  function sendOtpCode(email) {
     els.authStatus.textContent = 'Sending code...';
     supabase('/auth/v1/otp', { method: 'POST', body: JSON.stringify({ email, create_user: true }) })
-      .then(() => {
-        chrome.runtime.sendMessage({ action: 'setPendingEmail', email });
-        els.authStatus.textContent = 'Check your email';
+      .then((resp) => {
+        if (resp && resp.error) {
+          els.authStatus.textContent = 'Error: ' + (resp.error.message || resp.error);
+          return;
+        }
+        els.authStatus.textContent = 'Code sent. Check your inbox.';
         showAuth('otp');
       })
-      .catch(() => { els.authStatus.textContent = 'Failed to send code'; });
+      .catch((err) => {
+        els.authStatus.textContent = 'Failed: ' + (err.message || err);
+        console.error('OTP error:', err);
+      });
   }
 
   function handleOtp() {
