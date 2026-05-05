@@ -9,11 +9,12 @@
   height: 34px;
   border-radius: 8px;
   border: none;
-  background: #ef4027;
+  background-color: #ef4027;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
   box-shadow: 0 2px 10px rgba(239, 64, 39, 0.3);
   cursor: pointer;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -26,18 +27,6 @@
 }
 .asq-save-btn:active {
   transform: scale(0.96);
-}
-.asq-save-btn svg {
-  width: 18px;
-  height: 18px;
-  stroke: #fff;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  pointer-events: none;
-  position: relative;
-  z-index: 1;
 }
 
 /* Sheen overlay */
