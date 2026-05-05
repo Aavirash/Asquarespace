@@ -229,8 +229,15 @@
 
   function renderCollections() {
     els.collectionsList.innerHTML = '';
+    const allCount = rawStateData && rawStateData.space2_state ? (rawStateData.space2_state.items || []).length : 0;
+    const allBtn = document.createElement('button');
+    allBtn.className = 'col-item';
+    allBtn.innerHTML = `<span>All Items</span><span class="col-count">${allCount}</span>`;
+    allBtn.addEventListener('click', () => savePageToCollection('__all__'));
+    els.collectionsList.appendChild(allBtn);
+
     if (collections.length === 0) {
-      els.collectionsList.innerHTML = '<div class="section-label" style="padding:8px 0;color:rgba(228,236,255,0.35)">No collections yet</div>';
+      els.collectionsList.innerHTML += '<div class="section-label" style="padding:8px 0;color:rgba(228,236,255,0.35)">No custom collections yet</div>';
     } else {
       collections.forEach(col => {
         const btn = document.createElement('button');
@@ -254,6 +261,20 @@
   }
 
   function savePageToCollection(collectionId) {
+    if (collectionId === '__all__') {
+      const url = els.pageTitle.dataset.url || '';
+      const newItem = {
+        id: `item-${Date.now()}-${Math.floor(Math.random() * 99999)}`,
+        src: url, filePath: '', cloudPath: '', browserBlobKey: '',
+        signedUrlExpiresAt: 0, mediaType: 'url', thumbnailUrl: els.pageThumb.src || '',
+        pageUrl: url, title: els.pageTitle.textContent, description: '',
+        collectionIds: [], createdAt: Date.now(), updatedAt: Date.now(),
+      };
+      const existingItems = rawStateData?.space2_state?.items || [];
+      const updatedState = { items: [newItem].concat(existingItems), collections, savedAt: Date.now() };
+      upsertState(updatedState).then(() => { renderCollections(); setTimeout(() => window.close(), 800); }).catch(() => { alert('Save failed'); });
+      return;
+    }
     const col = collections.find(c => c.id === collectionId);
     if (!col) return;
     const url = els.pageTitle.dataset.url || '';
@@ -266,7 +287,8 @@
     };
     col.itemIds = col.itemIds || [];
     col.itemIds.push(newItem.id);
-    const updatedState = { items: (rawStateData?.space2_state?.items || []).concat([newItem]), collections, savedAt: Date.now() };
+    const existingItems = rawStateData?.space2_state?.items || [];
+    const updatedState = { items: [newItem].concat(existingItems), collections, savedAt: Date.now() };
 
     upsertState(updatedState)
       .then(() => { renderCollections(); setTimeout(() => window.close(), 800); })

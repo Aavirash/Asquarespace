@@ -36,7 +36,11 @@
         }
         const pageUrl = window.location.href;
         const title = el.alt || el.title || extractFileName(src);
-        openCollectionDropdown(saveBtn, { src, pageUrl, title });
+        openCollectionDropdown(saveBtn, {
+          src, pageUrl, title,
+          width: el.naturalWidth || el.videoWidth || el.offsetWidth || 0,
+          height: el.naturalHeight || el.videoHeight || el.offsetHeight || 0,
+        });
       }
     });
     document.body.appendChild(saveBtn);
@@ -94,7 +98,15 @@
         return;
       }
       if (!collections || collections.length === 0) {
-        dd.innerHTML += '<div class="asq-dd-empty">No collections</div>';
+        // Add "All Items" option even when no custom collections exist
+        const allBtn = document.createElement('button');
+        allBtn.className = 'asq-dd-item';
+        allBtn.textContent = 'All Items';
+        allBtn.addEventListener('click', () => {
+          saveItemToCollection(item, '__all__', auth);
+          dd.remove();
+        });
+        dd.appendChild(allBtn);
         const newBtn = document.createElement('button');
         newBtn.className = 'asq-dd-item asq-dd-new';
         newBtn.textContent = '+ New collection';
@@ -107,6 +119,15 @@
         });
         dd.appendChild(newBtn);
       } else {
+        // "All Items" at the very top
+        const allBtn = document.createElement('button');
+        allBtn.className = 'asq-dd-item';
+        allBtn.textContent = 'All Items';
+        allBtn.addEventListener('click', () => {
+          saveItemToCollection(item, '__all__', auth);
+          dd.remove();
+        });
+        dd.appendChild(allBtn);
         collections.forEach(col => {
           const btn = document.createElement('button');
           btn.className = 'asq-dd-item';
@@ -196,11 +217,18 @@
 
   function saveItemToCollection(item, collectionId, auth) {
     loadCollections().then(() => {
-      const col = collectionsCache.find(c => c.id === collectionId);
-      if (!col) { showToast('Collection not found'); return; }
-      const newItem = buildItem(item, [collectionId]);
-      col.itemIds = col.itemIds || [];
-      col.itemIds.push(newItem.id);
+      // "__all__" means no specific collection — save to main space
+      const targetColIds = (collectionId === '__all__') ? [] : [collectionId];
+      if (collectionId !== '__all__') {
+        const col = collectionsCache.find(c => c.id === collectionId);
+        if (!col) { showToast('Collection not found'); return; }
+        col.itemIds = col.itemIds || [];
+      }
+      const newItem = buildItem(item, targetColIds);
+      if (collectionId !== '__all__') {
+        const col = collectionsCache.find(c => c.id === collectionId);
+        col.itemIds.push(newItem.id);
+      }
       upsertState(auth, collectionsCache, newItem);
     });
   }
@@ -223,6 +251,7 @@
       signedUrlExpiresAt: 0, mediaType: detectMediaType(item.src),
       thumbnailUrl: item.src, pageUrl: item.pageUrl,
       title: item.title, description: '',
+      width: item.width || 0, height: item.height || 0,
       collectionIds, createdAt: Date.now(), updatedAt: Date.now(),
     };
   }
@@ -247,7 +276,7 @@
       const existingItems = (Array.isArray(resp) && resp.length > 0 && resp[0]?.space2_state)
         ? (resp[0].space2_state.items || []) : [];
       const updatedState = {
-        items: existingItems.concat([newItem]),
+        items: [newItem].concat(existingItems),
         collections,
         savedAt: Date.now(),
       };

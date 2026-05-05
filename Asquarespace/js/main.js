@@ -2032,7 +2032,7 @@ function _renderSpace2GridImpl(){
                          mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':'';
         const thumbHtml=isAudio
             ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon"><i data-lucide="music" aria-hidden="true"></i></div></div>`
-            :`<div class="space2-thumb-shell">
+            :`<div class="space2-thumb-shell"${item&&item.width&&item.height?` style="aspect-ratio:${item.width}/${item.height}"`:''}>
                 ${isVideo
                     ?`<video class="space2-video-thumb" src="${escapeHtml(thumbSrc)}" muted loop playsinline preload="metadata" autoplay></video>`
                     :`<img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
