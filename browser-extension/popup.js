@@ -20,12 +20,35 @@
 
   // ── Init ──────────────────────────────────────────────────────
   function init() {
-    // First check: are we fully authenticated?
-    chrome.runtime.sendMessage({ action: 'getAuth' }, (resp) => {
-      if (resp.token) {
+    // Ensure at least auth screen shows by default
+    showAuth('passcode');
+
+    try {
+      chrome.runtime.sendMessage({ action: 'getAuth' }, (resp) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[popup] Extension context invalidated — close and reopen popup');
+          showAuth('passcode');
+          return;
+        }
+        if (!resp || !resp.token) {
+          // No token - check if waiting for OTP
+          try {
+            chrome.runtime.sendMessage({ action: 'getPendingEmail' }, (pending) => {
+              if (chrome.runtime.lastError || !pending || !pending.email) {
+                showAuth('passcode');
+                return;
+              }
+              els.email.value = pending.email;
+              showAuth('otp');
+              els.authStatus.textContent = 'Check your email for the code';
+            });
+          } catch (e) {
+            showAuth('passcode');
+          }
+          return;
+        }
         // Token exists - try to restore user
         authState = { user: resp.user || {}, token: resp.token, refreshToken: resp.refreshToken || null };
-        // If user has id, go straight to main
         if (resp.user && resp.user.id) {
           showMain();
           return;
@@ -39,23 +62,13 @@
             showMain();
           })
           .catch(() => {
-            // Token invalid, start fresh
             chrome.runtime.sendMessage({ action: 'clearAuth' });
             showAuth('passcode');
           });
-        return;
-      }
-      // No token - check if waiting for OTP
-      chrome.runtime.sendMessage({ action: 'getPendingEmail' }, (pending) => {
-        if (pending && pending.email) {
-          els.email.value = pending.email;
-          showAuth('otp');
-          els.authStatus.textContent = 'Check your email for the code';
-          return;
-        }
-        showAuth('passcode');
       });
-    });
+    } catch (e) {
+      showAuth('passcode');
+    }
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
