@@ -7229,40 +7229,6 @@ window.addEventListener('load',()=>requestAnimationFrame(()=>updateSpaceSlider({
 window.addEventListener('resize',()=>{requestAnimationFrame(()=>updateSpaceSlider({animate:false}));updateBottomBarCompactUi();});
 window.addEventListener('orientationchange',()=>{requestAnimationFrame(()=>updateSpaceSlider({animate:false}));setTimeout(()=>updateSpaceSlider({animate:false}),120);});
 
-// ── Extension: X Bookmarks Import Handler ──────────────────────────────────
-async function importXBookmarksFromExtension(urls){
-    const X_COLLECTION_NAME='X Bookmarks';
-    let col=space2State.collections.find(c=>c.name===X_COLLECTION_NAME);
-    if(!col){
-        col={id:`col-${Date.now()}`,name:X_COLLECTION_NAME,itemIds:[]};
-        space2State.collections.push(col);
-    }
-    for(const url of urls){
-        await importUrlToSpace2(url);
-        const lastItem=space2State.items[0];
-        if(lastItem&&!lastItem.collectionIds.includes(col.id)){
-            lastItem.collectionIds.push(col.id);
-            col.itemIds.push(lastItem.id);
-        }
-    }
-    saveSpace2State(undefined,undefined,{skipCloudSync:true});
-    renderSpace2Collections();
-    renderSpace2Grid();
-    syncSpace2StateToSupabase({force:true,reason:'x-bookmarks-import'}).catch(err=>console.warn('x bookmarks sync failed',err));
-}
-
-// Listen for messages from the browser extension
-window.addEventListener('message',(event)=>{
-    if(event.source!==window||!event.data||event.data.source!=='asq-extension') return;
-    if(event.data.action==='importXBookmarks'&&event.data.urls){
-        importXBookmarksFromExtension(event.data.urls).then(()=>{
-            window.postMessage({source:'asq-extension-response',action:'importXBookmarks',success:true},'*');
-        }).catch(err=>{
-            console.error('x bookmarks import error:',err);
-            window.postMessage({source:'asq-extension-response',action:'importXBookmarks',success:false,error:err.message},'*');
-        });
-    }
-});
 window.addEventListener('orientationchange',()=>{requestAnimationFrame(()=>updateSpaceSlider({animate:false}));setTimeout(()=>updateSpaceSlider({animate:false}),120);});
 if(window.visualViewport){
     window.visualViewport.addEventListener('resize',()=>requestAnimationFrame(()=>updateSpaceSlider({animate:false})));

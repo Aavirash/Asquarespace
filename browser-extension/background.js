@@ -97,17 +97,121 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 .then((data) => sendResponse(data))
                 .catch((err2) => sendResponse({ error: err2.message }));
               return;
+            }
+          }
+          sendResponse({ error: err.message });
+        });
+      return true;
+    }
+    if (msg.action === 'showToast' && sender.tab) {
+      try {
+        chrome.tabs.sendMessage(sender.tab.id, { action: 'showToast', message: msg.message });
+      } catch (e) {}
+      sendResponse({ ok: true });
+      return true;
+    }
+    if (msg.action === 'importXBookmarks') {
+      importXBookmarks(msg.urls, msg.authState)
+        .then((result) => sendResponse(result))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true;
+    }
+  } catch (e) {
+    console.error('background onMessage error:', e);
+    sendResponse({ error: e.message });
+  }
+  return false;
+});
+
+// ── Supabase helpers ────────────────────────────────────────────────────────
+async function supabaseFetch(endpoint, options = {}) {
+  const { asq_token, asq_refresh_token } = await new Promise(r => chrome.storage.local.get(['asq_token', 'asq_refresh_token'], r));
+  const headers = {
+    'Content-Type': 'application/json',
+    'apikey': SUPABASE_ANON_KEY,
+    ...(options.headers || {}),
+  };
+  if (asq_token) {
+    headers['Authorization'] = `Bearer ${asq_token}`;
+  }
+  if (options.method === 'POST') {
+    headers['Prefer'] = 'resolution=merge-duplicates,return=minimal';
+  }
+  console.log(`[supabase] ${options.method} ${endpoint}`);
+  const res = await fetch(`${SUPABASE_URL}${endpoint}`, { ...options, headers });
+  console.log(`[supabase] ${res.status} ${res.statusText}`);
+
+  // If JWT expired, try refresh once then retry
+  if (res.status === 401) {
+    const errText = await res.text().catch(() => '');
+    if (errText.includes('JWT expired')) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        // Retry with new token
+        const newHeaders = { ...headers };
+        const newToken = await new Promise(r => chrome.storage.local.get(['asq_token'], d => r(d.asq_token)));
+        if (newToken) newHeaders['Authorization'] = `Bearer ${newToken}`;
+        const retryRes = await fetch(`${SUPABASE_URL}${endpoint}`, { ...options, headers: newHeaders });
+        if (retryRes.status === 204) return {};
+        return retryRes.json().catch(() => null);
+      }
+    }
+    throw new Error(`HTTP ${res.status}: ${errText}`);
+  }
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error(`[supabase] Error:`, errText);
+    throw new Error(`HTTP ${res.status}: ${errText || res.statusText}`);
+  }
+  if (res.status === 204) return {};
+  return res.json().catch(() => null);
+}
+
+async function tryRefreshToken() {
+  const { asq_refresh_token } = await new Promise(r => chrome.storage.local.get(['asq_refresh_token'], r));
+  if (!asq_refresh_token) {
+    console.warn('[auth] No refresh token stored');
+    return false;
+  }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+      body: JSON.stringify({ refresh_token: asq_refresh_token }),
+    });
+    if (!res.ok) {
+      console.error('[auth] Refresh failed:', res.status);
+      return false;
+    }
+    const session = await res.json();
+    await new Promise(r => chrome.storage.local.set({
+      asq_token: session.access_token,
+      asq_refresh_token: session.refresh_token,
+      asq_user: session.user,
+    }, r));
+    console.log('[auth] Token refreshed successfully');
+    return true;
+  } catch (e) {
+    console.error('[auth] Refresh error:', e);
+    return false;
   }
 }
 
+// ── X Bookmarks import ─────────────────────────────────────────────────────
 async function importXBookmarks(urls, authState) {
   const STATE_TABLE = 'user_workspace_state';
   const X_COLLECTION_NAME = 'X Bookmarks';
 
   try {
-    // 1. Fetch current state from Supabase
+    // Get user ID from storage (more reliable than popup's authState)
+    const stored = await new Promise(r => chrome.storage.local.get(['asq_user', 'asq_token'], r));
+    const userId = stored.asq_user?.id || authState?.user?.id;
+    if (!userId) return { success: false, error: 'Not signed in' };
+
+    // 1. Fetch current state
     const stateResp = await supabaseFetch(
-      `/rest/v1/${STATE_TABLE}?select=*&user_id=eq.${encodeURIComponent(authState.user.id)}&board_key=eq.default%3A%3Aspace2-global`,
+      `/rest/v1/${STATE_TABLE}?select=*&user_id=eq.${encodeURIComponent(userId)}&board_key=eq.default%3A%3Aspace2-global`,
       { method: 'GET' }
     );
 
@@ -125,7 +229,7 @@ async function importXBookmarks(urls, authState) {
       existingCollections.push(xCol);
     }
 
-    // 3. Fetch metadata for each URL and create items
+    // 3. Create items for new URLs
     const existingUrls = new Set(existingItems.map(i => i.src));
     const newItems = [];
     const now = Date.now();
@@ -137,10 +241,10 @@ async function importXBookmarks(urls, authState) {
       const isYouTube = /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)/i.test(url);
 
       if (isYouTube) {
-        const ytId = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-        if (ytId) {
+        const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        if (ytMatch) {
           meta.title = 'YouTube Video';
-          meta.image = `https://img.youtube.com/vi/${ytId[1]}/hqdefault.jpg`;
+          meta.image = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
         }
       } else {
         try {
@@ -175,10 +279,10 @@ async function importXBookmarks(urls, authState) {
     }
 
     if (newItems.length === 0) {
-      return { success: true, count: 0, message: 'All bookmarks already synced' };
+      return { success: true, count: 0, message: 'All already synced' };
     }
 
-    // 4. Upsert combined state
+    // 4. Upsert state
     const updatedState = {
       items: [...newItems, ...existingItems],
       collections: existingCollections,
@@ -188,7 +292,7 @@ async function importXBookmarks(urls, authState) {
     await supabaseFetch(`/rest/v1/${STATE_TABLE}?on_conflict=user_id,board_key`, {
       method: 'POST',
       body: JSON.stringify({
-        user_id: authState.user.id,
+        user_id: userId,
         board_key: 'default::space2-global',
         board_id: 'space2-global',
         project_key: '',
@@ -206,22 +310,16 @@ async function importXBookmarks(urls, authState) {
 }
 
 async function fetchUrlMetadataExt(url) {
-  // For extension: try to fetch OG tags directly (background has no CORS)
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
-
   try {
     const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
       signal: controller.signal,
       redirect: 'follow'
     });
     clearTimeout(timeout);
-
     if (!res.ok) return { title: '', description: '', image: '' };
-
     const html = await res.text();
     const titleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
       || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
@@ -229,7 +327,6 @@ async function fetchUrlMetadataExt(url) {
       || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
     const imgMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
       || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-
     return {
       title: titleMatch ? titleMatch[1] : '',
       description: descMatch ? descMatch[1] : '',
@@ -238,85 +335,5 @@ async function fetchUrlMetadataExt(url) {
   } catch (e) {
     clearTimeout(timeout);
     return { title: '', description: '', image: '' };
-  }
-}
-          sendResponse({ error: err.message });
-        });
-      return true;
-    }
-    if (msg.action === 'showToast' && sender.tab) {
-      try {
-        chrome.tabs.sendMessage(sender.tab.id, { action: 'showToast', message: msg.message });
-      } catch (e) {}
-      sendResponse({ ok: true });
-      return true;
-    }
-    if (msg.action === 'importXBookmarks') {
-      importXBookmarks(msg.urls, msg.authState)
-        .then((result) => sendResponse(result))
-        .catch((err) => sendResponse({ success: false, error: err.message }));
-      return true;
-    }
-  } catch (e) {
-    console.error('background onMessage error:', e);
-    sendResponse({ error: e.message });
-  }
-  return false;
-});
-
-async function supabaseFetch(endpoint, options = {}) {
-  const { asq_token, asq_refresh_token } = await new Promise(r => chrome.storage.local.get(['asq_token', 'asq_refresh_token'], r));
-  const headers = {
-    'Content-Type': 'application/json',
-    'apikey': SUPABASE_ANON_KEY,
-    ...(options.headers || {}),
-  };
-  // Only add auth header if we have a token (auth endpoints don't need it)
-  if (asq_token) {
-    headers['Authorization'] = `Bearer ${asq_token}`;
-  }
-  if (options.method === 'POST') {
-    headers['Prefer'] = 'resolution=merge-duplicates,return=minimal';
-  }
-  console.log(`[supabase] ${options.method} ${endpoint}`);
-  const res = await fetch(`${SUPABASE_URL}${endpoint}`, { ...options, headers });
-  console.log(`[supabase] ${res.status} ${res.statusText}`);
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    console.error(`[supabase] Error:`, errText);
-    throw new Error(`HTTP ${res.status}: ${errText || res.statusText}`);
-  }
-  if (res.status === 204) return {};
-  const data = await res.json().catch(() => null);
-  return data;
-}
-
-async function tryRefreshToken() {
-  const { asq_refresh_token } = await new Promise(r => chrome.storage.local.get(['asq_refresh_token'], r));
-  if (!asq_refresh_token) {
-    console.warn('[auth] No refresh token stored');
-    return false;
-  }
-  try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
-      body: JSON.stringify({ refresh_token: asq_refresh_token }),
-    });
-    if (!res.ok) {
-      console.error('[auth] Refresh failed:', res.status);
-      return false;
-    }
-    const session = await res.json();
-    await new Promise(r => chrome.storage.local.set({
-      asq_token: session.access_token,
-      asq_refresh_token: session.refresh_token,
-      asq_user: session.user,
-    }, r));
-    console.log('[auth] Token refreshed successfully');
-    return true;
-  } catch (e) {
-    console.error('[auth] Refresh error:', e);
-    return false;
   }
 }
