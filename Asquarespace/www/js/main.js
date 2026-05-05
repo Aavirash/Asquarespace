@@ -3882,10 +3882,50 @@ async function bootstrapAppAfterAuth(){
         if(currentSupabaseUser){
             await restoreStateFromSupabase();
             pendingSpace2CloudLoad=false;
+            initSpace2RealtimeSubscription();
+            listenForExtensionSaves();
             setSpace2AutoMetaStatus('Cloud connected. Tap Sync Now when you want to sync.');
             setTimeout(()=>setSpace2AutoMetaStatus(''),3200);
         }
     }
+}
+
+let space2RealtimeChannel=null;
+function initSpace2RealtimeSubscription(){
+    const client=initSupabaseClient();
+    if(!client||!currentSupabaseUser||space2RealtimeChannel) return;
+    space2RealtimeChannel=client
+        .channel('space2-state-watcher')
+        .on('postgres_changes',{event:'UPDATE',schema:'public',table:'user_workspace_state',filter:`user_id=eq.${currentSupabaseUser.id}`},async(payload)=>{
+            console.log('[realtime] space2 state changed',payload);
+            try{
+                await restoreStateFromSupabase();
+                setSpace2AutoMetaStatus('Synced from web');
+                setTimeout(()=>setSpace2AutoMetaStatus(''),2500);
+            }catch(e){
+                console.warn('[realtime] restore failed',e);
+            }
+        })
+        .subscribe((status)=>{
+            console.log('[realtime] subscription status:',status);
+        });
+}
+
+function listenForExtensionSaves(){
+    if(typeof BroadcastChannel==='undefined') return;
+    const ch=new BroadcastChannel('asq-space2-sync');
+    ch.onmessage=async(msg)=>{
+        if(msg.data&&msg.data.action==='saved'){
+            console.log('[broadcast] extension saved at',msg.data.timestamp);
+            try{
+                await restoreStateFromSupabase();
+                setSpace2AutoMetaStatus('Extension save detected');
+                setTimeout(()=>setSpace2AutoMetaStatus(''),2500);
+            }catch(e){
+                console.warn('[broadcast] restore failed',e);
+            }
+        }
+    };
 }
 
 function lockAppForAuth(){

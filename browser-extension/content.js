@@ -74,9 +74,13 @@
     dd.style.top = `${ddTop}px`;
     dd.style.left = `${ddLeft}px`;
 
-    loadCollections().then(({ auth, collections }) => {
+    loadCollections().then(({ auth, collections, error }) => {
       const loading = dd.querySelector('.asq-dd-loading');
       if (loading) loading.remove();
+      if (error) {
+        dd.innerHTML += `<div class="asq-dd-empty" style="color:rgba(239,64,39,0.7)">Error: ${error.substring(0, 60)}...</div>`;
+        return;
+      }
       if (!auth || !auth.token) {
         dd.innerHTML += '<div class="asq-dd-empty">Not signed in</div>';
         return;
@@ -130,6 +134,9 @@
     document.querySelectorAll('.asq-dropdown').forEach(d => d.remove());
   }
 
+  // ── BroadcastChannel for cross-tab sync ────────────────────────
+  const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('asq-space2-sync') : null;
+
   function loadCollections() {
     return new Promise((resolve) => {
       if (collectionsCache && Date.now() - collectionsCacheTime < 30000) {
@@ -146,7 +153,16 @@
         const space2Key = 'default::space2-global';
         const endpoint = `/rest/v1/user_workspace_state?select=space2_state&user_id=eq.${encodeURIComponent(auth.user.id)}&board_key=eq.${encodeURIComponent(space2Key)}`;
         chrome.runtime.sendMessage({ action: 'supabaseRequest', endpoint, options: { method: 'GET' } }, (resp) => {
-          collectionsCache = (Array.isArray(resp) && resp.length > 0 && resp[0]?.space2_state) ? (resp[0].space2_state.collections || []) : [];
+          if (resp && resp.error) {
+            console.error('loadCollections GET error:', resp);
+            authCache = auth;
+            collectionsCache = [];
+            collectionsCacheTime = Date.now();
+            resolve({ auth, collections: [], error: resp.error });
+            return;
+          }
+          const space2State = (Array.isArray(resp) && resp.length > 0 && resp[0]?.space2_state) ? resp[0].space2_state : null;
+          collectionsCache = space2State ? (space2State.collections || []) : [];
           collectionsCacheTime = Date.now();
           resolve({ auth, collections: collectionsCache });
         });
@@ -239,6 +255,9 @@
         }
         collectionsCache = collections;
         collectionsCacheTime = Date.now();
+        if (syncChannel) {
+          syncChannel.postMessage({ action: 'saved', timestamp: Date.now() });
+        }
         showToast('Saved!');
       });
     });
