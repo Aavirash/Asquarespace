@@ -11,9 +11,7 @@
   function createSaveButton() {
     saveBtn = document.createElement('div');
     saveBtn.className = 'asq-save-btn';
-    saveBtn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline d="M17 21v-8H7v8"/><polyline d="M7 3v5h8"/></svg>
-    `;
+    saveBtn.innerHTML = `<div class="asq-btn-sheen"></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L4 8v13h6v-7h4v7h6V8l-8-5z"/></svg>`;
     saveBtn.addEventListener('mouseenter', () => { btnHovered = true; });
     saveBtn.addEventListener('mouseleave', () => { btnHovered = false; });
     saveBtn.addEventListener('click', (e) => {

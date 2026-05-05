@@ -4436,6 +4436,15 @@ window.addEventListener('keydown',e=>{
     const hasModifier=e.metaKey||e.ctrlKey;
     const isTextTarget=isTextEditingTarget(e.target);
 
+    // Cmd+S: toggle Space2 sidebar
+    if(e.metaKey&&!e.ctrlKey&&key==='s'){
+        e.preventDefault();
+        if(currentSpace==='space2'){
+            setSpace2CollectionsOpen(!space2CollectionsOpen);
+        }
+        return;
+    }
+
     if(hasModifier&&!e.shiftKey&&key==='z'&&!isTextTarget){
         e.preventDefault();
         undo();
