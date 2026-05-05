@@ -105,7 +105,7 @@ async function supabaseFetch(endpoint, options = {}) {
     'apikey': SUPABASE_ANON_KEY,
     ...(asq_token ? { 'Authorization': `Bearer ${asq_token}` } : {}),
     ...(options.headers || {}),
-    'Prefer': options.method === 'POST' ? 'resolution=merge-duplicates' : undefined,
+    'Prefer': options.method === 'POST' ? 'resolution=insert-duplicate,return=minimal' : undefined,
   };
   // Remove undefined Prefer header
   if (!headers['Prefer']) delete headers['Prefer'];

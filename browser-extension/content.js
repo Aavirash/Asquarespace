@@ -193,12 +193,22 @@
   }
 
   function upsertState(auth, collections, newItem) {
+    if (!auth || !auth.token) { showToast('Not signed in'); return; }
+    const userId = auth.user?.id;
+    if (!userId) { showToast('Auth error: no user ID'); return; }
     const space2Key = 'default::space2-global';
+
+    // First fetch existing state
     chrome.runtime.sendMessage({
       action: 'supabaseRequest',
-      endpoint: `/rest/v1/user_workspace_state?select=space2_state&user_id=eq.${encodeURIComponent(auth.user.id)}&board_key=eq.${encodeURIComponent(space2Key)}`,
+      endpoint: `/rest/v1/user_workspace_state?select=space2_state&user_id=eq.${encodeURIComponent(userId)}&board_key=eq.${encodeURIComponent(space2Key)}`,
       options: { method: 'GET' },
     }, (resp) => {
+      if (resp?.error) {
+        console.error('GET state failed:', resp);
+        showToast('Save failed: ' + resp.error);
+        return;
+      }
       const existingItems = (Array.isArray(resp) && resp.length > 0 && resp[0]?.space2_state)
         ? (resp[0].space2_state.items || []) : [];
       const updatedState = {
@@ -212,7 +222,7 @@
         options: {
           method: 'POST',
           body: JSON.stringify({
-            user_id: auth.user.id,
+            user_id: userId,
             board_key: space2Key,
             board_id: 'space2-global',
             canvas_state: {},
@@ -221,9 +231,14 @@
           }),
         },
       }, (result) => {
+        if (result?.error) {
+          console.error('POST state failed:', result);
+          showToast('Save failed: ' + result.error);
+          return;
+        }
         collectionsCache = collections;
         collectionsCacheTime = Date.now();
-        showToast(result?.error ? 'Save failed' : 'Saved!');
+        showToast('Saved!');
       });
     });
   }
