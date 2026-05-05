@@ -43,7 +43,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
     if (msg.action === 'setAuth') {
-      chrome.storage.local.set({ asq_user: msg.user, asq_token: msg.token }, () => {
+      chrome.storage.local.set({
+        asq_user: msg.user,
+        asq_token: msg.token,
+        asq_refresh_token: msg.refreshToken || null,
+      }, () => {
         sendResponse({ ok: true });
       });
       return true;
@@ -81,7 +85,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.action === 'supabaseRequest') {
       supabaseFetch(msg.endpoint, msg.options)
         .then((data) => sendResponse(data))
-        .catch((err) => sendResponse({ error: err.message }));
+        .catch(async (err) => {
+          // Handle JWT expiry - try refreshing token
+          if (err.message && err.message.includes('JWT expired')) {
+            const refreshed = await tryRefreshToken();
+            if (refreshed) {
+              supabaseFetch(msg.endpoint, msg.options)
+                .then((data) => sendResponse(data))
+                .catch((err2) => sendResponse({ error: err2.message }));
+              return;
+            }
+          }
+          sendResponse({ error: err.message });
+        });
       return true;
     }
     if (msg.action === 'showToast' && sender.tab) {
@@ -99,7 +115,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 async function supabaseFetch(endpoint, options = {}) {
-  const { asq_token } = await new Promise(r => chrome.storage.local.get(['asq_token'], r));
+  const { asq_token, asq_refresh_token } = await new Promise(r => chrome.storage.local.get(['asq_token', 'asq_refresh_token'], r));
   if (!asq_token) throw new Error('No auth token');
   const headers = {
     'Content-Type': 'application/json',
@@ -121,4 +137,34 @@ async function supabaseFetch(endpoint, options = {}) {
   if (res.status === 204) return {};
   const data = await res.json().catch(() => null);
   return data;
+}
+
+async function tryRefreshToken() {
+  const { asq_refresh_token } = await new Promise(r => chrome.storage.local.get(['asq_refresh_token'], r));
+  if (!asq_refresh_token) {
+    console.warn('[auth] No refresh token stored');
+    return false;
+  }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+      body: JSON.stringify({ refresh_token: asq_refresh_token }),
+    });
+    if (!res.ok) {
+      console.error('[auth] Refresh failed:', res.status);
+      return false;
+    }
+    const session = await res.json();
+    await new Promise(r => chrome.storage.local.set({
+      asq_token: session.access_token,
+      asq_refresh_token: session.refresh_token,
+      asq_user: session.user,
+    }, r));
+    console.log('[auth] Token refreshed successfully');
+    return true;
+  } catch (e) {
+    console.error('[auth] Refresh error:', e);
+    return false;
+  }
 }

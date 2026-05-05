@@ -24,7 +24,7 @@
     chrome.runtime.sendMessage({ action: 'getAuth' }, (resp) => {
       if (resp.token) {
         // Token exists - try to restore user
-        authState = { user: resp.user || {}, token: resp.token };
+        authState = { user: resp.user || {}, token: resp.token, refreshToken: resp.refreshToken || null };
         // If user has id, go straight to main
         if (resp.user && resp.user.id) {
           showMain();
@@ -35,7 +35,7 @@
           .then((userData) => {
             const user = userData || {};
             authState.user = user;
-            chrome.runtime.sendMessage({ action: 'setAuth', user, token: authState.token });
+            chrome.runtime.sendMessage({ action: 'setAuth', user, token: authState.token, refreshToken: authState.refreshToken });
             showMain();
           })
           .catch(() => {
@@ -153,25 +153,25 @@
     supabase('/auth/v1/verify', { method: 'POST', body: JSON.stringify({ email, token, type: 'email' }) })
       .then((resp) => {
         if (resp.error || !resp.access_token) { els.authStatus.textContent = 'Invalid code'; return; }
-        authState = { user: {}, token: resp.access_token };
-        chrome.runtime.sendMessage({ action: 'setAuth', user: null, token: resp.access_token });
+        authState = { user: {}, token: resp.access_token, refreshToken: resp.refresh_token };
+        chrome.runtime.sendMessage({ action: 'setAuth', user: null, token: resp.access_token, refreshToken: resp.refresh_token });
         chrome.runtime.sendMessage({ action: 'clearPending' });
         // Fetch user info with the token
         supabase('/auth/v1/user', { method: 'GET' })
           .then((userData) => {
             if (userData && userData.id) {
               authState.user = userData;
-              chrome.runtime.sendMessage({ action: 'setAuth', user: userData, token: resp.access_token });
+              chrome.runtime.sendMessage({ action: 'setAuth', user: userData, token: resp.access_token, refreshToken: resp.refresh_token });
             } else {
               // Fallback: store email as user
               authState.user = { id: 'ext-' + email, email };
-              chrome.runtime.sendMessage({ action: 'setAuth', user: authState.user, token: resp.access_token });
+              chrome.runtime.sendMessage({ action: 'setAuth', user: authState.user, token: resp.access_token, refreshToken: resp.refresh_token });
             }
             showMain();
           })
           .catch(() => {
             authState.user = { id: 'ext-' + email, email };
-            chrome.runtime.sendMessage({ action: 'setAuth', user: authState.user, token: resp.access_token });
+            chrome.runtime.sendMessage({ action: 'setAuth', user: authState.user, token: resp.access_token, refreshToken: resp.refresh_token });
             showMain();
           });
       })
@@ -274,12 +274,13 @@
 
   function upsertState(space2State) {
     const space2Key = 'default::space2-global';
-    return supabase(`/rest/v1/${STATE_TABLE}`, {
+    return supabase(`/rest/v1/${STATE_TABLE}?on_conflict=user_id,board_key`, {
       method: 'POST',
       body: JSON.stringify({
         user_id: authState.user.id,
         board_key: space2Key,
         board_id: 'space2-global',
+        project_key: '',
         canvas_state: {},
         space2_state: space2State,
         updated_at: new Date().toISOString(),
