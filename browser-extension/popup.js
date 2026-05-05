@@ -1,4 +1,7 @@
 (function () {
+  const APP_PASSCODE = '24176882';
+  const STATE_TABLE = 'user_workspace_state';
+
   const screens = { auth: document.getElementById('auth-screen'), main: document.getElementById('main-screen') };
   const els = {
     passcode: document.getElementById('auth-passcode'), passcodeBtn: document.getElementById('auth-passcode-btn'),
@@ -13,10 +16,10 @@
 
   let authState = null;
   let collections = [];
+  let rawStateData = null;
 
   // ── Init ──────────────────────────────────────────────────────
   function init() {
-    // Restore state: check for pending email (waiting for OTP)
     chrome.runtime.sendMessage({ action: 'getPendingEmail' }, (pending) => {
       if (pending && pending.email) {
         els.email.value = pending.email;
@@ -24,7 +27,6 @@
         els.authStatus.textContent = 'Check your email for the code';
         return;
       }
-      // Check full auth
       chrome.runtime.sendMessage({ action: 'getAuth' }, (resp) => {
         if (resp.user && resp.token) {
           authState = { user: resp.user, token: resp.token };
@@ -35,31 +37,21 @@
       });
     });
 
-    // Current page info
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
         els.pageTitle.textContent = tabs[0].title || 'Untitled Page';
-        try { els.pageHost.textContent = new URL(tabs[0].url).hostname; } catch { els.pageHost.textContent = tabs[0].url; }
-        // Try to get thumbnail from og:image or favicon
-        chrome.scripting.executeScript({
-          target: { tabId: tabs[0].id },
-          func: () => {
-            const og = document.querySelector('meta[property="og:image"]');
-            if (og) return og.content;
-            const link = document.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
-            if (link) return link.href;
-            return null;
-          },
-        }, (results) => {
-          if (results?.[0]?.result) {
-            els.pageThumb.src = results[0].result;
-            els.pageThumb.style.display = 'block';
-          }
-        });
+        els.pageTitle.dataset.url = tabs[0].url;
+        try {
+          const url = new URL(tabs[0].url);
+          els.pageHost.textContent = url.hostname;
+          els.pageThumb.src = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`;
+          els.pageThumb.style.display = 'block';
+        } catch {
+          els.pageHost.textContent = tabs[0].url;
+        }
       }
     });
 
-    // Event bindings
     els.passcodeBtn.addEventListener('click', handlePasscode);
     els.emailBtn.addEventListener('click', handleEmail);
     els.otpBtn.addEventListener('click', handleOtp);
@@ -68,20 +60,17 @@
     els.saveBtn.addEventListener('click', handleSavePage);
     els.newColBtn.addEventListener('click', handleNewCollection);
 
-    // Enter key on auth inputs
     els.passcode.addEventListener('keydown', (e) => { if (e.key === 'Enter') handlePasscode(); });
     els.email.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleEmail(); });
     els.otp.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleOtp(); });
   }
 
-  // ── Auth flow ─────────────────────────────────────────────────
+  // ── Auth ──────────────────────────────────────────────────────
   function showAuth(step) {
     screens.auth.classList.remove('hidden');
     screens.main.classList.add('hidden');
     document.querySelectorAll('.auth-step').forEach(s => s.classList.add('hidden'));
-    if (step === 'passcode') document.getElementById('auth-step-passcode').classList.remove('hidden');
-    if (step === 'email') document.getElementById('auth-step-email').classList.remove('hidden');
-    if (step === 'otp') document.getElementById('auth-step-otp').classList.remove('hidden');
+    document.getElementById('auth-step-' + step)?.classList.remove('hidden');
   }
 
   function showMain() {
@@ -90,20 +79,14 @@
     loadCollections();
   }
 
-  const APP_PASSCODE = '24176882';
-
   function handlePasscode() {
     const code = els.passcode.value.trim();
     if (!code) return;
-    if (code !== APP_PASSCODE) {
-      els.authStatus.textContent = 'Invalid passcode';
-      return;
-    }
+    if (code !== APP_PASSCODE) { els.authStatus.textContent = 'Invalid passcode'; return; }
     showAuth('email');
-    els.authStatus.textContent = 'Passcode accepted. Enter your email to continue.';
-    // Restore last-used email if available
+    els.authStatus.textContent = 'Passcode accepted. Enter your email.';
     chrome.runtime.sendMessage({ action: 'getLastEmail' }, (result) => {
-      if (result?.email) { els.email.value = result.email; }
+      if (result?.email) els.email.value = result.email;
       els.email.focus();
     });
   }
@@ -112,14 +95,10 @@
     const email = els.email.value.trim();
     if (!email) return;
     els.authStatus.textContent = 'Sending code...';
-    supabase('/auth/v1/otp', {
-      method: 'POST',
-      body: JSON.stringify({ email, create_user: false }),
-    })
+    supabase('/auth/v1/otp', { method: 'POST', body: JSON.stringify({ email, create_user: true }) })
       .then(() => {
-        // Persist pending email so popup can restore after close
         chrome.runtime.sendMessage({ action: 'setPendingEmail', email });
-        els.authStatus.textContent = 'Check your email for the code';
+        els.authStatus.textContent = 'Check your email';
         showAuth('otp');
       })
       .catch(() => { els.authStatus.textContent = 'Failed to send code'; });
@@ -130,17 +109,10 @@
     if (!token) return;
     const email = els.email.value.trim();
     els.authStatus.textContent = 'Verifying...';
-    supabase('/auth/v1/verify', {
-      method: 'POST',
-      body: JSON.stringify({ email, token, type: 'email' }),
-    })
+    supabase('/auth/v1/verify', { method: 'POST', body: JSON.stringify({ email, token, type: 'email' }) })
       .then((resp) => {
-        if (resp.error || !resp.access_token) {
-          els.authStatus.textContent = 'Invalid code';
-          return;
-        }
-        // User data is in resp.user or we extract from the token response
-        const user = resp.user || { email };
+        if (resp.error || !resp.access_token) { els.authStatus.textContent = 'Invalid code'; return; }
+        const user = resp.user || { id: resp.user?.id, email };
         authState = { user, token: resp.access_token };
         chrome.runtime.sendMessage({ action: 'setAuth', user, token: resp.access_token });
         chrome.runtime.sendMessage({ action: 'clearPending' });
@@ -152,10 +124,8 @@
   function handleSignOut() {
     chrome.runtime.sendMessage({ action: 'clearAuth' });
     chrome.runtime.sendMessage({ action: 'clearPending' });
-    authState = null;
-    els.passcode.value = '';
-    els.email.value = '';
-    els.otp.value = '';
+    authState = null; collections = []; rawStateData = null;
+    els.passcode.value = ''; els.email.value = ''; els.otp.value = '';
     els.authStatus.textContent = 'Enter your passcode';
     showAuth('passcode');
   }
@@ -163,29 +133,48 @@
   // ── Collections ───────────────────────────────────────────────
   function loadCollections() {
     if (!authState?.user?.id) return;
-    els.collectionsList.innerHTML = '<div class="section-label">Loading...</div>';
-    supabase(`/rest/v1/space2_state?select=*&user_id=eq.${encodeURIComponent(authState.user.id)}`, { method: 'GET' })
+    const space2Key = 'default::space2-global';
+    els.collectionsList.innerHTML = '<div class="section-label" style="padding:8px 0">Loading...</div>';
+
+    supabase(
+      `/rest/v1/${STATE_TABLE}?select=space2_state&user_id=eq.${encodeURIComponent(authState.user.id)}&board_key=eq.${encodeURIComponent(space2Key)}`,
+      { method: 'GET' }
+    )
       .then((resp) => {
-        if (resp.error || !resp.length) {
-          els.collectionsList.innerHTML = '<div class="section-label">No collections yet</div>';
-          return;
+        if (Array.isArray(resp) && resp.length > 0 && resp[0]?.space2_state) {
+          rawStateData = resp[0];
+          collections = resp[0].space2_state.collections || [];
+        } else {
+          rawStateData = null;
+          collections = [];
         }
-        collections = resp[0].collections || [];
         renderCollections();
       })
-      .catch(() => { els.collectionsList.innerHTML = '<div class="section-label">Failed to load</div>'; });
+      .catch((err) => {
+        console.error('Load collections failed:', err);
+        collections = [];
+        renderCollections();
+      });
   }
 
   function renderCollections() {
     els.collectionsList.innerHTML = '';
-    collections.forEach(col => {
-      const btn = document.createElement('button');
-      btn.className = 'col-item';
-      const count = (col.itemIds || []).length;
-      btn.innerHTML = `<span>${col.name}</span><span class="col-count">${count}</span>`;
-      btn.addEventListener('click', () => savePageToCollection(col.id));
-      els.collectionsList.appendChild(btn);
-    });
+    if (collections.length === 0) {
+      els.collectionsList.innerHTML = '<div class="section-label" style="padding:8px 0;color:rgba(228,236,255,0.35)">No collections yet</div>';
+    } else {
+      collections.forEach(col => {
+        const btn = document.createElement('button');
+        btn.className = 'col-item';
+        const count = (col.itemIds || []).length;
+        btn.innerHTML = `<span>${escHtml(col.name)}</span><span class="col-count">${count}</span>`;
+        btn.addEventListener('click', () => savePageToCollection(col.id));
+        els.collectionsList.appendChild(btn);
+      });
+    }
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
   }
 
   // ── Save ──────────────────────────────────────────────────────
@@ -197,42 +186,20 @@
   function savePageToCollection(collectionId) {
     const col = collections.find(c => c.id === collectionId);
     if (!col) return;
-    const url = els.pageTitle.dataset.url || window.location.href;
+    const url = els.pageTitle.dataset.url || '';
     const newItem = {
-      id: `item-${Date.now()}`,
-      src: url,
-      filePath: '',
-      cloudPath: '',
-      browserBlobKey: '',
-      signedUrlExpiresAt: 0,
-      mediaType: 'url',
-      thumbnailUrl: els.pageThumb.src || '',
-      pageUrl: url,
-      title: els.pageTitle.textContent,
-      description: '',
-      collectionIds: [collectionId],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      id: `item-${Date.now()}-${Math.floor(Math.random() * 99999)}`,
+      src: url, filePath: '', cloudPath: '', browserBlobKey: '',
+      signedUrlExpiresAt: 0, mediaType: 'url', thumbnailUrl: els.pageThumb.src || '',
+      pageUrl: url, title: els.pageTitle.textContent, description: '',
+      collectionIds: [collectionId], createdAt: Date.now(), updatedAt: Date.now(),
     };
+    col.itemIds = col.itemIds || [];
+    col.itemIds.push(newItem.id);
+    const updatedState = { items: (rawStateData?.space2_state?.items || []).concat([newItem]), collections, savedAt: Date.now() };
 
-    supabase('/rest/v1/space2_state', {
-      method: 'POST',
-      body: JSON.stringify({
-        user_id: authState.user.id,
-        items: [newItem],
-        collections: collections.map(c => ({
-          ...c,
-          itemIds: c.itemIds || [],
-        })),
-        savedAt: Date.now(),
-      }),
-    })
-      .then(() => {
-        col.itemIds = col.itemIds || [];
-        col.itemIds.push(newItem.id);
-        renderCollections();
-        window.close();
-      })
+    upsertState(updatedState)
+      .then(() => { renderCollections(); setTimeout(() => window.close(), 800); })
       .catch(() => { alert('Save failed'); });
   }
 
@@ -241,31 +208,32 @@
     if (!name || !name.trim() || !authState?.token) return;
     const newCol = { id: `col-${Date.now()}`, name: name.trim(), itemIds: [] };
     collections.push(newCol);
+    const updatedState = { items: rawStateData?.space2_state?.items || [], collections, savedAt: Date.now() };
 
-    supabase('/rest/v1/space2_state', {
+    upsertState(updatedState)
+      .then(() => renderCollections())
+      .catch(() => { collections.pop(); alert('Failed to create collection'); });
+  }
+
+  function upsertState(space2State) {
+    const space2Key = 'default::space2-global';
+    return supabase(`/rest/v1/${STATE_TABLE}`, {
       method: 'POST',
       body: JSON.stringify({
         user_id: authState.user.id,
-        items: [],
-        collections,
-        savedAt: Date.now(),
+        board_key: space2Key,
+        board_id: 'space2-global',
+        canvas_state: {},
+        space2_state: space2State,
+        updated_at: new Date().toISOString(),
       }),
-    })
-      .then(() => renderCollections())
-      .catch(() => {
-        collections.pop();
-        alert('Failed to create collection');
-      });
+    });
   }
 
   // ── Supabase helper ───────────────────────────────────────────
   function supabase(endpoint, options = {}) {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({
-        action: 'supabaseRequest',
-        endpoint,
-        options,
-      }, resolve);
+      chrome.runtime.sendMessage({ action: 'supabaseRequest', endpoint, options }, resolve);
     });
   }
 

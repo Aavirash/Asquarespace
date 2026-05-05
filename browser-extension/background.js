@@ -1,5 +1,6 @@
 const SUPABASE_URL = 'https://seceezshzzkxoqllbosw.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_9uq_CY2KsPns9dtogTVbyA_5wlvxA3e';
+const STATE_TABLE = 'user_workspace_state';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -28,7 +29,6 @@ function extractFileName(url) {
   catch { return 'Untitled'; }
 }
 
-// Message handler for popup and content scripts
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'getAuth') {
     chrome.storage.local.get(['asq_user', 'asq_token'], (result) => {
@@ -92,8 +92,12 @@ async function supabaseFetch(endpoint, options = {}) {
     'apikey': SUPABASE_ANON_KEY,
     ...(asq_token ? { 'Authorization': `Bearer ${asq_token}` } : {}),
     ...(options.headers || {}),
+    'Prefer': options.method === 'POST' ? 'resolution=merge-duplicates' : undefined,
   };
+  // Remove undefined Prefer header
+  if (!headers['Prefer']) delete headers['Prefer'];
   const res = await fetch(`${SUPABASE_URL}${endpoint}`, { ...options, headers });
-  if (!res.ok) throw new Error(`Supabase ${res.status}: ${res.statusText}`);
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${data?.message || res.statusText}`);
+  return data;
 }
