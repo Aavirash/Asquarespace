@@ -37,5 +37,11 @@
     "32": "assets/icon-32.png",
     "48": "assets/icon-48.png",
     "128": "assets/icon-128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/icon-32.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
