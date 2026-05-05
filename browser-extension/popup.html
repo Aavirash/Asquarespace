@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="popup">
+    <!-- Auth screen -->
+    <div id="auth-screen" class="hidden">
+      <div class="popup-brand">ASQUARESPACE</div>
+      <div class="popup-title">Sign in</div>
+      <div id="auth-status" class="auth-status">Enter your passcode</div>
+      <div id="auth-step-passcode" class="auth-step">
+        <input id="auth-passcode" class="auth-input" type="password" placeholder="Passcode" autocomplete="off">
+        <button id="auth-passcode-btn" class="auth-btn primary">Continue</button>
+      </div>
+      <div id="auth-step-email" class="auth-step hidden">
+        <input id="auth-email" class="auth-input" type="email" placeholder="Email">
+        <button id="auth-email-btn" class="auth-btn primary">Send code</button>
+      </div>
+      <div id="auth-step-otp" class="auth-step hidden">
+        <input id="auth-otp" class="auth-input" type="text" placeholder="6-digit code" maxlength="6">
+        <button id="auth-otp-btn" class="auth-btn primary">Verify</button>
+        <button id="auth-change-email" class="auth-btn secondary">Change email</button>
+      </div>
+    </div>
+
+    <!-- Main panel -->
+    <div id="main-screen" class="hidden">
+      <div class="popup-head">
+        <div class="popup-brand">ASQUARESPACE</div>
+        <button id="sign-out-btn" class="icon-btn" title="Sign out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline d="M16 17l5-5-5-5"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+
+      <!-- Page info -->
+      <div id="page-info" class="page-info">
+        <img id="page-thumb" class="page-thumb" src="" alt="">
+        <div class="page-meta">
+          <div id="page-title" class="page-title"></div>
+          <div id="page-host" class="page-host"></div>
+        </div>
+      </div>
+
+      <!-- Save button -->
+      <button id="save-page-btn" class="save-btn primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline d="M17 21v-8H7v8"/><polyline d="M7 3v5h8"/></svg>
+        Save to Collection
+      </button>
+
+      <!-- Collections list -->
+      <div class="section-label">Collections</div>
+      <div id="collections-list" class="collections-list"></div>
+      <button id="new-collection-btn" class="new-col-btn">+ New collection</button>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
