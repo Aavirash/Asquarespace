@@ -165,20 +165,6 @@ const space2CapturePermissionBtn = document.getElementById('space2-capture-permi
 const space2CaptureStatus = document.getElementById('space2-capture-status');
 const space2LayoutGridBtn = document.getElementById('space2-layout-grid-btn');
 const space2LayoutFeedBtn = document.getElementById('space2-layout-feed-btn');
-const space2LayoutPill = document.getElementById('space2-layout-pill');
-const space2LayoutGridPill = document.getElementById('space2-layout-grid');
-const space2LayoutFeedPill = document.getElementById('space2-layout-feed');
-const space2LayoutCanvasPill = document.getElementById('space2-layout-canvas');
-const space2ImportXBtn = document.getElementById('space2-import-x-btn');
-const space2Lightbox = document.getElementById('space2-lightbox');
-const space2LightboxMedia = document.getElementById('space2-lightbox-media');
-const space2LightboxTitle = document.getElementById('space2-lightbox-title');
-const space2LightboxLink = document.getElementById('space2-lightbox-link');
-const space2LightboxClose = document.getElementById('space2-lightbox-close');
-const space2LightboxCopy = document.getElementById('space2-lightbox-copy');
-const space2LightboxDownload = document.getElementById('space2-lightbox-download');
-const space2LightboxOpen = document.getElementById('space2-lightbox-open');
-const space2LightboxDelete = document.getElementById('space2-lightbox-delete');
 const space2ColumnsSelect = document.getElementById('space2-columns-select');
 const space2AutoMetaToggle = document.getElementById('space2-auto-meta-toggle');
 const space2AutoMetaRun = document.getElementById('space2-auto-meta-run');
@@ -294,16 +280,13 @@ let space2ActiveItemId='';
 let space2CollectionsOpen=false;
 let space2View='grid';
 let space2SidebarWidth=parseInt(localStorage.getItem('asq.space2.sidebar.width')||'264',10)||264;
-let space2LayoutMode=(()=>{
-    const v=localStorage.getItem('asq.space2.layout.mode')||'grid';
-    return (v==='feed'||v==='canvas')?v:'grid';
-})();
+let space2LayoutMode=(localStorage.getItem('asq.space2.layout.mode')||'grid')==='feed'?'feed':'grid';
 let space2ColumnsSetting=localStorage.getItem('asq.space2.layout.columns')||'auto';
 let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='1';
 let space2AutoMetaRunning=false;
 const space2SidebarHead=document.querySelector('#space2-sidebar .space2-sidebar-head');
 const space2MobileLayoutSlots=new Map();
-[space2ViewSwitch,space2LayoutPill,space2SearchWrap].forEach(el=>{
+[space2ViewSwitch,space2SearchWrap].forEach(el=>{
     if(el&&el.parentElement) space2MobileLayoutSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
 });
 let space2AiModels=[];
@@ -2556,10 +2539,6 @@ async function resolveSpace2ItemDisplaySource(item){
 }
 
 async function openSpace2Item(itemId){
-    if(space2LayoutMode==='canvas'){
-        openLightbox(itemId);
-        return;
-    }
     const item=space2State.items.find(i=>i.id===itemId);
     if(!item) return;
     space2ActiveItemId=itemId;
@@ -3123,9 +3102,6 @@ function updateControlCornerState(){
     if(space2ViewSwitch){
         space2ViewSwitch.classList.toggle('hidden',currentSpace!=='space2');
     }
-    if(space2LayoutPill){
-        space2LayoutPill.classList.toggle('hidden',currentSpace!=='space2');
-    }
 }
 
 function updateSpace2TopCornerVisibility(){
@@ -3163,9 +3139,6 @@ function applySpace2MobileHeaderLayout(){
     if(isMobile&&inSpace2){
         if(space2SidebarHead&&space2ViewSwitch&&space2ViewSwitch.parentElement!==space2SidebarHead){
             space2SidebarHead.appendChild(space2ViewSwitch);
-        }
-        if(space2SidebarHead&&space2LayoutPill&&space2LayoutPill.parentElement!==space2SidebarHead){
-            space2SidebarHead.appendChild(space2LayoutPill);
         }
         if(space2SidebarHead&&space2SearchWrap&&space2SearchWrap.parentElement!==space2SidebarHead){
             space2SidebarHead.appendChild(space2SearchWrap);
@@ -3250,10 +3223,6 @@ function updateSpace2LayoutSettingsUI(){
     if(space2LayoutGridBtn) space2LayoutGridBtn.classList.toggle('primary',space2LayoutMode==='grid');
     if(space2LayoutFeedBtn) space2LayoutFeedBtn.classList.toggle('primary',space2LayoutMode==='feed');
     if(space2ColumnsSelect) space2ColumnsSelect.value=space2ColumnsSetting;
-    // Update pill buttons
-    if(space2LayoutGridPill) space2LayoutGridPill.classList.toggle('active',space2LayoutMode==='grid');
-    if(space2LayoutFeedPill) space2LayoutFeedPill.classList.toggle('active',space2LayoutMode==='feed');
-    if(space2LayoutCanvasPill) space2LayoutCanvasPill.classList.toggle('active',space2LayoutMode==='canvas');
 }
 
 function applySpace2LayoutSettings({persist=true}={}){
@@ -3265,16 +3234,8 @@ function applySpace2LayoutSettings({persist=true}={}){
         localStorage.setItem('asq.space2.layout.columns',space2ColumnsSetting);
     }
     updateSpace2LayoutSettingsUI();
-    if(space2Grid){
-        space2Grid.classList.toggle('feed-mode',space2LayoutMode==='feed');
-        space2Grid.classList.toggle('canvas-mode',space2LayoutMode==='canvas');
-    }
-    if(space2LayoutMode==='canvas'){
-        initCanvasMode();
-    }else{
-        destroyCanvasMode();
-        renderSpace2Grid();
-    }
+    if(space2Grid) space2Grid.classList.toggle('feed-mode',space2LayoutMode==='feed');
+    renderSpace2Grid();
 }
 
 async function requestSpace2CapturePermission({silent=false}={}){
@@ -4161,7 +4122,6 @@ async function switchProjectContextIfNeeded(){
     loadSpace2State(currentProjectKey,currentBoardId);
     if(currentSupabaseUser){
         restoreStateFromSupabase().catch(err=>console.warn('cloud context restore failed',err));
-        autoSyncXBookmarksOnLaunch().catch(err=>console.warn('auto x sync failed',err));
     }
     recoverCanvasIfEmpty(currentProjectKey);
     undoStack=[];
@@ -4182,9 +4142,6 @@ async function initPersistence(){
     setTimeout(clearTransientSearchInputs,0);
     setTimeout(clearTransientSearchInputs,220);
     loadSpace2State(currentProjectKey,currentBoardId);
-    if(currentSupabaseUser){
-        autoSyncXBookmarksOnLaunch().catch(err=>console.warn('auto x sync failed',err));
-    }
     recoverCanvasIfEmpty(currentProjectKey);
     persistenceReady=true;
     captureHistorySnapshot();
@@ -6548,6 +6505,31 @@ function showSpace2View(view) {
     const discoverEl = document.getElementById('space2-discover');
     const isGrid = view === 'grid';
     space2View=isGrid?'grid':'discover';
+    if(space2ViewToggle){
+        const thumb = space2ViewToggle.querySelector('.space2-view-thumb');
+        if(thumb){
+            const mobile = window.innerWidth <= 760;
+            const fromLeft = parseFloat(getComputedStyle(thumb).left) || 2;
+            const toLeft   = isGrid ? (mobile ? 34 : 42) : 2;
+            space2ViewToggle.classList.toggle('is-grid', isGrid);
+            space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
+            space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
+            // Set final position immediately.
+            thumb.style.left = toLeft + 'px';
+            // Web Animations API for the slide.
+            if(fromLeft !== toLeft){
+                thumb.animate(
+                    [{left:fromLeft+'px'},{left:toLeft+'px'}],
+                    {duration:200,easing:'cubic-bezier(0.4,0,0.2,1)'}
+                );
+            }
+        } else {
+            space2ViewToggle.classList.toggle('is-grid', isGrid);
+            space2ViewToggle.setAttribute('aria-pressed', isGrid ? 'true' : 'false');
+            space2ViewToggle.title = isGrid ? 'Switch to Discover' : 'Switch to Grid';
+        }
+        // View-switch and search bar stay embedded inside the sidebar header (no floating).
+    }
     if(space2DiscoverControls) space2DiscoverControls.classList.toggle('hidden', isGrid);
     if(space2Search) space2Search.placeholder = isGrid ? 'Search...' : 'Search in discover...';
     if(gridEl) gridEl.style.display = isGrid ? '' : 'none';
@@ -6694,426 +6676,6 @@ if(space2ColumnsSelect) space2ColumnsSelect.addEventListener('change',()=>{
     space2ColumnsSetting=(space2ColumnsSelect.value||'auto');
     applySpace2LayoutSettings();
 });
-if(space2LayoutGridPill) space2LayoutGridPill.addEventListener('click',()=>{
-    space2LayoutMode='grid';
-    applySpace2LayoutSettings();
-});
-if(space2LayoutFeedPill) space2LayoutFeedPill.addEventListener('click',()=>{
-    space2LayoutMode='feed';
-    applySpace2LayoutSettings();
-});
-if(space2LayoutCanvasPill) space2LayoutCanvasPill.addEventListener('click',()=>{
-    space2LayoutMode='canvas';
-    applySpace2LayoutSettings();
-});
-if(space2ImportXBtn) space2ImportXBtn.addEventListener('click',()=>{runXBookmarksImport();});
-
-// ──── Canvas Mode Engine ─────────────────────────────────────────────────────
-let canvasState={
-    cameraOffset:{x:0,y:0},
-    targetOffset:{x:0,y:0},
-    isDragging:false,
-    previousMouse:{x:0,y:0},
-    dragStart:{x:0,y:0},
-    hasDragged:false,
-    layoutItems:[],
-    colWidth:0,
-    totalWidth:0,
-    maxColHeight:0,
-    pool:[],
-    freePool:[],
-    activeMap:new Map(),
-    elToBookmark:new WeakMap(),
-    animFrame:null,
-};
-const CANVAS_COLS=5;
-const CANVAS_GAP=16;
-const CANVAS_POOL_SIZE=500;
-const CANVAS_BUFFER=600;
-const CANVAS_EASING=0.12;
-
-function initCanvasMode(){
-    if(!space2Grid) return;
-    canvasState.isDragging=false;
-    canvasState.cameraOffset={x:0,y:0};
-    canvasState.targetOffset={x:0,y:0};
-    buildCanvasLayout();
-    createCanvasPool();
-    renderCanvasItems();
-    canvasState.animFrame=requestAnimationFrame(canvasAnimate);
-    space2Grid.addEventListener('mousedown',canvasMouseDown);
-    space2Grid.addEventListener('mousemove',canvasMouseMove);
-    space2Grid.addEventListener('mouseup',canvasMouseUp);
-    space2Grid.addEventListener('mouseleave',canvasMouseUp);
-    space2Grid.addEventListener('wheel',canvasWheel,{passive:false});
-    space2Grid.addEventListener('touchstart',canvasTouchStart);
-    space2Grid.addEventListener('touchmove',canvasTouchMove,{passive:false});
-    space2Grid.addEventListener('touchend',canvasTouchEnd);
-    window.addEventListener('resize',canvasResize);
-}
-
-function destroyCanvasMode(){
-    if(canvasState.animFrame) cancelAnimationFrame(canvasState.animFrame);
-    canvasState.animFrame=null;
-    space2Grid?.removeEventListener('mousedown',canvasMouseDown);
-    space2Grid?.removeEventListener('mousemove',canvasMouseMove);
-    space2Grid?.removeEventListener('mouseup',canvasMouseUp);
-    space2Grid?.removeEventListener('mouseleave',canvasMouseUp);
-    space2Grid?.removeEventListener('wheel',canvasWheel);
-    space2Grid?.removeEventListener('touchstart',canvasTouchStart);
-    space2Grid?.removeEventListener('touchmove',canvasTouchMove);
-    space2Grid?.removeEventListener('touchend',canvasTouchEnd);
-    window.removeEventListener('resize',canvasResize);
-    if(space2Grid) space2Grid.innerHTML='';
-    canvasState.pool=[];
-    canvasState.freePool=[];
-    canvasState.activeMap.clear();
-    canvasState.layoutItems=[];
-}
-
-function buildCanvasLayout(){
-    const vw=space2Grid.clientWidth||window.innerWidth;
-    const gap=CANVAS_GAP;
-    const items=getFilteredSpace2Items().filter(i=>i.mediaType==='image'||i.mediaType==='video'||i.mediaType==='gif');
-    canvasState.colWidth=Math.floor((vw-gap)/CANVAS_COLS);
-    canvasState.totalWidth=canvasState.colWidth*CANVAS_COLS;
-    const colHeights=new Array(CANVAS_COLS).fill(0);
-    const columns=Array.from({length:CANVAS_COLS},()=>[]);
-
-    for(const item of items){
-        let minCol=0;
-        for(let c=1;c<CANVAS_COLS;c++){
-            if(colHeights[c]<colHeights[minCol]) minCol=c;
-        }
-        const w=item.width||800,h=item.height||600;
-        const aspect=w/h;
-        const itemW=canvasState.colWidth-gap;
-        const itemH=itemW/aspect;
-        const x=minCol*canvasState.colWidth+gap/2;
-        const y=colHeights[minCol]+gap/2;
-        columns[minCol].push({item,x,y,w:itemW,h:itemH});
-        colHeights[minCol]+=itemH+gap;
-    }
-
-    canvasState.maxColHeight=Math.max(...colHeights,1);
-    canvasState.layoutItems=[];
-    for(let col=0;col<CANVAS_COLS;col++){
-        for(let row=0;row<columns[col].length;row++){
-            const entry=columns[col][row];
-            canvasState.layoutItems.push({key:`${col}-${row}`,...entry});
-        }
-    }
-}
-
-function createCanvasPool(){
-    if(space2Grid) space2Grid.innerHTML='';
-    canvasState.pool=[];
-    canvasState.freePool=[];
-    canvasState.activeMap.clear();
-    const container=document.createElement('div');
-    container.className='canvas-container';
-    const grid=document.createElement('div');
-    grid.className='canvas-grid';
-    container.appendChild(grid);
-    space2Grid.appendChild(container);
-
-    for(let i=0;i<CANVAS_POOL_SIZE;i++){
-        const el=document.createElement('div');
-        el.className='canvas-item';
-        el.style.display='none';
-        grid.appendChild(el);
-        canvasState.pool.push(el);
-        canvasState.freePool.push(el);
-    }
-}
-
-function acquireCanvasEl(){
-    if(canvasState.freePool.length===0) return null;
-    const el=canvasState.freePool.pop();
-    el.style.display='';
-    return el;
-}
-
-function releaseCanvasEl(el){
-    el.style.display='none';
-    el.style.visibility='';
-    canvasState.freePool.push(el);
-}
-
-function renderCanvasItems(){
-    const vw=space2Grid.clientWidth||window.innerWidth;
-    const vh=space2Grid.clientHeight||window.innerHeight;
-    const buf=CANVAS_BUFFER;
-    const camX=canvasState.cameraOffset.x;
-    const camY=canvasState.cameraOffset.y;
-    const minCullX=Math.min(camX,canvasState.targetOffset.x);
-    const maxCullX=Math.max(camX,canvasState.targetOffset.x);
-    const minCullY=Math.min(camY,canvasState.targetOffset.y);
-    const maxCullY=Math.max(camY,canvasState.targetOffset.y);
-    const startTileX=Math.floor((minCullX-buf)/canvasState.totalWidth);
-    const endTileX=Math.floor((maxCullX+vw+buf)/canvasState.totalWidth);
-    const startTileY=Math.floor((minCullY-buf)/canvasState.maxColHeight);
-    const endTileY=Math.floor((maxCullY+vh+buf)/canvasState.maxColHeight);
-    const visibleThisFrame=new Set();
-
-    for(const layoutItem of canvasState.layoutItems){
-        for(let ty=startTileY;ty<=endTileY;ty++){
-            for(let tx=startTileX;tx<=endTileX;tx++){
-                const worldX=layoutItem.x+tx*canvasState.totalWidth;
-                const worldY=layoutItem.y+ty*canvasState.maxColHeight;
-                const sx=worldX-camX;
-                const sy=worldY-camY;
-                const txs=worldX-canvasState.targetOffset.x;
-                const tys=worldY-canvasState.targetOffset.y;
-                const visibleAtCam=sx+layoutItem.w>=-buf&&sx<=vw+buf&&sy+layoutItem.h>=-buf&&sy<=vh+buf;
-                const visibleAtTarget=txs+layoutItem.w>=-buf&&txs<=vw+buf&&tys+layoutItem.h>=-buf&&tys<=vh+buf;
-                if(!visibleAtCam&&!visibleAtTarget) continue;
-
-                const visKey=`${layoutItem.key}_${tx}_${ty}`;
-                visibleThisFrame.add(visKey);
-                const existing=canvasState.activeMap.get(visKey);
-                if(existing){
-                    existing.el.style.transform=`translate3d(${sx}px,${sy}px,0)`;
-                }else{
-                    const el=acquireCanvasEl();
-                    if(!el) continue;
-                    const item=layoutItem.item;
-                    const mt=item.mediaType||'image';
-                    el.style.width=`${layoutItem.w}px`;
-                    el.style.height=`${layoutItem.h}px`;
-                    el.style.transform=`translate3d(${sx}px,${sy}px,0)`;
-                    if(mt==='video'){
-                        el.innerHTML=`<video src="${escapeHtml(item.src||'')}" muted loop playsinline preload="metadata" autoplay></video>`;
-                    }else{
-                        el.innerHTML=`<img src="${escapeHtml(item.src||'')}" alt="" loading="lazy" decoding="async">`;
-                    }
-                    el.dataset.itemId=item.id;
-                    canvasState.elToBookmark.set(el,item);
-                    canvasState.activeMap.set(visKey,{el,layoutItem,screenX:sx,screenY:sy});
-                }
-            }
-        }
-    }
-
-    for(const [visKey,entry] of canvasState.activeMap){
-        if(!visibleThisFrame.has(visKey)){
-            releaseCanvasEl(entry.el);
-            canvasState.elToBookmark.delete(entry.el);
-            canvasState.activeMap.delete(visKey);
-        }
-    }
-}
-
-function canvasAnimate(){
-    canvasState.animFrame=requestAnimationFrame(canvasAnimate);
-    const dx=canvasState.targetOffset.x-canvasState.cameraOffset.x;
-    const dy=canvasState.targetOffset.y-canvasState.cameraOffset.y;
-    if(Math.abs(dx)>0.01||Math.abs(dy)>0.01){
-        canvasState.cameraOffset.x+=dx*CANVAS_EASING;
-        canvasState.cameraOffset.y+=dy*CANVAS_EASING;
-        renderCanvasItems();
-    }
-}
-
-function canvasMouseDown(e){
-    canvasState.isDragging=true;
-    canvasState.hasDragged=false;
-    canvasState.dragStart={x:e.clientX,y:e.clientY};
-    canvasState.previousMouse={x:e.clientX,y:e.clientY};
-    space2Grid.style.cursor='grabbing';
-}
-
-function canvasMouseMove(e){
-    if(!canvasState.isDragging) return;
-    const totalDx=e.clientX-canvasState.dragStart.x;
-    const totalDy=e.clientY-canvasState.dragStart.y;
-    if(Math.sqrt(totalDx*totalDx+totalDy*totalDy)>5) canvasState.hasDragged=true;
-    const deltaX=e.clientX-canvasState.previousMouse.x;
-    const deltaY=e.clientY-canvasState.previousMouse.y;
-    canvasState.targetOffset.x-=deltaX;
-    canvasState.targetOffset.y-=deltaY;
-    canvasState.previousMouse={x:e.clientX,y:e.clientY};
-}
-
-function canvasMouseUp(e){
-    const wasDragging=canvasState.isDragging;
-    canvasState.isDragging=false;
-    space2Grid.style.cursor='';
-    if(wasDragging&&!canvasState.hasDragged){
-        const target=e.target.closest('.canvas-item');
-        if(target&&target.dataset.itemId) openLightbox(target.dataset.itemId);
-    }
-}
-
-function canvasWheel(e){
-    e.preventDefault();
-    canvasState.targetOffset.x+=e.deltaX;
-    canvasState.targetOffset.y+=e.deltaY;
-}
-
-let canvasTouchStartPos=null;
-function canvasTouchStart(e){
-    if(e.touches.length===1) canvasTouchStartPos={x:e.touches[0].clientX,y:e.touches[0].clientY};
-}
-function canvasTouchMove(e){
-    if(e.touches.length===1&&canvasTouchStartPos){
-        e.preventDefault();
-        const deltaX=e.touches[0].clientX-canvasTouchStartPos.x;
-        const deltaY=e.touches[0].clientY-canvasTouchStartPos.y;
-        canvasState.targetOffset.x-=deltaX;
-        canvasState.targetOffset.y-=deltaY;
-        canvasTouchStartPos={x:e.touches[0].clientX,y:e.touches[0].clientY};
-    }
-}
-function canvasTouchEnd(){canvasTouchStartPos=null;}
-
-function canvasResize(){
-    if(space2LayoutMode!=='canvas') return;
-    buildCanvasLayout();
-    for(const [visKey,entry] of canvasState.activeMap){
-        releaseCanvasEl(entry.el);
-        canvasState.activeMap.delete(visKey);
-    }
-    renderCanvasItems();
-}
-
-// ──── Lightbox ───────────────────────────────────────────────────────────────
-function openLightbox(itemId){
-    const item=space2State.items.find(i=>i.id===itemId);
-    if(!item||!space2Lightbox) return;
-    const mt=item.mediaType||'image';
-    const previewSrc=item.src||'';
-
-    if(mt==='video'){
-        space2LightboxMedia.innerHTML=`<video src="${escapeHtml(previewSrc)}" controls autoplay muted playsinline style="max-width:70vw;max-height:70vh;border-radius:24px;"></video>`;
-    }else if(mt==='youtube'){
-        const ytId=extractYouTubeId(previewSrc);
-        space2LightboxMedia.innerHTML=`<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1" allow="autoplay;encrypted-media" allowfullscreen style="width:70vw;height:70vh;border:none;border-radius:24px;"></iframe>`;
-    }else{
-        space2LightboxMedia.innerHTML=`<img src="${escapeHtml(previewSrc)}" alt="">`;
-    }
-
-    space2LightboxTitle.textContent=item.title||'';
-    if(item.pageUrl||item.src){
-        space2LightboxLink.href=item.pageUrl||item.src;
-        space2LightboxLink.textContent=item.pageUrl||item.src;
-    }else{
-        space2LightboxLink.textContent='';
-    }
-
-    space2Lightbox.classList.remove('hidden');
-    document.addEventListener('keydown',lightboxKeydown);
-}
-
-function closeLightbox(){
-    if(!space2Lightbox) return;
-    space2Lightbox.classList.add('hidden');
-    space2LightboxMedia.innerHTML='';
-    document.removeEventListener('keydown',lightboxKeydown);
-}
-
-function lightboxKeydown(e){
-    if(e.key==='Escape') closeLightbox();
-}
-
-if(space2LightboxClose) space2LightboxClose.addEventListener('click',closeLightbox);
-if(space2Lightbox) space2Lightbox.addEventListener('click',e=>{if(e.target===space2Lightbox) closeLightbox();});
-if(space2LightboxOpen) space2LightboxOpen.addEventListener('click',()=>{
-    const link=space2LightboxLink.href;
-    if(link) window.open(link,'_blank');
-});
-if(space2LightboxDownload) space2LightboxDownload.addEventListener('click',async()=>{
-    const item=space2State.items.find(i=>i.id===space2LightboxMedia.dataset.itemId);
-    if(!item) return;
-    try{
-        const resp=await fetch(item.src);
-        const blob=await resp.blob();
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement('a');
-        a.href=url;
-        a.download=(item.title||'download').replace(/[^a-z0-9]/gi,'_');
-        a.click();
-        URL.revokeObjectURL(url);
-    }catch(e){}
-});
-if(space2LightboxCopy) space2LightboxCopy.addEventListener('click',async()=>{
-    const img=space2LightboxMedia.querySelector('img');
-    if(!img) return;
-    try{
-        const resp=await fetch(img.src);
-        const blob=await resp.blob();
-        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-    }catch(e){}
-});
-if(space2LightboxDelete) space2LightboxDelete.addEventListener('click',()=>{
-    const items=[...space2Grid.querySelectorAll('.canvas-item')];
-    for(const el of items){
-        if(el.dataset.itemId===space2LightboxTitle.dataset.itemId){
-            el.remove();
-            break;
-        }
-    }
-    closeLightbox();
-});
-
-// ──── X Bookmarks Import ─────────────────────────────────────────────────────
-async function runXBookmarksImport(){
-    if(!space2ImportXBtn||!currentSupabaseUser||!space2AuthToken) return;
-    space2ImportXBtn.disabled=true;
-    space2ImportXBtn.innerHTML=`<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg><span>Syncing...</span>`;
-
-    try{
-        if(IS_MAC_APP&&nodeChildProcess){
-            await runXImportCLI();
-        }else{
-            showSpace2Toast('X Import requires the Mac app');
-        }
-    }catch(e){
-        showSpace2Toast('X Import failed: '+e.message);
-    }finally{
-        space2ImportXBtn.disabled=false;
-        space2ImportXBtn.innerHTML=`<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg><span>Import X</span>`;
-    }
-}
-
-async function runXImportCLI(){
-    const scriptDir=nodePath.join(__dirname||'.','x-importer');
-    const shellScript=nodePath.join(scriptDir,'sync-x-bookmarks.sh');
-
-    return new Promise((resolve,reject)=>{
-        const child=nodeChildProcess.exec(
-            `bash "${shellScript}" "${space2AuthToken}" dia`,
-            {env:{...process.env,HOME:nodeOs.homedir()}},
-            (err,stdout,stderr)=>{
-                if(err){
-                    showSpace2Toast('X Import failed');
-                    reject(err);
-                    return;
-                }
-                showSpace2Toast('X Bookmarks synced!');
-                restoreStateFromSupabase();
-                resolve();
-            }
-        );
-    });
-}
-
-async function autoSyncXBookmarksOnLaunch(){
-    if(!currentSupabaseUser||!space2AuthToken) return;
-    const lastSync=localStorage.getItem('asq.xBookmarks.lastSync');
-    const now=Date.now();
-    if(lastSync&&(now-parseInt(lastSync,10))<3600000) return; // Skip if synced in last hour
-
-    try{
-        if(IS_MAC_APP&&nodeChildProcess){
-            await runXImportCLI();
-            localStorage.setItem('asq.xBookmarks.lastSync',now.toString());
-        }
-    }catch(e){
-        console.warn('Auto X sync failed:',e);
-    }
-}
-
 if(space2AutoMetaToggle) space2AutoMetaToggle.addEventListener('change',()=>{
     space2AutoMetaEnabled=!!space2AutoMetaToggle.checked;
     localStorage.setItem('asq.space2.autoMeta',space2AutoMetaEnabled?'1':'0');

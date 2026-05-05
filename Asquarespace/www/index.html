@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Light.otf" as="font" type="font/otf">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Black.otf" as="font" type="font/otf">
-    <link rel="stylesheet" href="css/style.css?v=20260506-001">
+    <link rel="stylesheet" href="css/style.css?v=20260505-014">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -266,15 +266,15 @@
     <div class="space2-body">
       <aside id="space2-sidebar" class="space2-sidebar">
         <div class="space2-head space2-sidebar-head">
-          <div id="space2-layout-pill" class="space2-layout-pill hidden" aria-label="Grid layout mode">
-            <button id="space2-layout-grid" class="space2-layout-btn active" type="button" title="Grid layout" aria-label="Grid layout">
-              <i data-lucide="layout-grid" aria-hidden="true"></i>
-            </button>
-            <button id="space2-layout-feed" class="space2-layout-btn" type="button" title="Feed layout" aria-label="Feed layout">
-              <i data-lucide="list" aria-hidden="true"></i>
-            </button>
-            <button id="space2-layout-canvas" class="space2-layout-btn" type="button" title="Canvas layout" aria-label="Canvas layout">
-              <i data-lucide="scan" aria-hidden="true"></i>
+          <div id="space2-view-switch" class="space2-view-switch hidden" aria-label="Discover and Grid switch">
+            <button id="space2-view-toggle" class="space2-view-toggle" aria-label="Toggle Discover and Grid view" aria-pressed="false" title="Switch to Grid">
+              <span class="space2-view-icon space2-view-icon-discover" aria-hidden="true">
+                <i data-lucide="compass" aria-hidden="true"></i>
+              </span>
+              <span class="space2-view-icon space2-view-icon-grid" aria-hidden="true">
+                <i data-lucide="layout-grid" aria-hidden="true"></i>
+              </span>
+              <span class="space2-view-thumb" aria-hidden="true"></span>
             </button>
           </div>
           <div class="space2-search-wrap">
@@ -294,10 +294,6 @@
         <div class="space2-side-title">Collections</div>
         <div id="space2-collections" class="space2-collections"></div>
         <div class="space2-sidebar-footer">
-          <button id="space2-import-x-btn" class="space2-import-x-btn" type="button" title="Import X Bookmarks" aria-label="Import X Bookmarks">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-            <span>Import X</span>
-          </button>
           <button id="space2-settings-btn" class="space2-sidebar-settings" type="button" aria-label="Open Space settings" title="Space settings">
             <i data-lucide="settings" aria-hidden="true"></i>
           </button>
@@ -413,30 +409,6 @@
           </div>
         </div>
       </div>
-    </div>
-  </div>
-
-  <!-- Lightbox overlay -->
-  <div id="space2-lightbox" class="space2-lightbox hidden">
-    <button id="space2-lightbox-close" class="space2-lightbox-close" type="button" aria-label="Close">
-      <i data-lucide="x" aria-hidden="true"></i>
-    </button>
-    <button id="space2-lightbox-copy" class="space2-lightbox-action" type="button" title="Copy image" aria-label="Copy image">
-      <i data-lucide="copy" aria-hidden="true"></i>
-    </button>
-    <button id="space2-lightbox-download" class="space2-lightbox-action" type="button" title="Download" aria-label="Download">
-      <i data-lucide="download" aria-hidden="true"></i>
-    </button>
-    <button id="space2-lightbox-open" class="space2-lightbox-action" type="button" title="Open original" aria-label="Open original">
-      <i data-lucide="external-link" aria-hidden="true"></i>
-    </button>
-    <button id="space2-lightbox-delete" class="space2-lightbox-action space2-lightbox-action-danger" type="button" title="Delete" aria-label="Delete">
-      <i data-lucide="trash-2" aria-hidden="true"></i>
-    </button>
-    <div id="space2-lightbox-media" class="space2-lightbox-media"></div>
-    <div id="space2-lightbox-info" class="space2-lightbox-info">
-      <div id="space2-lightbox-title" class="space2-lightbox-title"></div>
-      <a id="space2-lightbox-link" class="space2-lightbox-link" href="#" target="_blank" rel="noopener"></a>
     </div>
   </div>
 
@@ -713,6 +685,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/lucide.min.js"></script>
 <script src="js/CSInterface.js"></script>
-    <script src="js/main.js?v=20260506-002"></script>
+<script src="js/main.js?v=20260505-014"></script>
 </body>
 </html>
