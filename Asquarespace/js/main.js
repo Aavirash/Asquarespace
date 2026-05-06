@@ -2398,32 +2398,25 @@ function runSpace2InfiniteEase(){
     if(space2InfiniteEaseRaf) return;
     const tick=()=>{
         if(space2GridViewMode!=='infinite'||space2View!=='grid'){
+            space2InfiniteVelocity={x:0,y:0};
             space2InfiniteEaseRaf=0;
             return;
         }
         const dx=space2InfiniteTargetOffset.x-space2InfiniteOffset.x;
         const dy=space2InfiniteTargetOffset.y-space2InfiniteOffset.y;
-        const done=Math.abs(dx)<0.08&&Math.abs(dy)<0.08;
+        const distance=Math.hypot(dx,dy);
+        const done=distance<0.18;
         if(done){
             space2InfiniteOffset.x=space2InfiniteTargetOffset.x;
             space2InfiniteOffset.y=space2InfiniteTargetOffset.y;
-            if(Math.abs(space2InfiniteVelocity.x)>0.02||Math.abs(space2InfiniteVelocity.y)>0.02){
-                space2InfiniteOffset.x+=space2InfiniteVelocity.x;
-                space2InfiniteOffset.y+=space2InfiniteVelocity.y;
-                space2InfiniteTargetOffset.x=space2InfiniteOffset.x;
-                space2InfiniteTargetOffset.y=space2InfiniteOffset.y;
-                space2InfiniteVelocity.x*=0.9;
-                space2InfiniteVelocity.y*=0.9;
-                layoutSpace2Grid();
-                space2InfiniteEaseRaf=requestAnimationFrame(tick);
-                return;
-            }
+            space2InfiniteVelocity={x:0,y:0};
             layoutSpace2Grid();
             space2InfiniteEaseRaf=0;
             return;
         }
-        space2InfiniteOffset.x+=dx*0.58;
-        space2InfiniteOffset.y+=dy*0.58;
+        const easing=distance>220?0.46:distance>80?0.34:0.26;
+        space2InfiniteOffset.x+=dx*easing;
+        space2InfiniteOffset.y+=dy*easing;
         layoutSpace2Grid();
         space2InfiniteEaseRaf=requestAnimationFrame(tick);
     };
@@ -2436,10 +2429,12 @@ function setSpace2GridViewMode(mode,{persist=true,resetOffset=false}={}){
         updateSpace2GridModeToggleUI();
         return;
     }
+    const changed=space2GridViewMode!==next;
     space2GridViewMode=next;
     if(resetOffset){
         space2InfiniteOffset={x:0,y:0};
         space2InfiniteTargetOffset={x:0,y:0};
+        space2InfiniteVelocity={x:0,y:0};
     }
     if(persist) localStorage.setItem('asq.space2.grid.viewMode',space2GridViewMode);
     updateSpace2GridModeToggleUI();
@@ -2452,7 +2447,8 @@ function setSpace2GridViewMode(mode,{persist=true,resetOffset=false}={}){
         cancelAnimationFrame(space2InfiniteEaseRaf);
         space2InfiniteEaseRaf=0;
     }
-    scheduleSpace2GridLayout();
+    if(changed) renderSpace2Grid();
+    else scheduleSpace2GridLayout();
 }
 
 function isSpace2InfiniteInteractiveTarget(target){
@@ -2467,6 +2463,13 @@ function onSpace2InfinitePointerDown(e){
     const isPanButton=isMouse?(e.button===1||e.button===2):(pointerType==='touch'||pointerType==='pen');
     if(!isPanButton) return;
     if(!isMouse&&isSpace2InfiniteInteractiveTarget(e.target)) return;
+    if(space2InfiniteEaseRaf){
+        cancelAnimationFrame(space2InfiniteEaseRaf);
+        space2InfiniteEaseRaf=0;
+    }
+    space2InfiniteVelocity={x:0,y:0};
+    space2InfiniteTargetOffset.x=space2InfiniteOffset.x;
+    space2InfiniteTargetOffset.y=space2InfiniteOffset.y;
     space2InfinitePointerDrag={id:e.pointerId,startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,moved:false};
     space2Grid.classList.add('space2-grid-dragging');
     try{space2Grid.setPointerCapture(e.pointerId);}catch{}
@@ -2480,14 +2483,18 @@ function onSpace2InfinitePointerMove(e){
     if(Math.abs(e.clientX-space2InfinitePointerDrag.startX)>4||Math.abs(e.clientY-space2InfinitePointerDrag.startY)>4){
         space2InfinitePointerDrag.moved=true;
     }
-    const dragGain=1.18;
-    space2InfiniteTargetOffset.x-=dx*dragGain;
-    space2InfiniteTargetOffset.y-=dy*dragGain;
-    space2InfiniteVelocity.x=-dx*0.22;
-    space2InfiniteVelocity.y=-dy*0.22;
+    const dragGain=1.02;
+    const moveX=dx*dragGain;
+    const moveY=dy*dragGain;
+    space2InfiniteOffset.x-=moveX;
+    space2InfiniteOffset.y-=moveY;
+    space2InfiniteTargetOffset.x=space2InfiniteOffset.x;
+    space2InfiniteTargetOffset.y=space2InfiniteOffset.y;
+    space2InfiniteVelocity.x=-moveX;
+    space2InfiniteVelocity.y=-moveY;
     space2InfinitePointerDrag.lastX=e.clientX;
     space2InfinitePointerDrag.lastY=e.clientY;
-    runSpace2InfiniteEase();
+    scheduleSpace2InfiniteRender();
     e.preventDefault();
 }
 
@@ -2495,6 +2502,15 @@ function onSpace2InfinitePointerUp(e){
     if(space2GridViewMode!=='infinite'||!space2InfinitePointerDrag||space2InfinitePointerDrag.id!==e.pointerId) return;
     space2InfiniteSuppressClick=!!space2InfinitePointerDrag.moved;
     try{space2Grid&&space2Grid.releasePointerCapture(e.pointerId);}catch{}
+    if(space2InfinitePointerDrag.moved){
+        const momentumX=Math.max(-64,Math.min(64,space2InfiniteVelocity.x*7));
+        const momentumY=Math.max(-64,Math.min(64,space2InfiniteVelocity.y*7));
+        space2InfiniteTargetOffset.x=space2InfiniteOffset.x+momentumX;
+        space2InfiniteTargetOffset.y=space2InfiniteOffset.y+momentumY;
+        runSpace2InfiniteEase();
+    }else{
+        space2InfiniteVelocity={x:0,y:0};
+    }
     space2InfinitePointerDrag=null;
     if(space2Grid) space2Grid.classList.remove('space2-grid-dragging');
 }
@@ -2503,15 +2519,13 @@ function onSpace2InfiniteWheel(e){
     if(space2GridViewMode!=='infinite'||space2View!=='grid') return;
     const target=e.target;
     if(target&&target.closest&&target.closest('input,textarea,select,[contenteditable="true"]')) return;
-    const speed=2.1;
+    const speed=2.35;
     const wx=e.deltaX*speed;
     const wy=e.deltaY*speed;
-    space2InfiniteOffset.x+=wx*0.72;
-    space2InfiniteOffset.y+=wy*0.72;
-    space2InfiniteTargetOffset.x=space2InfiniteOffset.x+wx*0.28;
-    space2InfiniteTargetOffset.y=space2InfiniteOffset.y+wy*0.28;
-    space2InfiniteVelocity.x+=wx*0.04;
-    space2InfiniteVelocity.y+=wy*0.04;
+    space2InfiniteOffset.x+=wx*0.86;
+    space2InfiniteOffset.y+=wy*0.86;
+    space2InfiniteTargetOffset.x=space2InfiniteOffset.x+wx*0.14;
+    space2InfiniteTargetOffset.y=space2InfiniteOffset.y+wy*0.14;
     runSpace2InfiniteEase();
     e.preventDefault();
 }
