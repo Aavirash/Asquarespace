@@ -2032,7 +2032,7 @@ function _renderSpace2GridImpl(){
                     const video=card.querySelector('.space2-video-thumb');
                     if(video&&video.src!==thumbSrc){
                         video.src=thumbSrc;
-                        video.play().catch(()=>{});
+                        if(!infiniteLite) video.play().catch(()=>{});
                     }
                 }else{
                     const img=card.querySelector('.space2-thumb');
@@ -2079,9 +2079,8 @@ function _renderSpace2GridImpl(){
                             card.classList.add('img-pending');
                             card.classList.remove('img-loaded');
                             if(pxCanvas) pxCanvas.style.display='none';
-                            if(space2LazyImageObserver) space2LazyImageObserver.unobserve(img);
                             img.dataset.loaded='0';
-                            observeSpace2LazyImage(img);
+                            if(!infiniteLite) observeSpace2LazyImage(img);
                         }
                     }
                 }
@@ -2334,6 +2333,7 @@ function _renderSpace2GridImpl(){
     space2Grid.innerHTML='';
     space2Grid.appendChild(fragment);
     layoutSpace2Grid();
+    if(infiniteLite) loadSpace2InfiniteVisibleImages();
     scheduleSpace2GridLayout();
 }
 
@@ -2582,6 +2582,7 @@ function layoutSpace2Grid(){
         card.style.top=`${top}px`;
     });
     space2Grid.style.setProperty('--space2-grid-content-height',`${Math.max(space2Grid.clientHeight,0)}px`);
+    loadSpace2InfiniteVisibleImages();
 }
 
 // ── IndexedDB image blob cache — prevents re-downloading images on every reload ──
@@ -2703,6 +2704,30 @@ function observeSpace2LazyImage(img){
     }
     ensureSpace2LazyImageObserver();
     if(space2LazyImageObserver) space2LazyImageObserver.observe(img);
+}
+
+function loadSpace2InfiniteVisibleImages(){
+    if(!space2Grid||space2GridViewMode!=='infinite'||space2LayoutMode==='feed') return;
+    const gridRect=space2Grid.getBoundingClientRect();
+    const buffer=220;
+    const imgs=space2Grid.querySelectorAll('.space2-item .space2-thumb[data-src]');
+    imgs.forEach(img=>{
+        if(!img||img.dataset.loaded==='1') return;
+        const card=img.closest('.space2-item');
+        if(!card) return;
+        const r=card.getBoundingClientRect();
+        const visible=!(
+            r.right<gridRect.left-buffer||
+            r.left>gridRect.right+buffer||
+            r.bottom<gridRect.top-buffer||
+            r.top>gridRect.bottom+buffer
+        );
+        if(!visible) return;
+        img.dataset.loaded='1';
+        const src=(img.dataset.src||'').trim();
+        const cacheKey=img.dataset.cacheKey||src;
+        _loadImgWithBlobCache(img,src,cacheKey).catch(()=>{img.src=src;});
+    });
 }
 
 async function resolveSpace2ItemDisplaySource(item){
