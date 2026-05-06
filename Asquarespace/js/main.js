@@ -2416,10 +2416,6 @@ function setSpace2GridViewMode(mode,{persist=true,resetOffset=false}={}){
         space2InfiniteTargetOffset={x:0,y:0};
     }
     if(persist) localStorage.setItem('asq.space2.grid.viewMode',space2GridViewMode);
-    if(space2LazyImageObserver){
-        try{space2LazyImageObserver.disconnect();}catch{}
-        space2LazyImageObserver=null;
-    }
     updateSpace2GridModeToggleUI();
     if(space2Grid){
         const infinite=space2GridViewMode==='infinite';
@@ -2537,15 +2533,9 @@ function layoutSpace2Grid(){
     const paddingBottom=parseFloat(styles.paddingBottom)||0;
     const gap=parseFloat(styles.getPropertyValue('--space2-grid-gap'))||16;
     const baseColumnCount=getSpace2GridColumnCount();
-    const infiniteColumnCount=infiniteMode
-        ?Math.max(baseColumnCount+2,Math.min(18,Math.ceil(Math.sqrt(Math.max(cards.length,1))*2.2)))
-        :baseColumnCount;
-    const columnCount=infiniteMode?infiniteColumnCount:baseColumnCount;
+    const columnCount=baseColumnCount;
     const innerWidth=Math.max(0,space2Grid.clientWidth-paddingLeft-paddingRight);
-    const baseCardWidth=Math.max(0,(innerWidth-gap*(baseColumnCount-1))/baseColumnCount);
-    const cardWidth=infiniteMode
-        ?Math.max(160,baseCardWidth*0.86)
-        :Math.max(0,(innerWidth-gap*(columnCount-1))/columnCount);
+    const cardWidth=Math.max(0,(innerWidth-gap*(columnCount-1))/columnCount);
     const columnHeights=Array(columnCount).fill(paddingTop);
 
     cards.forEach(card=>{
@@ -2572,10 +2562,8 @@ function layoutSpace2Grid(){
         return;
     }
 
-    const worldWidth=Math.max(
-        cardWidth+gap,
-        paddingLeft+paddingRight+columnCount*(cardWidth+gap)
-    );
+    const baseWorldWidth=paddingLeft+paddingRight+columnCount*(cardWidth+gap);
+    const worldWidth=Math.max(cardWidth+gap,baseWorldWidth*2);
     const worldHeight=Math.max(280,contentHeight-paddingBottom+gap);
     const wrappedX=((space2InfiniteOffset.x%worldWidth)+worldWidth)%worldWidth;
     const wrappedY=((space2InfiniteOffset.y%worldHeight)+worldHeight)%worldHeight;
