@@ -294,8 +294,10 @@ let space2LayoutMode=(localStorage.getItem('asq.space2.layout.mode')||'grid')===
 let space2ColumnsSetting=localStorage.getItem('asq.space2.layout.columns')||'auto';
 let space2GridViewMode=localStorage.getItem('asq.space2.grid.viewMode')==='infinite'?'infinite':'masonry';
 let space2InfiniteOffset={x:0,y:0};
+let space2InfiniteTargetOffset={x:0,y:0};
 let space2InfiniteWorld={width:0,height:0,paddingLeft:0,paddingTop:0};
 let space2InfinitePanRaf=0;
+let space2InfiniteEaseRaf=0;
 let space2InfinitePointerDrag=null;
 let space2InfiniteSuppressClick=false;
 let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='1';
@@ -2376,6 +2378,31 @@ function scheduleSpace2InfiniteRender(){
     });
 }
 
+function runSpace2InfiniteEase(){
+    if(space2InfiniteEaseRaf) return;
+    const tick=()=>{
+        if(space2GridViewMode!=='infinite'||space2View!=='grid'){
+            space2InfiniteEaseRaf=0;
+            return;
+        }
+        const dx=space2InfiniteTargetOffset.x-space2InfiniteOffset.x;
+        const dy=space2InfiniteTargetOffset.y-space2InfiniteOffset.y;
+        const done=Math.abs(dx)<0.3&&Math.abs(dy)<0.3;
+        if(done){
+            space2InfiniteOffset.x=space2InfiniteTargetOffset.x;
+            space2InfiniteOffset.y=space2InfiniteTargetOffset.y;
+            layoutSpace2Grid();
+            space2InfiniteEaseRaf=0;
+            return;
+        }
+        space2InfiniteOffset.x+=dx*0.22;
+        space2InfiniteOffset.y+=dy*0.22;
+        layoutSpace2Grid();
+        space2InfiniteEaseRaf=requestAnimationFrame(tick);
+    };
+    space2InfiniteEaseRaf=requestAnimationFrame(tick);
+}
+
 function setSpace2GridViewMode(mode,{persist=true,resetOffset=false}={}){
     const next=mode==='infinite'?'infinite':'masonry';
     if(space2GridViewMode===next&&!resetOffset){
@@ -2383,13 +2410,20 @@ function setSpace2GridViewMode(mode,{persist=true,resetOffset=false}={}){
         return;
     }
     space2GridViewMode=next;
-    if(resetOffset) space2InfiniteOffset={x:0,y:0};
+    if(resetOffset){
+        space2InfiniteOffset={x:0,y:0};
+        space2InfiniteTargetOffset={x:0,y:0};
+    }
     if(persist) localStorage.setItem('asq.space2.grid.viewMode',space2GridViewMode);
     updateSpace2GridModeToggleUI();
     if(space2Grid){
         const infinite=space2GridViewMode==='infinite';
         space2Grid.classList.toggle('infinite-mode',infinite);
         if(!infinite) space2Grid.classList.remove('space2-grid-dragging');
+    }
+    if(space2GridViewMode!=='infinite'&&space2InfiniteEaseRaf){
+        cancelAnimationFrame(space2InfiniteEaseRaf);
+        space2InfiniteEaseRaf=0;
     }
     scheduleSpace2GridLayout();
 }
@@ -2419,11 +2453,11 @@ function onSpace2InfinitePointerMove(e){
     if(Math.abs(e.clientX-space2InfinitePointerDrag.startX)>4||Math.abs(e.clientY-space2InfinitePointerDrag.startY)>4){
         space2InfinitePointerDrag.moved=true;
     }
-    space2InfiniteOffset.x-=dx;
-    space2InfiniteOffset.y-=dy;
+    space2InfiniteTargetOffset.x-=dx;
+    space2InfiniteTargetOffset.y-=dy;
     space2InfinitePointerDrag.lastX=e.clientX;
     space2InfinitePointerDrag.lastY=e.clientY;
-    scheduleSpace2InfiniteRender();
+    runSpace2InfiniteEase();
     e.preventDefault();
 }
 
@@ -2438,10 +2472,11 @@ function onSpace2InfinitePointerUp(e){
 function onSpace2InfiniteWheel(e){
     if(space2GridViewMode!=='infinite'||space2View!=='grid') return;
     const target=e.target;
-    if(target&&target.closest&&target.closest('video,audio,iframe,input,textarea,button,a')) return;
-    space2InfiniteOffset.x+=e.deltaX;
-    space2InfiniteOffset.y+=e.deltaY;
-    scheduleSpace2InfiniteRender();
+    if(target&&target.closest&&target.closest('input,textarea,select,[contenteditable="true"]')) return;
+    const speed=1.08;
+    space2InfiniteTargetOffset.x+=e.deltaX*speed;
+    space2InfiniteTargetOffset.y+=e.deltaY*speed;
+    runSpace2InfiniteEase();
     e.preventDefault();
 }
 
@@ -2495,9 +2530,16 @@ function layoutSpace2Grid(){
     const paddingTop=parseFloat(styles.paddingTop)||0;
     const paddingBottom=parseFloat(styles.paddingBottom)||0;
     const gap=parseFloat(styles.getPropertyValue('--space2-grid-gap'))||16;
-    const columnCount=getSpace2GridColumnCount();
+    const baseColumnCount=getSpace2GridColumnCount();
+    const infiniteColumnCount=infiniteMode
+        ?Math.max(baseColumnCount+2,Math.min(18,Math.ceil(Math.sqrt(Math.max(cards.length,1))*2.2)))
+        :baseColumnCount;
+    const columnCount=infiniteMode?infiniteColumnCount:baseColumnCount;
     const innerWidth=Math.max(0,space2Grid.clientWidth-paddingLeft-paddingRight);
-    const cardWidth=Math.max(0,(innerWidth-gap*(columnCount-1))/columnCount);
+    const baseCardWidth=Math.max(0,(innerWidth-gap*(baseColumnCount-1))/baseColumnCount);
+    const cardWidth=infiniteMode
+        ?Math.max(160,baseCardWidth*0.86)
+        :Math.max(0,(innerWidth-gap*(columnCount-1))/columnCount);
     const columnHeights=Array(columnCount).fill(paddingTop);
 
     cards.forEach(card=>{
@@ -2524,7 +2566,10 @@ function layoutSpace2Grid(){
         return;
     }
 
-    const worldWidth=Math.max(cardWidth+gap,innerWidth+gap);
+    const worldWidth=Math.max(
+        cardWidth+gap,
+        paddingLeft+paddingRight+columnCount*(cardWidth+gap)
+    );
     const worldHeight=Math.max(280,contentHeight-paddingBottom+gap);
     const wrappedX=((space2InfiniteOffset.x%worldWidth)+worldWidth)%worldWidth;
     const wrappedY=((space2InfiniteOffset.y%worldHeight)+worldHeight)%worldHeight;
