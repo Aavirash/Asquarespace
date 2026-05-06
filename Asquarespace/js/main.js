@@ -300,6 +300,7 @@ let space2InfinitePanRaf=0;
 let space2InfiniteEaseRaf=0;
 let space2InfinitePointerDrag=null;
 let space2InfiniteSuppressClick=false;
+let space2InfiniteVelocity={x:0,y:0};
 let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='1';
 let space2AutoMetaRunning=false;
 const space2SidebarHead=document.querySelector('#space2-sidebar .space2-sidebar-head');
@@ -2155,6 +2156,13 @@ function _renderSpace2GridImpl(){
             const desc=card.querySelector('.space2-desc');
             if(img){
                 const onLoaded=()=>{
+                    const shell=img.closest('.space2-thumb-shell');
+                    if(shell&&img.naturalWidth&&img.naturalHeight){
+                        const ar=`${img.naturalWidth}/${img.naturalHeight}`;
+                        shell.style.setProperty('--shell-ar',ar);
+                        shell.style.aspectRatio=ar;
+                        shell.classList.add('shell-ratio');
+                    }
                     if(desc&&!item.description&&item.aiMetaState!=='loading'&&img.naturalWidth&&img.naturalHeight){
                         desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
                     }
@@ -2242,6 +2250,13 @@ function _renderSpace2GridImpl(){
                         const w=video.videoWidth||0;
                         const h=video.videoHeight||0;
                         if(w&&h) desc.textContent=`${w} x ${h}`;
+                        const shell=video.closest('.space2-thumb-shell');
+                        if(shell&&w&&h){
+                            const ar=`${w}/${h}`;
+                            shell.style.setProperty('--shell-ar',ar);
+                            shell.style.aspectRatio=ar;
+                            shell.classList.add('shell-ratio');
+                        }
                     }
                     scheduleSpace2GridLayout();
                 },{once:true});
@@ -2388,16 +2403,27 @@ function runSpace2InfiniteEase(){
         }
         const dx=space2InfiniteTargetOffset.x-space2InfiniteOffset.x;
         const dy=space2InfiniteTargetOffset.y-space2InfiniteOffset.y;
-        const done=Math.abs(dx)<0.3&&Math.abs(dy)<0.3;
+        const done=Math.abs(dx)<0.08&&Math.abs(dy)<0.08;
         if(done){
             space2InfiniteOffset.x=space2InfiniteTargetOffset.x;
             space2InfiniteOffset.y=space2InfiniteTargetOffset.y;
+            if(Math.abs(space2InfiniteVelocity.x)>0.02||Math.abs(space2InfiniteVelocity.y)>0.02){
+                space2InfiniteOffset.x+=space2InfiniteVelocity.x;
+                space2InfiniteOffset.y+=space2InfiniteVelocity.y;
+                space2InfiniteTargetOffset.x=space2InfiniteOffset.x;
+                space2InfiniteTargetOffset.y=space2InfiniteOffset.y;
+                space2InfiniteVelocity.x*=0.9;
+                space2InfiniteVelocity.y*=0.9;
+                layoutSpace2Grid();
+                space2InfiniteEaseRaf=requestAnimationFrame(tick);
+                return;
+            }
             layoutSpace2Grid();
             space2InfiniteEaseRaf=0;
             return;
         }
-        space2InfiniteOffset.x+=dx*0.22;
-        space2InfiniteOffset.y+=dy*0.22;
+        space2InfiniteOffset.x+=dx*0.58;
+        space2InfiniteOffset.y+=dy*0.58;
         layoutSpace2Grid();
         space2InfiniteEaseRaf=requestAnimationFrame(tick);
     };
@@ -2457,6 +2483,8 @@ function onSpace2InfinitePointerMove(e){
     const dragGain=1.18;
     space2InfiniteTargetOffset.x-=dx*dragGain;
     space2InfiniteTargetOffset.y-=dy*dragGain;
+    space2InfiniteVelocity.x=-dx*0.22;
+    space2InfiniteVelocity.y=-dy*0.22;
     space2InfinitePointerDrag.lastX=e.clientX;
     space2InfinitePointerDrag.lastY=e.clientY;
     runSpace2InfiniteEase();
@@ -2475,9 +2503,15 @@ function onSpace2InfiniteWheel(e){
     if(space2GridViewMode!=='infinite'||space2View!=='grid') return;
     const target=e.target;
     if(target&&target.closest&&target.closest('input,textarea,select,[contenteditable="true"]')) return;
-    const speed=1.42;
-    space2InfiniteTargetOffset.x+=e.deltaX*speed;
-    space2InfiniteTargetOffset.y+=e.deltaY*speed;
+    const speed=2.1;
+    const wx=e.deltaX*speed;
+    const wy=e.deltaY*speed;
+    space2InfiniteOffset.x+=wx*0.72;
+    space2InfiniteOffset.y+=wy*0.72;
+    space2InfiniteTargetOffset.x=space2InfiniteOffset.x+wx*0.28;
+    space2InfiniteTargetOffset.y=space2InfiniteOffset.y+wy*0.28;
+    space2InfiniteVelocity.x+=wx*0.04;
+    space2InfiniteVelocity.y+=wy*0.04;
     runSpace2InfiniteEase();
     e.preventDefault();
 }
@@ -2577,7 +2611,9 @@ function layoutSpace2Grid(){
         let left=baseLeft-wrappedX;
         let top=baseTop-wrappedY;
         if(left+cw<paddingLeft) left+=worldWidth;
+        if(left>paddingLeft+innerWidth) left-=worldWidth;
         if(top+ch<paddingTop) top+=worldHeight;
+        if(top>paddingTop+space2Grid.clientHeight) top-=worldHeight;
         card.style.left=`${left}px`;
         card.style.top=`${top}px`;
     });
