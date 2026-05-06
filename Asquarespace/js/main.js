@@ -146,6 +146,8 @@ const space2UploadBrowse = document.getElementById('space2-upload-browse');
 const space2UploadCancel = document.getElementById('space2-upload-cancel');
 const space2UploadSave = document.getElementById('space2-upload-save');
 const space2ViewToggle = document.getElementById('space2-view-toggle');
+const space2GridModeSwitch = document.getElementById('space2-grid-mode-switch');
+const space2GridModeToggle = document.getElementById('space2-grid-mode-toggle');
 const space2GridAdd = document.getElementById('space2-grid-add');
 const space2DiscoverPanel = document.getElementById('space2-discover');
 const space2DiscoverControls = document.getElementById('space2-discover-controls');
@@ -180,6 +182,13 @@ const space2ItemDelete = document.getElementById('space2-item-delete');
 const space2ItemDownload = document.getElementById('space2-item-download');
 const space2ItemCancel = document.getElementById('space2-item-cancel');
 const space2ItemSave = document.getElementById('space2-item-save');
+const space2Lightbox = document.getElementById('space2-lightbox');
+const space2LightboxStage = document.getElementById('space2-lightbox-stage');
+const space2LightboxClose = document.getElementById('space2-lightbox-close');
+const space2LightboxEdit = document.getElementById('space2-lightbox-edit');
+const space2LightboxMeta = document.getElementById('space2-lightbox-meta');
+const space2LightboxTitle = document.getElementById('space2-lightbox-title');
+const space2LightboxDescription = document.getElementById('space2-lightbox-description');
 const space2CollectionModal = document.getElementById('space2-collection-modal');
 let space2LayoutFrame=0;
 let space2LazyImageObserver=null;
@@ -282,11 +291,17 @@ let space2View='grid';
 let space2SidebarWidth=parseInt(localStorage.getItem('asq.space2.sidebar.width')||'264',10)||264;
 let space2LayoutMode=(localStorage.getItem('asq.space2.layout.mode')||'grid')==='feed'?'feed':'grid';
 let space2ColumnsSetting=localStorage.getItem('asq.space2.layout.columns')||'auto';
+let space2GridViewMode=localStorage.getItem('asq.space2.grid.viewMode')==='infinite'?'infinite':'masonry';
+let space2InfiniteOffset={x:0,y:0};
+let space2InfiniteWorld={width:0,height:0,paddingLeft:0,paddingTop:0};
+let space2InfinitePanRaf=0;
+let space2InfinitePointerDrag=null;
+let space2InfiniteSuppressClick=false;
 let space2AutoMetaEnabled=(localStorage.getItem('asq.space2.autoMeta')||'0')==='1';
 let space2AutoMetaRunning=false;
 const space2SidebarHead=document.querySelector('#space2-sidebar .space2-sidebar-head');
 const space2MobileLayoutSlots=new Map();
-[space2ViewSwitch,space2SearchWrap].forEach(el=>{
+[space2ViewSwitch,space2GridModeSwitch,space2SearchWrap].forEach(el=>{
     if(el&&el.parentElement) space2MobileLayoutSlots.set(el,{parent:el.parentElement,next:el.nextElementSibling});
 });
 let space2AiModels=[];
@@ -2279,7 +2294,13 @@ function _renderSpace2GridImpl(){
             card.classList.remove('img-pending');
             card.classList.add('img-loaded');
         }
-        card.addEventListener('click',()=>openSpace2Item(item.id));
+        card.addEventListener('click',()=>{
+            if(space2InfiniteSuppressClick){
+                space2InfiniteSuppressClick=false;
+                return;
+            }
+            openSpace2Lightbox(item.id);
+        });
         const collectionBtn=card.querySelector('[data-action="collection"]');
         if(collectionBtn){
             collectionBtn.addEventListener('click',e=>{
@@ -2338,6 +2359,88 @@ function getSpace2GridColumnCount(){
     return 5;
 }
 
+function updateSpace2GridModeToggleUI(){
+    if(!space2GridModeToggle) return;
+    const isInfinite=space2GridViewMode==='infinite';
+    space2GridModeToggle.classList.toggle('is-infinite',isInfinite);
+    space2GridModeToggle.setAttribute('aria-pressed',isInfinite?'true':'false');
+    space2GridModeToggle.title=isInfinite?'Switch to Rainfall grid':'Switch to Infinite grid';
+}
+
+function scheduleSpace2InfiniteRender(){
+    if(space2InfinitePanRaf) return;
+    space2InfinitePanRaf=requestAnimationFrame(()=>{
+        space2InfinitePanRaf=0;
+        layoutSpace2Grid();
+    });
+}
+
+function setSpace2GridViewMode(mode,{persist=true,resetOffset=false}={}){
+    const next=mode==='infinite'?'infinite':'masonry';
+    if(space2GridViewMode===next&&!resetOffset){
+        updateSpace2GridModeToggleUI();
+        return;
+    }
+    space2GridViewMode=next;
+    if(resetOffset) space2InfiniteOffset={x:0,y:0};
+    if(persist) localStorage.setItem('asq.space2.grid.viewMode',space2GridViewMode);
+    updateSpace2GridModeToggleUI();
+    if(space2Grid){
+        const infinite=space2GridViewMode==='infinite';
+        space2Grid.classList.toggle('infinite-mode',infinite);
+        if(!infinite) space2Grid.classList.remove('space2-grid-dragging');
+    }
+    scheduleSpace2GridLayout();
+}
+
+function isSpace2InfiniteInteractiveTarget(target){
+    if(!target) return false;
+    return !!target.closest('.space2-card-action,.space2-grid-add,.space2-yt-play-btn,.space2-yt-pause-btn,audio,video,iframe,input,textarea,button,a,[data-action]');
+}
+
+function onSpace2InfinitePointerDown(e){
+    if(space2GridViewMode!=='infinite'||!space2Grid||space2View!=='grid') return;
+    if(e.button!==0&&e.pointerType!=='touch'&&e.pointerType!=='pen') return;
+    if(isSpace2InfiniteInteractiveTarget(e.target)) return;
+    space2InfinitePointerDrag={id:e.pointerId,startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,moved:false};
+    space2Grid.classList.add('space2-grid-dragging');
+    try{space2Grid.setPointerCapture(e.pointerId);}catch{}
+    e.preventDefault();
+}
+
+function onSpace2InfinitePointerMove(e){
+    if(space2GridViewMode!=='infinite'||!space2InfinitePointerDrag||space2InfinitePointerDrag.id!==e.pointerId) return;
+    const dx=e.clientX-space2InfinitePointerDrag.lastX;
+    const dy=e.clientY-space2InfinitePointerDrag.lastY;
+    if(Math.abs(e.clientX-space2InfinitePointerDrag.startX)>4||Math.abs(e.clientY-space2InfinitePointerDrag.startY)>4){
+        space2InfinitePointerDrag.moved=true;
+    }
+    space2InfiniteOffset.x-=dx;
+    space2InfiniteOffset.y-=dy;
+    space2InfinitePointerDrag.lastX=e.clientX;
+    space2InfinitePointerDrag.lastY=e.clientY;
+    scheduleSpace2InfiniteRender();
+    e.preventDefault();
+}
+
+function onSpace2InfinitePointerUp(e){
+    if(space2GridViewMode!=='infinite'||!space2InfinitePointerDrag||space2InfinitePointerDrag.id!==e.pointerId) return;
+    space2InfiniteSuppressClick=!!space2InfinitePointerDrag.moved;
+    try{space2Grid&&space2Grid.releasePointerCapture(e.pointerId);}catch{}
+    space2InfinitePointerDrag=null;
+    if(space2Grid) space2Grid.classList.remove('space2-grid-dragging');
+}
+
+function onSpace2InfiniteWheel(e){
+    if(space2GridViewMode!=='infinite'||space2View!=='grid') return;
+    const target=e.target;
+    if(target&&target.closest&&target.closest('video,audio,iframe,input,textarea,button,a')) return;
+    space2InfiniteOffset.x+=e.deltaX;
+    space2InfiniteOffset.y+=e.deltaY;
+    scheduleSpace2InfiniteRender();
+    e.preventDefault();
+}
+
 function scheduleSpace2GridLayout(){
     if(!space2Grid) return;
     if(space2LayoutFrame) cancelAnimationFrame(space2LayoutFrame);
@@ -2375,6 +2478,8 @@ function playPixelationLoad(canvas,imgEl,onDone){
 
 function layoutSpace2Grid(){
     if(!space2Grid) return;
+    const infiniteMode=space2GridViewMode==='infinite'&&space2LayoutMode!=='feed';
+    space2Grid.classList.toggle('infinite-mode',infiniteMode);
     const cards=[...space2Grid.querySelectorAll('.space2-item')];
     if(!cards.length){
         space2Grid.style.setProperty('--space2-grid-content-height','0px');
@@ -2399,13 +2504,41 @@ function layoutSpace2Grid(){
         }
         const left=paddingLeft+targetColumn*(cardWidth+gap);
         const top=columnHeights[targetColumn];
-        card.style.left=`${left}px`;
-        card.style.top=`${top}px`;
+        card.dataset.worldLeft=String(left);
+        card.dataset.worldTop=String(top);
+        card.dataset.worldWidth=String(cardWidth);
         columnHeights[targetColumn]=top+card.offsetHeight+gap;
     });
 
     const contentHeight=Math.max(...columnHeights)-gap+paddingBottom;
-    space2Grid.style.setProperty('--space2-grid-content-height',`${Math.max(contentHeight,0)}px`);
+    if(!infiniteMode){
+        cards.forEach(card=>{
+            card.style.left=`${parseFloat(card.dataset.worldLeft)||0}px`;
+            card.style.top=`${parseFloat(card.dataset.worldTop)||0}px`;
+        });
+        space2Grid.style.setProperty('--space2-grid-content-height',`${Math.max(contentHeight,0)}px`);
+        return;
+    }
+
+    const worldWidth=Math.max(cardWidth+gap,innerWidth+gap);
+    const worldHeight=Math.max(280,contentHeight-paddingBottom+gap);
+    const wrappedX=((space2InfiniteOffset.x%worldWidth)+worldWidth)%worldWidth;
+    const wrappedY=((space2InfiniteOffset.y%worldHeight)+worldHeight)%worldHeight;
+    space2InfiniteWorld={width:worldWidth,height:worldHeight,paddingLeft,paddingTop};
+
+    cards.forEach(card=>{
+        const baseLeft=parseFloat(card.dataset.worldLeft)||0;
+        const baseTop=parseFloat(card.dataset.worldTop)||0;
+        const cw=card.offsetWidth||cardWidth;
+        const ch=card.offsetHeight||cardWidth;
+        let left=baseLeft-wrappedX;
+        let top=baseTop-wrappedY;
+        if(left+cw<paddingLeft) left+=worldWidth;
+        if(top+ch<paddingTop) top+=worldHeight;
+        card.style.left=`${left}px`;
+        card.style.top=`${top}px`;
+    });
+    space2Grid.style.setProperty('--space2-grid-content-height',`${Math.max(space2Grid.clientHeight,0)}px`);
 }
 
 // ── IndexedDB image blob cache — prevents re-downloading images on every reload ──
@@ -2538,9 +2671,111 @@ async function resolveSpace2ItemDisplaySource(item){
     return item.src||'';
 }
 
+function closeSpace2Lightbox(){
+    if(!space2Lightbox) return;
+    space2Lightbox.classList.remove('is-open');
+    space2Lightbox.setAttribute('aria-hidden','true');
+    setTimeout(()=>{
+        if(space2Lightbox&&space2Lightbox.classList.contains('is-open')) return;
+        if(space2Lightbox) space2Lightbox.classList.add('hidden');
+        if(space2LightboxStage) space2LightboxStage.innerHTML='';
+    },180);
+}
+
+function handleSpace2LightboxKeydown(e){
+    if(e.key!=='Escape') return;
+    if(!space2Lightbox||space2Lightbox.classList.contains('hidden')) return;
+    e.preventDefault();
+    closeSpace2Lightbox();
+}
+
+async function openSpace2Lightbox(itemId){
+    const item=space2State.items.find(i=>i.id===itemId);
+    if(!item||!space2Lightbox||!space2LightboxStage) return;
+    space2ActiveItemId=itemId;
+    const mt=item.mediaType||'image';
+    const source=await resolveSpace2ItemDisplaySource(item)||item.src||'';
+    if(!source) return;
+
+    space2LightboxStage.innerHTML='';
+    if(mt==='video'){
+        const video=document.createElement('video');
+        video.src=source;
+        video.controls=true;
+        video.autoplay=true;
+        video.playsInline=true;
+        video.preload='metadata';
+        space2LightboxStage.appendChild(video);
+    }else if(mt==='audio'){
+        const wrap=document.createElement('div');
+        wrap.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;width:100%;height:100%;padding:20px;';
+        const icon=document.createElement('i');
+        icon.setAttribute('data-lucide','music');
+        icon.setAttribute('aria-hidden','true');
+        icon.style.cssText='width:48px;height:48px;opacity:.58;';
+        const audio=document.createElement('audio');
+        audio.src=source;
+        audio.controls=true;
+        audio.autoplay=true;
+        wrap.appendChild(icon);
+        wrap.appendChild(audio);
+        space2LightboxStage.appendChild(wrap);
+        refreshLucideIcons();
+    }else if(mt==='youtube'){
+        const ytId=extractYouTubeId(item.src||'')||'';
+        const iframe=document.createElement('iframe');
+        iframe.src=`https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0`;
+        iframe.setAttribute('allow','autoplay;encrypted-media;picture-in-picture');
+        iframe.setAttribute('allowfullscreen','true');
+        space2LightboxStage.appendChild(iframe);
+    }else if(mt==='url'){
+        const wrap=document.createElement('div');
+        wrap.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;width:100%;height:100%;padding:20px;';
+        if(item.thumbnailUrl||source){
+            const img=document.createElement('img');
+            img.src=item.thumbnailUrl||source;
+            img.alt='';
+            img.style.maxHeight='70%';
+            wrap.appendChild(img);
+        }
+        const link=document.createElement('a');
+        link.href=item.pageUrl||item.src||'#';
+        link.target='_blank';
+        link.rel='noopener';
+        link.textContent=item.pageUrl||item.src||'Open source';
+        link.style.cssText='color:#8b8bff;font-size:13px;text-decoration:none;word-break:break-all;text-align:center;';
+        wrap.appendChild(link);
+        space2LightboxStage.appendChild(wrap);
+    }else{
+        const img=document.createElement('img');
+        img.src=source;
+        img.alt=item.title||'Preview';
+        space2LightboxStage.appendChild(img);
+    }
+
+    const title=(item.title||'').trim();
+    const description=(item.description||'').trim();
+    if(space2LightboxMeta&&space2LightboxTitle&&space2LightboxDescription){
+        if(title||description){
+            space2LightboxMeta.classList.remove('hidden');
+            space2LightboxTitle.textContent=title||'Untitled';
+            space2LightboxDescription.textContent=description;
+        }else{
+            space2LightboxMeta.classList.add('hidden');
+            space2LightboxTitle.textContent='';
+            space2LightboxDescription.textContent='';
+        }
+    }
+
+    space2Lightbox.classList.remove('hidden');
+    space2Lightbox.setAttribute('aria-hidden','false');
+    requestAnimationFrame(()=>space2Lightbox.classList.add('is-open'));
+}
+
 async function openSpace2Item(itemId){
     const item=space2State.items.find(i=>i.id===itemId);
     if(!item) return;
+    closeSpace2Lightbox();
     space2ActiveItemId=itemId;
     const mt=item.mediaType||'image';
     const previewSrc=await resolveSpace2ItemDisplaySource(item);
@@ -3223,6 +3458,10 @@ function updateSpace2LayoutSettingsUI(){
     if(space2LayoutGridBtn) space2LayoutGridBtn.classList.toggle('primary',space2LayoutMode==='grid');
     if(space2LayoutFeedBtn) space2LayoutFeedBtn.classList.toggle('primary',space2LayoutMode==='feed');
     if(space2ColumnsSelect) space2ColumnsSelect.value=space2ColumnsSetting;
+    if(space2GridModeSwitch){
+        const shouldShow=space2View==='grid'&&space2LayoutMode!=='feed';
+        space2GridModeSwitch.classList.toggle('hidden',!shouldShow);
+    }
 }
 
 function applySpace2LayoutSettings({persist=true}={}){
@@ -3232,6 +3471,9 @@ function applySpace2LayoutSettings({persist=true}={}){
     if(persist){
         localStorage.setItem('asq.space2.layout.mode',space2LayoutMode);
         localStorage.setItem('asq.space2.layout.columns',space2ColumnsSetting);
+    }
+    if(space2LayoutMode==='feed'&&space2GridViewMode==='infinite'){
+        setSpace2GridViewMode('masonry',{persist:true,resetOffset:true});
     }
     updateSpace2LayoutSettingsUI();
     if(space2Grid) space2Grid.classList.toggle('feed-mode',space2LayoutMode==='feed');
@@ -6531,6 +6773,7 @@ function showSpace2View(view) {
         // View-switch and search bar stay embedded inside the sidebar header (no floating).
     }
     if(space2DiscoverControls) space2DiscoverControls.classList.toggle('hidden', isGrid);
+    if(space2GridModeSwitch) space2GridModeSwitch.classList.toggle('hidden', !isGrid);
     if(space2Search) space2Search.placeholder = isGrid ? 'Search...' : 'Search in discover...';
     if(gridEl) gridEl.style.display = isGrid ? '' : 'none';
     if(discoverEl) discoverEl.classList.toggle('hidden', isGrid);
@@ -6539,7 +6782,11 @@ function showSpace2View(view) {
         space2Panel.classList.toggle('grid-view', isGrid);
     }
     if(!isGrid) initDiscoverPanel();
-    if(isGrid) scheduleSpace2GridLayout();
+    if(isGrid){
+        updateSpace2GridModeToggleUI();
+        scheduleSpace2GridLayout();
+    }
+    if(!isGrid&&space2Grid) space2Grid.classList.remove('space2-grid-dragging');
     syncSpace2AIHubVisibility();
     updateControlCornerState();
     updateSpace2TopCornerVisibility();
@@ -6641,9 +6888,29 @@ function renderDiscoverSources(feedKey=discoverCurrentFeed){
     });
 }
 if(space2ViewToggle) space2ViewToggle.addEventListener('click', () => showSpace2View(space2View==='grid'?'discover':'grid'));
+if(space2GridModeToggle) space2GridModeToggle.addEventListener('click',()=>{
+    setSpace2GridViewMode(space2GridViewMode==='infinite'?'masonry':'infinite',{persist:true,resetOffset:space2GridViewMode!=='infinite'});
+});
+if(space2Grid){
+    space2Grid.addEventListener('pointerdown',onSpace2InfinitePointerDown,{passive:false});
+    space2Grid.addEventListener('pointermove',onSpace2InfinitePointerMove,{passive:false});
+    space2Grid.addEventListener('pointerup',onSpace2InfinitePointerUp,{passive:true});
+    space2Grid.addEventListener('pointercancel',onSpace2InfinitePointerUp,{passive:true});
+    space2Grid.addEventListener('wheel',onSpace2InfiniteWheel,{passive:false});
+}
+if(space2LightboxClose) space2LightboxClose.addEventListener('click',closeSpace2Lightbox);
+if(space2LightboxEdit) space2LightboxEdit.addEventListener('click',()=>{
+    if(!space2ActiveItemId) return;
+    openSpace2Item(space2ActiveItemId);
+});
+if(space2Lightbox) space2Lightbox.addEventListener('click',e=>{
+    if(e.target===space2Lightbox) closeSpace2Lightbox();
+});
+document.addEventListener('keydown',handleSpace2LightboxKeydown);
 initSpace2SidebarSizing();
 initSpace2GridDropzone();
 applySpace2LayoutSettings({persist:false});
+setSpace2GridViewMode(space2GridViewMode,{persist:false});
 if(space2NewCollection) space2NewCollection.addEventListener('click',()=>createSpace2Collection());
 if(space2ItemCancel) space2ItemCancel.addEventListener('click',closeSpace2Item);
 if(space2ItemSave) space2ItemSave.addEventListener('click',saveSpace2Item);

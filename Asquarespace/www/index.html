@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Light.otf" as="font" type="font/otf">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Black.otf" as="font" type="font/otf">
-    <link rel="stylesheet" href="css/style.css?v=20260505-014">
+    <link rel="stylesheet" href="css/style.css?v=20260506-001">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -275,6 +275,17 @@
                 <i data-lucide="layout-grid" aria-hidden="true"></i>
               </span>
               <span class="space2-view-thumb" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div id="space2-grid-mode-switch" class="space2-grid-mode-switch hidden" aria-label="Grid layout mode switch">
+            <button id="space2-grid-mode-toggle" class="space2-grid-mode-toggle" aria-label="Toggle Rainfall and Infinite grid mode" aria-pressed="false" title="Switch to Infinite grid">
+              <span class="space2-grid-mode-icon space2-grid-mode-icon-masonry" aria-hidden="true">
+                <i data-lucide="gallery-vertical" aria-hidden="true"></i>
+              </span>
+              <span class="space2-grid-mode-icon space2-grid-mode-icon-infinite" aria-hidden="true">
+                <i data-lucide="scan" aria-hidden="true"></i>
+              </span>
+              <span class="space2-grid-mode-thumb" aria-hidden="true"></span>
             </button>
           </div>
           <div class="space2-search-wrap">
@@ -681,10 +692,25 @@
     <div id="preview-content"></div>
   </div>
 
+  <div id="space2-lightbox" class="space2-lightbox hidden" aria-hidden="true">
+    <button id="space2-lightbox-close" class="space2-lightbox-close" type="button" aria-label="Close preview">
+      <i data-lucide="x" aria-hidden="true"></i>
+    </button>
+    <button id="space2-lightbox-edit" class="space2-lightbox-edit" type="button" aria-label="Open item details">
+      <i data-lucide="square-pen" aria-hidden="true"></i>
+      Edit Details
+    </button>
+    <div id="space2-lightbox-stage" class="space2-lightbox-stage"></div>
+    <div id="space2-lightbox-meta" class="space2-lightbox-meta hidden">
+      <div id="space2-lightbox-title" class="space2-lightbox-title"></div>
+      <div id="space2-lightbox-description" class="space2-lightbox-description"></div>
+    </div>
+  </div>
+
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/lucide.min.js"></script>
 <script src="js/CSInterface.js"></script>
-<script src="js/main.js?v=20260505-014"></script>
+<script src="js/main.js?v=20260506-001"></script>
 </body>
 </html>
