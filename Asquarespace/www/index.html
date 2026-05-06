@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="icons/favicon.png">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Light.otf" as="font" type="font/otf">
     <link rel="preload" href="Font/HK Grotesque Wide/HKGroteskWide-Black.otf" as="font" type="font/otf">
-    <link rel="stylesheet" href="css/style.css?v=20260506-001">
+    <link rel="stylesheet" href="css/style.css?v=20260506-002">
 </head>
 <body class="auth-locked">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -50,6 +50,20 @@
       <span id="space-toggle-thumb" class="space-toggle-thumb" aria-hidden="true"></span>
       <button id="space-toggle-space" class="space-toggle-btn" type="button" role="tab" aria-selected="false" title="Canvas Space">Space</button>
       <button id="space-toggle-grid" class="space-toggle-btn" type="button" role="tab" aria-selected="true" title="Inspiration Grid">Grid</button>
+    </div>
+  </div>
+
+  <div id="space2-grid-mode-corner" class="space2-grid-mode-corner hidden" aria-label="Grid layout mode">
+    <div id="space2-grid-mode-switch" class="space2-grid-mode-switch hidden" aria-label="Grid layout mode switch">
+      <button id="space2-grid-mode-toggle" class="space2-grid-mode-toggle" aria-label="Toggle Rainfall and Infinite grid mode" aria-pressed="false" title="Switch to Infinite grid">
+        <span class="space2-grid-mode-icon space2-grid-mode-icon-masonry" aria-hidden="true">
+          <i data-lucide="gallery-vertical" aria-hidden="true"></i>
+        </span>
+        <span class="space2-grid-mode-icon space2-grid-mode-icon-infinite" aria-hidden="true">
+          <i data-lucide="scan" aria-hidden="true"></i>
+        </span>
+        <span class="space2-grid-mode-thumb" aria-hidden="true"></span>
+      </button>
     </div>
   </div>
 
@@ -275,17 +289,6 @@
                 <i data-lucide="layout-grid" aria-hidden="true"></i>
               </span>
               <span class="space2-view-thumb" aria-hidden="true"></span>
-            </button>
-          </div>
-          <div id="space2-grid-mode-switch" class="space2-grid-mode-switch hidden" aria-label="Grid layout mode switch">
-            <button id="space2-grid-mode-toggle" class="space2-grid-mode-toggle" aria-label="Toggle Rainfall and Infinite grid mode" aria-pressed="false" title="Switch to Infinite grid">
-              <span class="space2-grid-mode-icon space2-grid-mode-icon-masonry" aria-hidden="true">
-                <i data-lucide="gallery-vertical" aria-hidden="true"></i>
-              </span>
-              <span class="space2-grid-mode-icon space2-grid-mode-icon-infinite" aria-hidden="true">
-                <i data-lucide="scan" aria-hidden="true"></i>
-              </span>
-              <span class="space2-grid-mode-thumb" aria-hidden="true"></span>
             </button>
           </div>
           <div class="space2-search-wrap">
@@ -711,6 +714,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/lucide.min.js"></script>
 <script src="js/CSInterface.js"></script>
-<script src="js/main.js?v=20260506-001"></script>
+<script src="js/main.js?v=20260506-002"></script>
 </body>
 </html>

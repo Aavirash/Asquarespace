@@ -115,6 +115,8 @@ body.sketch-mode #sketch-draft-layer{display:block;cursor:crosshair;}
 #theme-toggle svg{width:16px;height:16px;fill:currentColor;}
 
 .space-switcher{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;align-items:center;padding:3px;border-radius:11px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 84%,transparent);backdrop-filter:blur(10px);box-shadow:var(--shadow);z-index:310;}
+.space2-grid-mode-corner{position:absolute;top:14px;left:12px;z-index:338;pointer-events:auto;display:flex;align-items:center;}
+.space2-grid-mode-corner.hidden{display:none;}
 .space2-top-sync{position:absolute;top:14px;left:12px;z-index:338;pointer-events:auto;display:flex;align-items:center;}
 .space2-top-sync.hidden{display:none;}
 .space2-top-corner{position:absolute;top:14px;right:12px;z-index:338;pointer-events:auto;display:flex;align-items:center;gap:8px;}
@@ -411,8 +413,9 @@ body.sketch-mode #sketch-draft-layer{display:block;cursor:crosshair;}
 .space2-lightbox{position:fixed;inset:0;z-index:960;background:rgba(4,6,9,.78);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:18px;opacity:0;pointer-events:none;transition:opacity .24s ease;}
 .space2-lightbox.hidden{display:none;}
 .space2-lightbox.is-open{opacity:1;pointer-events:auto;}
-.space2-lightbox-stage{width:min(1120px,calc(100vw - 36px));height:min(76vh,820px);border-radius:16px;overflow:hidden;border:1px solid color-mix(in srgb,var(--border) 86%,transparent);background:color-mix(in srgb,var(--surface-2) 92%,#000 8%);box-shadow:0 20px 70px rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;}
-.space2-lightbox-stage img,.space2-lightbox-stage video,.space2-lightbox-stage iframe{width:100%;height:100%;object-fit:contain;display:block;border:none;background:#000;}
+.space2-lightbox-stage{max-width:calc(100vw - 36px);max-height:calc(100vh - 128px);display:flex;align-items:center;justify-content:center;}
+.space2-lightbox-stage img,.space2-lightbox-stage video{display:block;width:auto;height:auto;max-width:calc(100vw - 36px);max-height:calc(100vh - 128px);object-fit:contain;border:none;border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,.44);background:transparent;}
+.space2-lightbox-stage iframe{display:block;width:min(1200px,calc(100vw - 36px));aspect-ratio:16/9;height:auto;border:none;border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,.44);background:transparent;}
 .space2-lightbox-stage audio{width:min(560px,calc(100% - 32px));}
 .space2-lightbox-close,.space2-lightbox-edit{position:absolute;top:20px;height:42px;border-radius:11px;border:1px solid color-mix(in srgb,var(--border) 86%,transparent);background:color-mix(in srgb,var(--surface) 78%,transparent);backdrop-filter:blur(10px);color:var(--text);display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:12px;cursor:pointer;}
 .space2-lightbox-close{right:20px;width:42px;padding:0;}
@@ -1298,6 +1301,7 @@ body.sketch-mode .sketch-canvas{cursor:crosshair;}
     #ui-container{height:100dvh;max-height:100dvh;overflow:hidden;}
     #viewport{width:100vw;height:100dvh;overflow:hidden;overscroll-behavior:none;}
     .space-switcher{top:10px;}
+    .space2-grid-mode-corner{display:none !important;}
     .space2-top-sync{top:10px;left:10px;}
     .space-toggle{width:194px;height:30px;}
     .space-toggle-thumb{width:96px;height:30px;}
@@ -1403,7 +1407,8 @@ body.is-mobile-shell #theme-toggle:hover{background:color-mix(in srgb,var(--surf
     .space2-item-preview img{object-fit:contain;max-height:100%;}
     .space2-item-form{overflow:auto;min-height:0;}
     .space2-lightbox{padding:10px;}
-    .space2-lightbox-stage{width:calc(100vw - 20px);height:min(64vh,520px);border-radius:12px;}
+    .space2-lightbox-stage{max-width:calc(100vw - 20px);max-height:calc(100vh - 148px);}
+    .space2-lightbox-stage img,.space2-lightbox-stage video,.space2-lightbox-stage iframe{max-width:calc(100vw - 20px);max-height:calc(100vh - 148px);border-radius:12px;}
     .space2-lightbox-close,.space2-lightbox-edit{top:max(10px,env(safe-area-inset-top));}
     .space2-lightbox-close{right:10px;width:40px;height:40px;border-radius:10px;}
     .space2-lightbox-edit{right:56px;height:40px;border-radius:10px;padding:0 10px;font-size:11px;}

@@ -146,6 +146,7 @@ const space2UploadBrowse = document.getElementById('space2-upload-browse');
 const space2UploadCancel = document.getElementById('space2-upload-cancel');
 const space2UploadSave = document.getElementById('space2-upload-save');
 const space2ViewToggle = document.getElementById('space2-view-toggle');
+const space2GridModeCorner = document.getElementById('space2-grid-mode-corner');
 const space2GridModeSwitch = document.getElementById('space2-grid-mode-switch');
 const space2GridModeToggle = document.getElementById('space2-grid-mode-toggle');
 const space2GridAdd = document.getElementById('space2-grid-add');
@@ -2400,8 +2401,11 @@ function isSpace2InfiniteInteractiveTarget(target){
 
 function onSpace2InfinitePointerDown(e){
     if(space2GridViewMode!=='infinite'||!space2Grid||space2View!=='grid') return;
-    if(e.button!==0&&e.pointerType!=='touch'&&e.pointerType!=='pen') return;
-    if(isSpace2InfiniteInteractiveTarget(e.target)) return;
+    const pointerType=String(e.pointerType||'mouse').toLowerCase();
+    const isMouse=pointerType==='mouse';
+    const isPanButton=isMouse?(e.button===1||e.button===2):(pointerType==='touch'||pointerType==='pen');
+    if(!isPanButton) return;
+    if(!isMouse&&isSpace2InfiniteInteractiveTarget(e.target)) return;
     space2InfinitePointerDrag={id:e.pointerId,startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,moved:false};
     space2Grid.classList.add('space2-grid-dragging');
     try{space2Grid.setPointerCapture(e.pointerId);}catch{}
@@ -3342,6 +3346,7 @@ function updateControlCornerState(){
 function updateSpace2TopCornerVisibility(){
     const show=currentSpace==='space1'||currentSpace==='space2';
     if(space2TopCorner) space2TopCorner.classList.toggle('hidden',!show);
+    if(space2GridModeCorner) space2GridModeCorner.classList.toggle('hidden',currentSpace!=='space2');
     if(space2TopSync) space2TopSync.classList.toggle('hidden',currentSpace!=='space2');
     if(barSketchBtn) barSketchBtn.classList.toggle('hidden',currentSpace!=='space1');
     if(sketchMenu&&currentSpace!=='space1') sketchMenu.classList.add('hidden');
@@ -3375,11 +3380,14 @@ function applySpace2MobileHeaderLayout(){
         if(space2SidebarHead&&space2ViewSwitch&&space2ViewSwitch.parentElement!==space2SidebarHead){
             space2SidebarHead.appendChild(space2ViewSwitch);
         }
+        if(space2SidebarHead&&space2GridModeSwitch&&space2GridModeSwitch.parentElement!==space2SidebarHead){
+            space2SidebarHead.appendChild(space2GridModeSwitch);
+        }
         if(space2SidebarHead&&space2SearchWrap&&space2SearchWrap.parentElement!==space2SidebarHead){
             space2SidebarHead.appendChild(space2SearchWrap);
         }
     }else{
-        [space2ViewSwitch,space2SearchWrap].forEach(restoreSpace2MobileLayoutSlot);
+        [space2ViewSwitch,space2GridModeSwitch,space2SearchWrap].forEach(restoreSpace2MobileLayoutSlot);
     }
 
     // Theme toggle always visible, regardless of space
@@ -6897,6 +6905,9 @@ if(space2Grid){
     space2Grid.addEventListener('pointerup',onSpace2InfinitePointerUp,{passive:true});
     space2Grid.addEventListener('pointercancel',onSpace2InfinitePointerUp,{passive:true});
     space2Grid.addEventListener('wheel',onSpace2InfiniteWheel,{passive:false});
+    space2Grid.addEventListener('contextmenu',e=>{
+        if(space2GridViewMode==='infinite'&&space2View==='grid') e.preventDefault();
+    });
 }
 if(space2LightboxClose) space2LightboxClose.addEventListener('click',closeSpace2Lightbox);
 if(space2LightboxEdit) space2LightboxEdit.addEventListener('click',()=>{
