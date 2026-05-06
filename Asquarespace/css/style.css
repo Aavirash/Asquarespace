@@ -281,7 +281,7 @@ body.sketch-mode #sketch-draft-layer{display:block;cursor:crosshair;}
 .space2-audio-icon svg{width:40px;height:40px;stroke:currentColor;fill:none;stroke-width:1.5;}
 .space2-audio-card{background:color-mix(in srgb,var(--surface-2) 50%,transparent);}
 .space2-upload-card{width:min(380px,calc(100% - 32px));}
-.space2-thumb{width:100%;height:auto;display:block;border-radius:12px;background:var(--surface-2);opacity:0;position:relative;z-index:1;}
+.space2-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;border-radius:12px;background:var(--surface-2);opacity:0;z-index:1;}
 .space2-item.img-loaded .space2-thumb{opacity:1;}
 .space2-thumb-skeleton{position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,0.12) 48%,rgba(255,255,255,0.18) 50%,rgba(255,255,255,0.12) 52%,transparent 70%);background-size:220% 100%;animation:space2ThumbShimmer 1.35s linear infinite;transition:opacity .22s ease;z-index:3;pointer-events:none;}
 .space2-item.img-loaded .space2-thumb-skeleton{opacity:0;pointer-events:none;}

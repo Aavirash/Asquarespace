@@ -1990,6 +1990,7 @@ function _renderSpace2GridImpl(){
         if(!desiredIds.has(id)) card.remove();
     });
     const fragment=document.createDocumentFragment();
+    const infiniteLite=space2GridViewMode==='infinite'&&space2LayoutMode!=='feed';
     list.forEach(item=>{
         const mt=item.mediaType||'image';
         // Determine display source for thumbnail
@@ -2094,7 +2095,7 @@ function _renderSpace2GridImpl(){
         const isYouTube=mt==='youtube';
         const mediaBadge=mt==='gif'?'<span class="space2-media-badge space2-badge-gif">GIF</span>':
                          mt==='url'?'<span class="space2-media-badge"><i data-lucide="link" aria-hidden="true"></i></span>':'';
-        const thumbHtml=isAudio
+                const thumbHtml=isAudio
             ?`<div class="space2-thumb-shell space2-audio-shell"><div class="space2-audio-icon"><i data-lucide="music" aria-hidden="true"></i></div></div>`
             :`<div class="space2-thumb-shell${item&&item.width&&item.height?' shell-ratio':''}"${item&&item.width&&item.height?` style="--shell-ar:${item.width}/${item.height};aspect-ratio:${item.width}/${item.height}"`:''}>
                 ${isYouTube
@@ -2102,8 +2103,8 @@ function _renderSpace2GridImpl(){
                       <button class="space2-yt-play-btn" data-yt-action="play" aria-label="Play video"><i data-lucide="play" aria-hidden="true"></i></button>
                       <div class="space2-yt-player-wrap" style="display:none;"></div>`
                     :isVideo
-                    ?`<video class="space2-video-thumb" src="${escapeHtml(thumbSrc)}" muted loop playsinline preload="metadata" autoplay></video>`
-                    :`<canvas class="space2-px-canvas"></canvas><img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
+                                        ?`<video class="space2-video-thumb" src="${escapeHtml(thumbSrc)}" muted${infiniteLite?'':' loop'} playsinline preload="${infiniteLite?'none':'metadata'}"${infiniteLite?'':' autoplay'}></video>`
+                                        :`${infiniteLite?'':'<canvas class="space2-px-canvas"></canvas>'}<img class="space2-thumb" data-src="${escapeHtml(thumbSrc)}" data-cache-key="${escapeHtml(item.id)}" alt="" loading="lazy" decoding="async">`
                 }
                 <div class="space2-thumb-skeleton" aria-hidden="true"></div>
                 ${mediaBadge}
@@ -2159,14 +2160,14 @@ function _renderSpace2GridImpl(){
                         desc.textContent=`${img.naturalWidth} x ${img.naturalHeight}`;
                     }
                     // For GIFs and YouTube thumbnails: skip pixelation, show directly
-                    if(mt==='gif'||mt==='youtube'){
+                    if(infiniteLite||mt==='gif'||mt==='youtube'){
                         card.classList.remove('img-pending');
                         card.classList.add('img-loaded');
                         scheduleSpace2GridLayout();
                         return;
                     }
                     // Pixelation loading effect
-                    if(pxCanvas&&img.complete&&img.naturalWidth){
+                    if(!infiniteLite&&pxCanvas&&img.complete&&img.naturalWidth){
                         const shell=img.closest('.space2-thumb-shell');
                         if(shell){
                             pxCanvas.width=shell.offsetWidth;
@@ -2250,7 +2251,7 @@ function _renderSpace2GridImpl(){
                     card.classList.add('img-loaded');
                     scheduleSpace2GridLayout();
                 },{once:true});
-                video.play().catch(()=>{});
+                if(!infiniteLite) video.play().catch(()=>{});
             }
         }else{
             card.classList.remove('img-pending');
@@ -2415,6 +2416,10 @@ function setSpace2GridViewMode(mode,{persist=true,resetOffset=false}={}){
         space2InfiniteTargetOffset={x:0,y:0};
     }
     if(persist) localStorage.setItem('asq.space2.grid.viewMode',space2GridViewMode);
+    if(space2LazyImageObserver){
+        try{space2LazyImageObserver.disconnect();}catch{}
+        space2LazyImageObserver=null;
+    }
     updateSpace2GridModeToggleUI();
     if(space2Grid){
         const infinite=space2GridViewMode==='infinite';
@@ -2430,7 +2435,7 @@ function setSpace2GridViewMode(mode,{persist=true,resetOffset=false}={}){
 
 function isSpace2InfiniteInteractiveTarget(target){
     if(!target) return false;
-    return !!target.closest('.space2-card-action,.space2-grid-add,.space2-yt-play-btn,.space2-yt-pause-btn,audio,video,iframe,input,textarea,button,a,[data-action]');
+    return !!target.closest('.space2-card-action,.space2-grid-add,.space2-yt-play-btn,.space2-yt-pause-btn,audio,video,iframe,input,textarea,select,[contenteditable="true"],[data-action]');
 }
 
 function onSpace2InfinitePointerDown(e){
@@ -2453,8 +2458,9 @@ function onSpace2InfinitePointerMove(e){
     if(Math.abs(e.clientX-space2InfinitePointerDrag.startX)>4||Math.abs(e.clientY-space2InfinitePointerDrag.startY)>4){
         space2InfinitePointerDrag.moved=true;
     }
-    space2InfiniteTargetOffset.x-=dx;
-    space2InfiniteTargetOffset.y-=dy;
+    const dragGain=1.18;
+    space2InfiniteTargetOffset.x-=dx*dragGain;
+    space2InfiniteTargetOffset.y-=dy*dragGain;
     space2InfinitePointerDrag.lastX=e.clientX;
     space2InfinitePointerDrag.lastY=e.clientY;
     runSpace2InfiniteEase();
@@ -2473,7 +2479,7 @@ function onSpace2InfiniteWheel(e){
     if(space2GridViewMode!=='infinite'||space2View!=='grid') return;
     const target=e.target;
     if(target&&target.closest&&target.closest('input,textarea,select,[contenteditable="true"]')) return;
-    const speed=1.08;
+    const speed=1.42;
     space2InfiniteTargetOffset.x+=e.deltaX*speed;
     space2InfiniteTargetOffset.y+=e.deltaY*speed;
     runSpace2InfiniteEase();
@@ -2677,6 +2683,7 @@ async function _loadImgWithBlobCache(img,url,cacheKey){
 
 function ensureSpace2LazyImageObserver(){
     if(space2LazyImageObserver||typeof IntersectionObserver==='undefined') return;
+    const lazyMargin=space2GridViewMode==='infinite'?280:SPACE2_LAZY_ROOT_MARGIN_PX;
     space2LazyImageObserver=new IntersectionObserver(entries=>{
         entries.forEach(entry=>{
             if(!entry.isIntersecting) return;
@@ -2691,7 +2698,7 @@ function ensureSpace2LazyImageObserver(){
         });
     },{
         root:space2Grid||null,
-        rootMargin:`${SPACE2_LAZY_ROOT_MARGIN_PX}px 0px`,
+        rootMargin:`${lazyMargin}px 0px`,
         threshold:0.01
     });
 }
