@@ -2567,9 +2567,12 @@ function layoutSpace2Grid(){
     const paddingBottom=parseFloat(styles.paddingBottom)||0;
     const gap=parseFloat(styles.getPropertyValue('--space2-grid-gap'))||16;
     const baseColumnCount=getSpace2GridColumnCount();
-    const columnCount=baseColumnCount;
     const innerWidth=Math.max(0,space2Grid.clientWidth-paddingLeft-paddingRight);
-    const cardWidth=Math.max(0,(innerWidth-gap*(columnCount-1))/columnCount);
+    const cardWidth=Math.max(0,(innerWidth-gap*(baseColumnCount-1))/baseColumnCount);
+    const worldColumnCount=infiniteMode
+        ?Math.max(baseColumnCount*3,Math.ceil(Math.sqrt(Math.max(cards.length,1)*baseColumnCount)))
+        :baseColumnCount;
+    const columnCount=infiniteMode?worldColumnCount:baseColumnCount;
     const columnHeights=Array(columnCount).fill(paddingTop);
 
     cards.forEach(card=>{
@@ -2596,8 +2599,7 @@ function layoutSpace2Grid(){
         return;
     }
 
-    const baseWorldWidth=paddingLeft+paddingRight+columnCount*(cardWidth+gap);
-    const worldWidth=Math.max(cardWidth+gap,baseWorldWidth*2);
+    const worldWidth=Math.max(cardWidth+gap,paddingLeft+paddingRight+columnCount*(cardWidth+gap));
     const worldHeight=Math.max(280,contentHeight-paddingBottom+gap);
     const wrappedX=((space2InfiniteOffset.x%worldWidth)+worldWidth)%worldWidth;
     const wrappedY=((space2InfiniteOffset.y%worldHeight)+worldHeight)%worldHeight;
