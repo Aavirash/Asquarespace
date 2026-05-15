@@ -1519,7 +1519,7 @@ body.r1-mode .space2-sash{display:none}
 body.r1-mode .space2-grid{padding:30px 4px calc(4px) 42px;--space2-grid-gap:3px}
 body.r1-mode .space2-grid.feed-mode{--space2-grid-gap:4px}
 body.r1-mode .space2-grid.infinite-mode{touch-action:pan-y}
-body.r1-mode .space2-ai-hub{display:none!important}
+body.r1-mode #space2-ai-hub{display:none!important}
 body.r1-mode #toolbar-hub{display:none!important}
 body.r1-mode #control-corner{display:none}
 body.r1-mode #context-toolbar{display:none!important}

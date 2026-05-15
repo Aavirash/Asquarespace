@@ -15,7 +15,7 @@
       html,body{width:240px!important;height:282px!important;overflow:hidden!important;position:relative!important;margin:0!important;padding:0!important;min-width:0!important;min-height:0!important;max-height:none!important;background:#0d0f12}
       #ui-container{width:240px!important;height:282px!important;inset:0!important;max-height:none!important;position:fixed!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch}
     </style>
-    <link rel="stylesheet" href="css/style.css?v=20260506-010">
+    <link rel="stylesheet" href="css/style.css?v=20260506-011">
 </head>
 <body class="auth-locked r1-mode">
 <div id="auth-screen" class="auth-screen" aria-live="polite">
@@ -720,33 +720,25 @@
 <script src="js/CSInterface.js"></script>
 <script src="js/main.js?v=20260506-009"></script>
 <script>
-// R1 keyboard/scroll handling (only in r1-mode)
+// R1 custom event handling (only in r1-mode)
 (function(){
 var container = document.getElementById('ui-container');
 if (!container) return;
-container.setAttribute('tabindex', '-1');
+var scrollOffset = 0;
 
-function focusContainer() {
-  if (document.body.classList.contains('r1-mode')) container.focus();
+function doScroll(delta) {
+  scrollOffset = Math.max(0, Math.min(scrollOffset + delta, container.scrollHeight - container.clientHeight));
+  container.scrollTop = scrollOffset;
 }
 
-// Arrow Up/Down → scroll
+window.addEventListener('scrollUp', function() { doScroll(-44); });
+window.addEventListener('scrollDown', function() { doScroll(44); });
+// Desktop keyboard fallback
 document.addEventListener('keydown', function(e) {
   if (!document.body.classList.contains('r1-mode')) return;
-  if (e.key === 'ArrowDown') { container.scrollBy({ top: 44, behavior: 'smooth' }); e.preventDefault(); }
-  else if (e.key === 'ArrowUp') { container.scrollBy({ top: -44, behavior: 'smooth' }); e.preventDefault(); }
+  if (e.key === 'ArrowDown') { doScroll(44); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { doScroll(-44); e.preventDefault(); }
 });
-
-// Wheel scroll fallback
-container.addEventListener('wheel', function(e) {
-  if (!document.body.classList.contains('r1-mode')) return;
-  e.preventDefault();
-  container.scrollBy({ top: e.deltaY, behavior: 'auto' });
-}, { passive: false });
-
-// Focus after a short delay (wait for main.js to init)
-setTimeout(focusContainer, 1000);
-setTimeout(focusContainer, 3000);
 })();
 </script>
 </body>
