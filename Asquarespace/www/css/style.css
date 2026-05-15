@@ -1493,4 +1493,55 @@ body.is-mobile-shell #theme-toggle:hover{background:color-mix(in srgb,var(--surf
     body.is-mobile-shell .space2-capture-actions{display:flex;}
 
     body.is-mobile-shell.space-2 #space2-ai-input::placeholder{font-size:12px !important;}
+
+/* ════ Rabbit R1 Overrides ════ */
+body.r1-mode, body.r1-mode html{width:240px!important;height:282px!important;overflow:hidden!important;position:relative!important}
+body.r1-mode{inset:auto!important;min-width:0!important;min-height:0!important;max-height:none!important}
+body.r1-mode #ui-container{width:240px;height:282px;inset:0!important;max-height:none}
+body.r1-mode .auth-card{width:min(220px,calc(100vw - 20px));padding:14px 14px 12px;}
+body.r1-mode .auth-title{font-size:18px;}
+body.r1-mode .auth-subtitle{font-size:11px;}
+body.r1-mode .auth-input{height:30px;font-size:12px;}
+body.r1-mode .auth-primary{height:30px;font-size:11px;}
+body.r1-mode .auth-secondary{height:28px;font-size:10px;}
+body.r1-mode .auth-status{font-size:10px;}
+body.r1-mode #space-toggle{height:24px;}
+body.r1-mode .space-toggle-btn{font-size:9px;}
+body.r1-mode .space-switcher{top:4px;}
+body.r1-mode .space2-panel{inset:28px 2px 2px;--space2-sidebar-width:36px}
+body.r1-mode .space2-sidebar{width:36px!important;padding:4px 3px!important;gap:4px;left:2px;top:4px;bottom:2px;background:transparent;backdrop-filter:none;border:none;border-radius:6px}
+body.r1-mode .space2-sidebar .space2-head{display:none}
+body.r1-mode .space2-sidebar .space2-side-title{display:none}
+body.r1-mode .space2-sidebar .space2-collections{display:none}
+body.r1-mode .space2-sidebar .space2-sidebar-footer{display:none}
+body.r1-mode .space2-sidebar .space2-discover-controls{display:none}
+body.r1-mode .space2-sash{display:none}
+body.r1-mode .space2-grid{padding:30px 4px calc(4px) 42px;--space2-grid-gap:3px}
+body.r1-mode .space2-grid.feed-mode{--space2-grid-gap:4px}
+body.r1-mode .space2-grid.infinite-mode{touch-action:pan-y}
+body.r1-mode .space2-ai-hub{display:none!important}
+body.r1-mode #toolbar-hub{display:none!important}
+body.r1-mode #control-corner{display:none}
+body.r1-mode #context-toolbar{display:none!important}
+body.r1-mode #multi-toolbar{display:none!important}
+body.r1-mode #note-toolbar{display:none!important}
+body.r1-mode #favorites-panel{display:none!important}
+body.r1-mode .space2-grid-mode-corner{display:none!important}
+body.r1-mode .space2-top-corner{top:2px;right:2px}
+body.r1-mode .space2-top-icon-btn{width:24px;height:24px;border-radius:5px}
+body.r1-mode .space2-top-icon-btn svg{width:12px;height:12px}
+body.r1-mode #space2-sync-btn{display:none}
+body.r1-mode .discover-feed{padding:4px;columns:1;column-gap:0}
+body.r1-mode .discover-card{margin-bottom:4px}
+body.r1-mode .space2-item-card{height:auto;width:calc(100vw - 8px);padding:4px}
+body.r1-mode .settings-card{width:calc(100% - 8px);padding:8px}
+body.r1-mode .space2-lightbox{display:none!important}
+body.r1-mode .mb-container{flex-direction:column}
+body.r1-mode .mb-sidebar{width:100%;flex-direction:row;padding:4px;overflow-x:auto}
+body.r1-mode .mb-main{padding:4px}
+body.r1-mode .mb-grid{grid-template-columns:repeat(2,1fr);gap:4px}
+body.r1-mode .mb-topbar{flex-wrap:wrap;gap:4px;padding:4px}
+body.r1-mode .mb-top-rhs{display:none}
+body.r1-mode .mb-actions{gap:4px}
+body.r1-mode .preview-overlay{display:none!important}
 }
