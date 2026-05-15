@@ -1497,7 +1497,7 @@ body.is-mobile-shell #theme-toggle:hover{background:color-mix(in srgb,var(--surf
 /* ════ Rabbit R1 Overrides ════ */
 body.r1-mode, body.r1-mode html{width:240px!important;height:282px!important;overflow:hidden!important;position:relative!important}
 body.r1-mode{inset:auto!important;min-width:0!important;min-height:0!important;max-height:none!important}
-body.r1-mode #ui-container{width:240px;height:282px;inset:0!important;max-height:none}
+body.r1-mode #ui-container{width:240px;height:282px;inset:0!important;max-height:none;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch}
 body.r1-mode .auth-card{width:min(220px,calc(100vw - 20px));padding:14px 14px 12px;}
 body.r1-mode .auth-title{font-size:18px;}
 body.r1-mode .auth-subtitle{font-size:11px;}
