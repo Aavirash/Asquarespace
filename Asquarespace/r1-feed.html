@@ -186,49 +186,37 @@ async function init() {
     return;
   }
 
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false }
   });
 
   try {
-    var res = await supabase.rpc('get_asq_feed', { p_email: 'asquareportal@gmail.com' });
+    var res = await client.rpc('get_asq_feed', { p_email: 'asquareportal@gmail.com' });
     if (res.error) throw res.error;
 
     var raw = res.data || [];
     if (!raw || !raw.length) { showEmpty(); return; }
 
-    // Only items with a cloudPath (cloud-synced) — include image/gif/video or untyped
-    var cloudItems = raw.filter(function(it) {
-      if (!it || !it.cloudPath) return false;
-      var t = (it.mediaType || '').toLowerCase();
-      return t === 'image' || t === 'gif' || t === 'video' || t === '';
-    });
-
-    if (!cloudItems.length) { showEmpty(); return; }
-
-    // Refresh signed URLs for all items in parallel
-    var BUCKET = 'asq-media';
-    var TTL = 60 * 60 * 24 * 30; // 30 days
-
-    var urlResults = await Promise.all(cloudItems.map(function(item) {
-      return supabase.storage.from(BUCKET).createSignedUrl(item.cloudPath, TTL)
-        .then(function(r) { return { item: item, result: r }; })
-        .catch(function() { return { item: item, result: { data: null } }; });
-    }));
-
+    // Build items array: use public URL for cloud-stored files, original src for others
     items = [];
-    urlResults.forEach(function(entry) {
-      var signed = entry.result && entry.result.data && entry.result.data.signedUrl;
-      if (signed) {
-        entry.item.freshSrc = signed;
-        items.push(entry.item);
-      } else if (entry.item.src && entry.item.src.indexOf('http') === 0) {
-        // Fallback: use original src (might be a permanent external URL)
-        items.push(entry.item);
+    raw.forEach(function(it) {
+      if (!it) return;
+      var t = (it.mediaType || '').toLowerCase();
+      if (t !== 'image' && t !== 'gif' && t !== 'video' && t !== '') return;
+
+      if (it.cloudPath) {
+        // Public URL — requires bucket to be public:
+        //   UPDATE storage.buckets SET public = true WHERE id = 'asq-media';
+        it.freshSrc = SUPABASE_URL + '/storage/v1/object/public/asq-media/' + it.cloudPath;
+      } else if (it.src && it.src.indexOf('http') === 0) {
+        it.freshSrc = it.src;
+      } else {
+        return; // no usable URL
       }
+      items.push(it);
     });
 
-    if (!items.length) { showError('Could not load any images. Try refreshing signed URLs in the main app.'); return; }
+    if (!items.length) { showError('No usable images found. Make the asq-media bucket public in Supabase.'); return; }
 
     viewEl.style.display = 'block';
     loadingEl.style.display = 'none';
