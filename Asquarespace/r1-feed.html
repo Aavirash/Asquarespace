@@ -8,19 +8,6 @@
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{width:240px;height:282px;overflow:hidden;background:#0d0f12;color:#fff;font-family:-apple-system,system-ui,sans-serif;user-select:none;-webkit-user-select:none}
 body{position:relative}
-#auth{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:8px;z-index:10;background:#0d0f12}
-#auth h1{font-size:20px;color:#ef4027}
-#auth p{font-size:11px;color:#8899aa;text-align:center;line-height:1.4}
-#auth textarea{width:100%;height:60px;padding:8px;border:1px solid #3a424e;border-radius:6px;background:#1a1f26;color:#fff;font-size:9px;resize:none;outline:none;font-family:monospace;word-break:break-all}
-#auth textarea:focus{border-color:#ef4027}
-#auth button{width:100%;padding:8px;border:none;border-radius:6px;background:#ef4027;color:#fff;font-weight:bold;font-size:13px;cursor:pointer}
-#auth .back-btn{background:transparent;color:#8899aa;font-size:10px;padding:4px}
-#auth .error{color:#DF5A5A;font-size:11px;display:none}
-#auth .hint{font-size:9px;color:#667788;text-align:center}
-#loading{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;background:#0d0f12}
-#loading .spinner{width:20px;height:20px;border:2px solid #3a424e;border-top-color:#ef4027;border-radius:50%;animation:spin .6s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-#loading p{font-size:10px;color:#667788}
 #view{position:absolute;inset:0;display:none;background:#0d0f12}
 #img-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
 #img-wrap img{width:100%;height:100%;object-fit:cover;display:block}
@@ -28,6 +15,10 @@ body{position:relative}
 #img-wrap img.reveal{filter:blur(0);transform:scale(1);transition:filter .4s ease,transform .4s ease}
 #counter{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-size:9px;color:rgba(255,255,255,.5);z-index:2;background:rgba(0,0,0,.5);padding:2px 8px;border-radius:8px;pointer-events:none}
 #ss-badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:8px;color:rgba(255,255,255,.3);z-index:2;display:none;letter-spacing:1px;text-transform:uppercase;pointer-events:none}
+#loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;background:#0d0f12}
+#loading .spinner{width:20px;height:20px;border:2px solid #3a424e;border-top-color:#ef4027;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{font-size:10px;color:#667788}
 #empty{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;background:#0d0f12}
 #empty p{font-size:12px;color:#667788}
 #empty .emoji{font-size:28px}
@@ -36,17 +27,7 @@ body{position:relative}
 </head>
 <body>
 
-<div id="auth">
-  <h1>ASQ Feed</h1>
-  <p>Paste your Supabase session token<br>from the Asquarespace app</p>
-  <textarea id="tokenInput" placeholder='Paste token here…'></textarea>
-  <button id="loginBtn">Connect</button>
-  <button id="skipBtn" class="back-btn">Open main app to sign in first</button>
-  <div class="error" id="authError"></div>
-  <div class="hint">Token is in localStorage under<br>sb-seceezshzzkxoqllbosw.supabase.co-auth-token</div>
-</div>
-
-<div id="loading"><div class="spinner"></div><p id="loadStatus">Loading…</p></div>
+<div id="loading"><div class="spinner"></div><p>Loading feed…</p></div>
 
 <div id="view">
   <div id="img-wrap"><img id="main-img" src="" alt=""></div>
@@ -66,46 +47,24 @@ body{position:relative}
 var SUPABASE_URL = 'https://seceezshzzkxoqllbosw.supabase.co';
 var SUPABASE_ANON_KEY = 'sb_publishable_9uq_CY2KsPns9dtogTVbyA_5wlvxA3e';
 
-var authEl = document.getElementById('auth');
-var loadingEl = document.getElementById('loading');
-var loadStatus = document.getElementById('loadStatus');
 var viewEl = document.getElementById('view');
+var loadingEl = document.getElementById('loading');
 var emptyEl = document.getElementById('empty');
 var errorEl = document.getElementById('error');
 var mainImg = document.getElementById('main-img');
 var imgWrap = document.getElementById('img-wrap');
 var counterEl = document.getElementById('counter');
 var ssBadge = document.getElementById('ss-badge');
-var tokenInput = document.getElementById('tokenInput');
-var loginBtn = document.getElementById('loginBtn');
-var skipBtn = document.getElementById('skipBtn');
-var authError = document.getElementById('authError');
 
 var items = [];
 var currentIdx = 0;
 var ssTimer = null;
 var ssActive = false;
-var supabase = null;
-var imgLoading = false;
 
-// --- Supabase client ---
-
-function initClient() {
-  if (!window.supabase || !window.supabase.createClient) return null;
-  return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-  });
-}
-
-// --- UI helpers ---
-
-function showLoading(msg) {
-  loadingEl.style.display = 'flex';
-  loadStatus.textContent = msg || 'Loading…';
-  authEl.style.display = 'none';
-  viewEl.style.display = 'none';
-  emptyEl.style.display = 'none';
-  errorEl.style.display = 'none';
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = String(s || '');
+  return d.innerHTML;
 }
 
 function showError(msg) {
@@ -122,20 +81,6 @@ function showEmpty() {
   viewEl.style.display = 'none';
 }
 
-function showAuth(err) {
-  authEl.style.display = 'flex';
-  loadingEl.style.display = 'none';
-  viewEl.style.display = 'none';
-  if (err) { authError.textContent = err; authError.style.display = 'block'; }
-  else authError.style.display = 'none';
-}
-
-function esc(s) {
-  var d = document.createElement('div');
-  d.textContent = String(s || '');
-  return d.innerHTML;
-}
-
 // --- Image loading with pixel effect ---
 
 function loadImage(idx) {
@@ -143,24 +88,24 @@ function loadImage(idx) {
   currentIdx = idx;
   var item = items[idx];
   var src = item.src || '';
-  if (!src) { showError('Image has no URL'); return; }
+  if (!src) return;
 
-  imgLoading = true;
   mainImg.className = 'pixel';
-  mainImg.src = src;
-  mainImg.alt = esc(item.title || '');
+  mainImg.src = '';
+  mainImg.alt = '';
 
-  mainImg.onload = function() {
-    imgLoading = false;
-    mainImg.className = 'reveal';
-  };
-  mainImg.onerror = function() {
-    imgLoading = false;
-    mainImg.className = '';
-    mainImg.style.objectFit = 'contain';
-    mainImg.src = '';
-    mainImg.alt = 'Failed to load';
-  };
+  requestAnimationFrame(function() {
+    mainImg.src = src;
+    mainImg.alt = esc(item.title || '');
+    mainImg.onload = function() {
+      mainImg.className = 'reveal';
+    };
+    mainImg.onerror = function() {
+      mainImg.className = '';
+      mainImg.style.objectFit = 'contain';
+      mainImg.alt = 'Failed';
+    };
+  });
 
   counterEl.textContent = (idx + 1) + ' / ' + items.length;
 }
@@ -213,67 +158,6 @@ function ssToggle() {
   else ssStart();
 }
 
-// --- Data fetch ---
-
-async function fetchItems() {
-  try {
-    var sess = await supabase.auth.getSession();
-    if (!sess || !sess.data || !sess.data.session) {
-      showAuth('No session. Sign in to the main Asquarespace app first, or paste a token.');
-      return;
-    }
-
-    var res = await supabase
-      .from('user_workspace_state')
-      .select('space2_state')
-      .eq('board_key', 'default::space2-global')
-      .maybeSingle();
-
-    if (res.error) throw res.error;
-    if (!res.data || !res.data.space2_state) { showEmpty(); return; }
-
-    var state = res.data.space2_state;
-    var raw = (state && state.items) || [];
-    if (!raw.length) { showEmpty(); return; }
-
-    // Only image/video items that have a src
-    items = raw.filter(function(it) {
-      return it && it.src && (it.mediaType === 'image' || it.mediaType === 'video' || it.mediaType === 'gif' || !it.mediaType);
-    });
-
-    if (!items.length) { showEmpty(); return; }
-
-    viewEl.style.display = 'block';
-    loadingEl.style.display = 'none';
-    authEl.style.display = 'none';
-
-    loadImage(0);
-    preloadNext(0);
-  } catch (e) {
-    showError('Failed to load: ' + (e.message || e));
-  }
-}
-
-// --- Auth via setSession ---
-
-async function tryAuthWithToken(token) {
-  try {
-    var parsed;
-    try { parsed = JSON.parse(token); } catch(_) { parsed = token; }
-    var sessionObj = typeof parsed === 'string' ? { access_token: parsed, refresh_token: '' } : parsed;
-    if (!sessionObj.access_token) throw new Error('No access_token in token');
-
-    var res = await supabase.auth.setSession(sessionObj);
-    if (res.error) throw res.error;
-    if (!res.data || !res.data.session) throw new Error('Session not established');
-
-    showLoading('Connected. Loading images…');
-    await fetchItems();
-  } catch (e) {
-    showAuth('Invalid token: ' + (e.message || e));
-  }
-}
-
 // --- R1 Custom Events ---
 
 window.addEventListener('scrollUp', showPrev);
@@ -291,55 +175,37 @@ document.addEventListener('keydown', function(e) {
 // --- Init ---
 
 async function init() {
-  supabase = initClient();
-  if (!supabase) { showError('Supabase client failed to init'); return; }
+  if (!window.supabase || !window.supabase.createClient) {
+    showError('Supabase library failed to load');
+    return;
+  }
 
-  showLoading('Checking session…');
+  var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false }
+  });
 
   try {
-    var sess = await supabase.auth.getSession();
-    if (sess && sess.data && sess.data.session) {
-      await fetchItems();
-      return;
-    }
-  } catch (_) {}
+    var res = await client.rpc('get_asq_feed', { p_email: 'asquareportal@gmail.com' });
+    if (res.error) throw res.error;
 
-  // No session — try localStorage directly (shared with main app)
-  try {
-    var stored = null;
-    for (var i = 0; i < localStorage.length; i++) {
-      var key = localStorage.key(i);
-      if (key && key.indexOf('supabase') !== -1 && key.indexOf('auth-token') !== -1) {
-        try { stored = JSON.parse(localStorage.getItem(key)); } catch(_) {}
-        if (stored) break;
-      }
-    }
-    if (stored) {
-      var res = await supabase.auth.setSession(stored);
-      if (!res.error && res.data && res.data.session) {
-        await fetchItems();
-        return;
-      }
-    }
-  } catch (_) {}
+    var raw = res.data || [];
+    if (!raw || !raw.length) { showEmpty(); return; }
 
-  showAuth();
+    items = raw.filter(function(it) {
+      return it && it.src && (!it.mediaType || it.mediaType === 'image' || it.mediaType === 'gif' || it.mediaType === 'video');
+    });
+
+    if (!items.length) { showEmpty(); return; }
+
+    viewEl.style.display = 'block';
+    loadingEl.style.display = 'none';
+
+    loadImage(0);
+    preloadNext(0);
+  } catch (e) {
+    showError('Failed to load: ' + (e.message || e));
+  }
 }
-
-loginBtn.addEventListener('click', function() {
-  var t = (tokenInput.value || '').trim();
-  if (!t) { showAuth('Paste your session token'); return; }
-  showLoading('Connecting…');
-  tryAuthWithToken(t);
-});
-
-skipBtn.addEventListener('click', function() {
-  window.location.href = window.location.origin;
-});
-
-tokenInput.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') loginBtn.click();
-});
 
 init().catch(function(e) {
   showError('Init failed: ' + (e.message || e));
