@@ -60,6 +60,7 @@ var items = [];
 var currentIdx = 0;
 var ssTimer = null;
 var ssActive = false;
+var supabase = null;
 
 function esc(s) {
   var d = document.createElement('div');
@@ -83,11 +84,15 @@ function showEmpty() {
 
 // --- Image loading with pixel effect ---
 
+function getItemSrc(item) {
+  return item.freshSrc || item.src || '';
+}
+
 function loadImage(idx) {
   if (!items.length || idx < 0 || idx >= items.length) return;
   currentIdx = idx;
   var item = items[idx];
-  var src = item.src || '';
+  var src = getItemSrc(item);
   if (!src) return;
 
   mainImg.className = 'pixel';
@@ -103,7 +108,7 @@ function loadImage(idx) {
     mainImg.onerror = function() {
       mainImg.className = '';
       mainImg.style.objectFit = 'contain';
-      mainImg.alt = 'Failed';
+      mainImg.alt = 'Load failed';
     };
   });
 
@@ -112,9 +117,10 @@ function loadImage(idx) {
 
 function preloadNext(idx) {
   var next = (idx + 1) % items.length;
-  if (!items[next] || !items[next].src) return;
+  var src = getItemSrc(items[next]);
+  if (!src) return;
   var img = new Image();
-  img.src = items[next].src;
+  img.src = src;
 }
 
 function showPrev() {
@@ -180,22 +186,49 @@ async function init() {
     return;
   }
 
-  var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false }
   });
 
   try {
-    var res = await client.rpc('get_asq_feed', { p_email: 'asquareportal@gmail.com' });
+    var res = await supabase.rpc('get_asq_feed', { p_email: 'asquareportal@gmail.com' });
     if (res.error) throw res.error;
 
     var raw = res.data || [];
     if (!raw || !raw.length) { showEmpty(); return; }
 
-    items = raw.filter(function(it) {
-      return it && it.src && (!it.mediaType || it.mediaType === 'image' || it.mediaType === 'gif' || it.mediaType === 'video');
+    // Only items with a cloudPath (cloud-synced) — include image/gif/video or untyped
+    var cloudItems = raw.filter(function(it) {
+      if (!it || !it.cloudPath) return false;
+      var t = (it.mediaType || '').toLowerCase();
+      return t === 'image' || t === 'gif' || t === 'video' || t === '';
     });
 
-    if (!items.length) { showEmpty(); return; }
+    if (!cloudItems.length) { showEmpty(); return; }
+
+    // Refresh signed URLs for all items in parallel
+    var BUCKET = 'asq-media';
+    var TTL = 60 * 60 * 24 * 30; // 30 days
+
+    var urlResults = await Promise.all(cloudItems.map(function(item) {
+      return supabase.storage.from(BUCKET).createSignedUrl(item.cloudPath, TTL)
+        .then(function(r) { return { item: item, result: r }; })
+        .catch(function() { return { item: item, result: { data: null } }; });
+    }));
+
+    items = [];
+    urlResults.forEach(function(entry) {
+      var signed = entry.result && entry.result.data && entry.result.data.signedUrl;
+      if (signed) {
+        entry.item.freshSrc = signed;
+        items.push(entry.item);
+      } else if (entry.item.src && entry.item.src.indexOf('http') === 0) {
+        // Fallback: use original src (might be a permanent external URL)
+        items.push(entry.item);
+      }
+    });
+
+    if (!items.length) { showError('Could not load any images. Try refreshing signed URLs in the main app.'); return; }
 
     viewEl.style.display = 'block';
     loadingEl.style.display = 'none';
