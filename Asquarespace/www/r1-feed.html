@@ -10,7 +10,7 @@ html,body{width:240px;height:282px;overflow:hidden;background:#0d0f12;color:#fff
 body{position:relative}
 #view{position:absolute;inset:0;display:none;background:#0d0f12}
 #img-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#13161b}
-#img-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+#img-wrap img{width:100%;height:100%;object-fit:contain;display:block}
 #counter{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-size:9px;color:rgba(255,255,255,.5);z-index:2;background:rgba(0,0,0,.5);padding:2px 8px;border-radius:8px;pointer-events:none;transition:opacity .3s}
 #ss-badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:8px;color:rgba(255,255,255,.5);z-index:2;display:none;letter-spacing:1px;text-transform:uppercase;pointer-events:none;opacity:0;transition:opacity .8s ease}
 #loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;background:#0d0f12}
@@ -184,7 +184,7 @@ function ssStart() {
     var idx;
     do { idx = Math.floor(Math.random() * items.length); } while (idx === currentIdx && items.length > 1);
     loadImage(idx);
-  }, 3000);
+  }, 6000);
 }
 
 function ssStop() {
@@ -203,8 +203,16 @@ function ssToggle() {
 
 // --- R1 Custom Events ---
 
-window.addEventListener('scrollUp', showPrev);
-window.addEventListener('scrollDown', showNext);
+var scrollThrottle = 0;
+function throttled(fn) { return function() {
+  var now = Date.now();
+  if (now - scrollThrottle < 400) return;
+  scrollThrottle = now;
+  fn();
+};}
+
+window.addEventListener('scrollUp', throttled(showPrev));
+window.addEventListener('scrollDown', throttled(showNext));
 window.addEventListener('sideClick', ssToggle);
 
 // Desktop keyboard fallback
