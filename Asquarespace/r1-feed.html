@@ -9,12 +9,18 @@
 html,body{width:240px;height:282px;overflow:hidden;background:#0d0f12;color:#fff;font-family:-apple-system,system-ui,sans-serif;user-select:none;-webkit-user-select:none}
 body{position:relative}
 #view{position:absolute;inset:0;display:none;background:#0d0f12}
-#img-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#img-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#13161b}
 #img-wrap img{width:100%;height:100%;object-fit:cover;display:block}
-#img-wrap img.pixel{filter:blur(24px);transform:scale(1.08)}
-#img-wrap img.reveal{filter:blur(0);transform:scale(1);transition:filter .4s ease,transform .4s ease}
-#counter{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-size:9px;color:rgba(255,255,255,.5);z-index:2;background:rgba(0,0,0,.5);padding:2px 8px;border-radius:8px;pointer-events:none}
-#ss-badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:8px;color:rgba(255,255,255,.3);z-index:2;display:none;letter-spacing:1px;text-transform:uppercase;pointer-events:none}
+#counter{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-size:9px;color:rgba(255,255,255,.5);z-index:2;background:rgba(0,0,0,.5);padding:2px 8px;border-radius:8px;pointer-events:none;transition:opacity .3s}
+#ss-badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:8px;color:rgba(255,255,255,.5);z-index:2;display:none;letter-spacing:1px;text-transform:uppercase;pointer-events:none;opacity:0;transition:opacity .8s ease}
+#loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;background:#0d0f12}
+#loading .spinner{width:20px;height:20px;border:2px solid #3a424e;border-top-color:#ef4027;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{font-size:10px;color:#667788}
+#empty{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;background:#0d0f12}
+#empty p{font-size:12px;color:#667788}
+#empty .emoji{font-size:28px}
+#error{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;font-size:11px;color:#DF5A5A;z-index:6;background:rgba(0,0,0,.85)}
 #loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;background:#0d0f12}
 #loading .spinner{width:20px;height:20px;border:2px solid #3a424e;border-top-color:#ef4027;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -60,6 +66,7 @@ var items = [];
 var currentIdx = 0;
 var ssTimer = null;
 var ssActive = false;
+var ssBadgeTimer = null;
 var supabase = null;
 
 function esc(s) {
@@ -82,7 +89,7 @@ function showEmpty() {
   viewEl.style.display = 'none';
 }
 
-// --- Image loading with pixel effect ---
+// --- Image loading with pixel reveal effect ---
 
 function getItemSrc(item) {
   return item.freshSrc || item.src || '';
@@ -95,22 +102,36 @@ function loadImage(idx) {
   var src = getItemSrc(item);
   if (!src) return;
 
-  mainImg.className = 'pixel';
-  mainImg.src = '';
-  mainImg.alt = '';
-
-  requestAnimationFrame(function() {
+  // Preload in hidden Image, then show with pixel blur→reveal
+  var preloader = new Image();
+  preloader.onload = function() {
+    mainImg.style.opacity = '0';
     mainImg.src = src;
     mainImg.alt = esc(item.title || '');
-    mainImg.onload = function() {
-      mainImg.className = 'reveal';
-    };
-    mainImg.onerror = function() {
-      mainImg.className = '';
-      mainImg.style.objectFit = 'contain';
-      mainImg.alt = 'Load failed';
-    };
-  });
+    void mainImg.offsetWidth; // force reflow
+    mainImg.style.transition = 'none';
+    mainImg.style.filter = 'blur(24px)';
+    mainImg.style.transform = 'scale(1.08)';
+    mainImg.style.opacity = '1';
+
+    requestAnimationFrame(function() {
+      mainImg.style.transition = 'filter .5s ease-out, transform .5s ease-out';
+      mainImg.style.filter = 'blur(0)';
+      mainImg.style.transform = 'scale(1)';
+      // Clean up inline styles after transition
+      setTimeout(function() {
+        mainImg.style.transition = '';
+        mainImg.style.filter = '';
+        mainImg.style.transform = '';
+      }, 600);
+    });
+  };
+  preloader.onerror = function() {
+    mainImg.style.opacity = '1';
+    mainImg.src = src;
+    mainImg.alt = 'Load failed';
+  };
+  preloader.src = src;
 
   counterEl.textContent = (idx + 1) + ' / ' + items.length;
 }
@@ -144,7 +165,21 @@ function showNext() {
 function ssStart() {
   if (ssActive || items.length < 2) return;
   ssActive = true;
+
+  // Hide counter in screensaver mode
+  counterEl.style.opacity = '0';
+
+  // Show badge briefly then fade
   ssBadge.style.display = 'block';
+  ssBadge.style.opacity = '0';
+  void ssBadge.offsetWidth;
+  ssBadge.style.opacity = '1';
+  clearTimeout(ssBadgeTimer);
+  ssBadgeTimer = setTimeout(function() {
+    ssBadge.style.opacity = '0';
+    setTimeout(function() { ssBadge.style.display = 'none'; }, 800);
+  }, 2000);
+
   ssTimer = setInterval(function() {
     var idx;
     do { idx = Math.floor(Math.random() * items.length); } while (idx === currentIdx && items.length > 1);
@@ -155,6 +190,8 @@ function ssStart() {
 function ssStop() {
   if (!ssActive) return;
   ssActive = false;
+  counterEl.style.opacity = '1';
+  clearTimeout(ssBadgeTimer);
   ssBadge.style.display = 'none';
   if (ssTimer) { clearInterval(ssTimer); ssTimer = null; }
 }
