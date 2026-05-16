@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ASQ Feed for R1</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d0f12;color:#fff;font-family:-apple-system,system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px;text-align:center;gap:16px}
+h1{color:#ef4027;font-size:24px}
+p{color:#8899aa;font-size:14px;max-width:400px;line-height:1.5}
+#qr{background:#fff;padding:16px;border-radius:12px;display:inline-block}
+#qr canvas{display:block}
+.steps{text-align:left;max-width:400px;font-size:13px;line-height:1.6;color:#c0c8d0}
+.steps li{margin:6px 0}
+.steps a{color:#ef4027}
+.footer{color:#667788;font-size:11px;margin-top:8px}
+.important{color:#DF5A5A;font-size:12px;max-width:400px}
+</style>
+</head>
+<body>
+<h1>ASQ Feed for R1</h1>
+<p>Your Asquarespace grid images — full-screen on R1</p>
+
+<div id="qr"></div>
+
+<div class="important">
+⚠️ Sign in to <a href="https://space.asquareportal.com">space.asquareportal.com</a> first on your R1's browser so Supabase token is stored.
+</div>
+
+<div class="steps">
+<strong>Install:</strong>
+<ol>
+<li>Open the <strong>Creations</strong> card on your R1</li>
+<li>Tap <strong>Add via QR code</strong></li>
+<li>Scan the QR code above</li>
+<li>Scroll wheel → prev/next image</li>
+<li>PTT button → toggle screensaver</li>
+</ol>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+var url = location.origin + location.pathname.replace(/r1-feed-install\.html$/, '') + 'r1-feed.html';
+new QRCode(document.getElementById('qr'), {
+  text: url,
+  width: 200,
+  height: 200,
+  colorDark: '#0d0f12',
+  colorLight: '#ffffff',
+  correctLevel: QRCode.CorrectLevel.H,
+});
+</script>
+</body>
+</html>
